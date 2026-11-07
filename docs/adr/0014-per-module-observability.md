@@ -1,0 +1,31 @@
+# ADR-0014: Per-module observability (logging, metrics, monitoring)
+- **Status:** Accepted (2026-11-07, owner)
+- **Context:** Owner wants logging, metrics and monitoring separated per module. The system is one deployable (ADR-0001) with a confirmed ops stack: structured logs, Micrometer → Prometheus, Grafana (HLD section "Observability": JSON logs with `correlationId`, `userId`, `orgId`; no PHI in logs; liveness/readiness). Without module attribution, a slow page or error spike can't be traced to billing vs. appointment, and nothing forces a new module to expose any signals.
+- **Problem:** Make every signal attributable to its owning module, and give each module its own view and alerts, without adding infrastructure.
+- **Options:** (A) separate infrastructure per module (own log files/streams, own Prometheus job, own health endpoint); (B) one shared stack, every signal tagged with `module`, per-module views and alerts built from the tags; (C) leave as is (app-level signals only).
+- **Decision:** B. "Separate per module" means **separate views, ownership and alerts over one shared stack**, not separate infrastructure — a single process can't fail per module, and per-module infra contradicts the operational-simplicity constraint.
+  - **Module name:** the package segment after `com.hms` (`patient`, `billing`, …; `shared` for the kernel). One source of truth: a `ModuleName` helper in `shared` that derives it from a class/package name.
+  - **Logging:**
+    - SLF4J only; logger = class (so logger names start with `com.hms.<module>`). Per-module levels via config (`logging.level.com.hms.billing=DEBUG`), no redeploy-time code change.
+    - JSON output using Spring Boot's built-in structured logging (no new dependency). Every line carries `module` (derived from the logger name by a small JSON customizer), `correlationId`, `userId`, `orgId` (MDC, set in the request filter).
+    - No PHI, passwords, tokens or clinical free text in logs (existing rule); log ids, not names. A redaction test per module covers its log statements' structured arguments.
+    - Audit (ADR-0007) is not logging and is never replaced by it.
+  - **Metrics (Micrometer):**
+    - **Use cases:** one timer `hms.usecase` around every public method of `application` services, tags `module`, `usecase` (`Class.method`), `outcome` (`success`/`business_error`/`error`). Implemented once as an aspect in `shared` over `com.hms.*.application..*` — needs `spring-boot-starter-aop` (Spring-maintained; justification: one place instead of hand-timing every service).
+    - **HTTP:** default `http.server.requests` plus a `module` tag from the handling controller's package (custom `ServerRequestObservationConvention`).
+    - **Domain metrics:** named `hms.<module>.<thing>` (e.g. `hms.billing.invoices.issued` counter, `hms.bedmanagement.beds.occupied` gauge, `hms.payment.amount.recorded` summary). Each module documents its domain metrics in its `api` package-info (or module README) when it adds them.
+    - **Cardinality and privacy:** tags must be bounded enumerations. Never tag with patient/user/encounter/invoice ids, names or free text. `orgId` is allowed in R1 (single org) and must be re-assessed before multi-tenant.
+  - **Health:** one liveness and one readiness for the application (it starts and stops as one). A module contributes a `HealthIndicator` only for a dependency it owns that can fail independently (e.g. future ABDM adapter, PDF renderer, SMS gateway). No fake per-module health for in-process code.
+  - **Tracing:** deferred — single process; correlation id joins logs, metrics exemplars and audit. Revisit with Micrometer Tracing (OpenTelemetry) when an out-of-process call path appears (ABDM, extracted service per ADR-0001).
+  - **Monitoring (Grafana/Prometheus, provisioned as code in `infra/monitoring/`):**
+    - One **overview** dashboard (all modules: request rate, error rate, p95 latency, JVM, DB pool).
+    - One **dashboard per module**, generated from a shared template parameterised by `module` (use-case latency/error by `usecase`, HTTP by endpoint, the module's domain metrics).
+    - **Alerts per module:** error ratio and p95 latency thresholds per module (defaults: error ratio > 2% over 10 min; p95 > 1 s over 10 min — tune after M6 load tests), plus module-specific business alerts (e.g. billing: reconciliation mismatch; audit: any audit write failure; bedmanagement: occupancy data inconsistency).
+  - **Enforcement:** ArchUnit rules (ADR-0001): no `System.out`/`System.err`/`printStackTrace`, no `java.util.logging`; loggers are `private static final`. A test asserts every module has a per-module dashboard entry (module list vs. dashboard provisioning file).
+- **Consequences:**
+  - \+ Any error or slowdown is attributable to a module; per-module levels allow targeted debugging in production without noise.
+  - \+ No new infrastructure; one extra Spring-maintained dependency (AOP).
+  - \+ Clean seams if a module is ever extracted (ADR-0001): its signals already exist under its own name.
+  - − Small upfront work in `[E0-*]` (aspect, JSON customizer, observation convention, dashboard template).
+  - − Aspect adds a timer per use-case call (negligible at R1 scale).
+  - − Log storage/search is not decided here: R1 relies on container logs. Centralised log search (e.g. Loki) is an open ADR candidate, needs its own justification.

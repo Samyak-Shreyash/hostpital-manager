@@ -1,0 +1,17 @@
+# ADR-0004: UUID strategy
+- **Status:** Accepted (2026-11-07, owner) — UUIDv7 with timestamp exposure as an accepted risk
+- **Context:** Core IDs need to be non-guessable-ish, generated without DB roundtrip, safe for future merge across tenants.
+- **Options:** bigserial; random UUIDv4; time-ordered UUIDv7; UUIDv7 with coarsened timestamp; UUIDv7 internally + separate random public id; encrypted ids at the API boundary.
+- **Decision:** UUIDv7 (RFC 9562) generated in the application by a small in-house generator in the `shared` kernel (no third-party library), stored as native `uuid`. Human business keys (UHID `HMS-000123`, invoice no.) are separate columns. IDs are never treated as authorization: every lookup also scopes by organization and checks permission.
+- **Accepted risk — creation-time exposure:** the first 48 bits of a UUIDv7 are the creation time in Unix milliseconds, so anyone who sees an id can derive when the record was created (e.g. when a patient was registered or an encounter opened). Assessed as low for R1:
+  - ids are visible only to authenticated staff of the same organization; creation dates are usually shown in the UI anyway;
+  - residual exposure is ids copied outside the app (browser history, shared links, logs, support tickets, screenshots).
+
+  Mitigations: never put ids in patient-facing material (printed invoices, prescriptions, receipts and SMS use business keys like UHID / invoice number); logs and support material follow the PHI-redaction rules; ids grant nothing without org scope + permission. Rejected alternatives: UUIDv4 (no leak, but loses index locality), coarsened timestamp (non-standard, still leaks), separate public id or encrypted ids (disproportionate complexity for R1). **Revisit** if ids become exposed to patients or third parties (patient portal, ABDM, public APIs) — at that point add an opaque public identifier for those surfaces.
+- **Keep the door open (conventions from day one):** so that hiding ids later is a one-place change, not a rewrite:
+  - **Typed ids in the backend:** each aggregate id is a value object (`PatientId`, `InvoiceId`, …) wrapping `UUID`, serialized/parsed by **one** Jackson module and one Spring `Converter` for path/query parameters. Controllers and DTOs never format or parse raw UUIDs by hand.
+  - **Opaque ids in the frontend:** ids are plain strings — no UUID format validation (no Zod `.uuid()`), no parsing, no assumptions about length or ordering.
+  - **No ids outside the system:** not in exports, QR codes, printed documents or messages to external systems (business keys only).
+
+  Later options this enables: **(D) separate random public id** for external surfaces (patient portal, ABDM, public APIs) — preferred, no key management, revocable, scoped to the external surface; **(E) deterministic encryption of ids at the API boundary** (e.g. AES-SIV, key from the secret store per ADR-0009, key version for rotation) if timestamps must also be hidden inside the staff app — needs a transition period accepting both plain and encrypted ids, and a support tool to map them. Neither requires a data migration; the stored UUIDv7 stays unchanged.
+- **Consequences:** + index locality vs v4, batch inserts without sequence, no dependency. − Creation timestamp derivable from the id (accepted risk above). − The in-house generator needs unit tests (version/variant bits, monotonic ordering within a millisecond).

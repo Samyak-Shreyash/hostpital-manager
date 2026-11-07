@@ -8,9 +8,11 @@ A commercial-grade Hospital Management System for small/medium multi-specialty c
 Solo developer + AI assistance. **Operational simplicity is a first-class constraint**: no Kubernetes, Kafka, Redis, microservices, or extra infra without a documented requirement.
 
 ## 2. Current status (update this section as work lands)
-- Phase: **foundation documents drafted, pending owner review/approval.** No application code exists yet.
-- Do **not** start implementing features until the foundation docs are approved and the relevant backlog issue is chosen.
-- Backlog: GitHub issues titled `[E<epic>-<n>] …` (86 issues, milestones M0–M6). Issue list source: `issues.json`; created with `Create-Issues.ps1` (idempotent, matches by `[ID]` prefix).
+- Phase: **M0 Skeleton — cleared to start (2026-11-07).** No application code exists yet; next issue is `[E0-1]` repo skeleton (#12).
+- Accepted ADRs (binding): 0001 modular monolith (ArchUnit only), 0003 single schema `hms`, 0004 UUIDv7, 0013 repo/build layout (monorepo, single Gradle project, Groovy DSL + version catalog, Vitest + ESLint), 0014 per-module observability. ADRs 0002 (baseline) and 0005–0012 as listed in `docs/adr/README.md` — Proposed ones are not binding.
+- Do **not** implement features of later milestones (M1+) until the Proposed ADRs they depend on (e.g. 0005 auth, 0006 RBAC, 0007 audit, 0010 isolation, 0012 money) are accepted.
+- Docs present: `docs/adr/`, `docs/product/prd.md`, `docs/architecture/{domain-model,hld}.md`, `docs/api/api-design.md`. Still missing (ask before inventing): `docs/architecture/database-design.md`, `docs/00-review-notes.md`, `docs/engineering/project-structure.md`, `docs/project-management/`.
+- Backlog: GitHub issues titled `[E<epic>-<n>] …` (86 issues, milestones M0–M6). 
 - Before any task: inspect the repo, read the relevant docs, check open/closed issues. **Never assume something exists — verify it.**
 
 ## 3. Confirmed decisions (do not reopen; changes need a documented ADR + owner approval)
@@ -24,13 +26,13 @@ Solo developer + AI assistance. **Operational simplicity is a first-class constr
 | Ops | Docker, Docker Compose (dev), GitHub Actions, reverse proxy, Prometheus + Grafana, structured logs |
 | Compliance direction | DPDP Act 2023/Rules 2025, ABDM (FHIR R4 at the boundary only) |
 
-Proposed-but-unapproved items live in `docs/adr/` with status **Proposed** (e.g. server-side sessions instead of JWT, Spring Modulith, RLS as defence in depth, UUIDv7). Treat Proposed ADRs as *not yet binding* — ask before depending on them.
+Proposed-but-unapproved items live in `docs/adr/` with status **Proposed** (e.g. server-side sessions instead of JWT, RLS as defence in depth). IDs are UUIDv7 from the in-house generator (ADR-0004, accepted); never expose them on patient-facing material — use business keys (UHID, invoice no.). Use typed id value objects (`PatientId`…) serialized in one place; the frontend treats ids as opaque strings (no `.uuid()` validation). Module boundaries are verified with ArchUnit only (ADR-0001, accepted); Spring Modulith is deferred — don't add it. Treat Proposed ADRs as *not yet binding* — ask before depending on them.
 
 ## 4. Architecture rules (enforced by tests where possible)
 - Modules: identity, organization, patient, practitioner, appointment, clinical, admission, bedmanagement, billing, payment, audit, reporting (+ `shared` kernel).
 - Per module packages: `api` (the **only** package other modules may import), `application` (use cases, `@Transactional` boundary), `domain`, `infrastructure` (JPA repos/adapters), `web` (controllers + DTOs).
 - **Never** import another module's repositories, entities or internal packages. Cross-module references are by ID. Reporting reads SQL views (documented exception).
-- Dependency direction per `docs/architecture/hld.md` §4. Admission supplies charges to billing through billing's `ChargeSource` port (never billing → admission).
+- Dependency direction per `docs/architecture/hld.md` 4. Admission supplies charges to billing through billing's `ChargeSource` port (never billing → admission).
 - Transactions start at application services only. No remote calls inside a DB transaction. Lock order: bed → admission → invoice.
 - Avoid over-engineering: prefer the simplest design that satisfies current requirements.
 

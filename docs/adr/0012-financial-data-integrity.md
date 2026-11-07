@@ -1,0 +1,6 @@
+# ADR-0012: Financial data integrity
+- **Status:** Proposed — **deviates from charter ("integer paise")**: master prompt mandates NUMERIC/DECIMAL
+- **Context:** Money must be exact, immutable once posted, auditable.
+- **Options:** integer paise; NUMERIC(14,2).
+- **Decision:** `NUMERIC(14,2)` in DB and `BigDecimal` + `Money` value object in code (scale 2, `RoundingMode.HALF_UP` at line level; total = Σ rounded lines, never re-rounded). Tax stored per line. Invoices immutable after issue (state check + trigger); corrections via credit note; payments/refunds/credit notes insert-only (trigger + privileges); gapless numbering from a locked sequence row; payment recording locks the invoice row and checks outstanding; derived `paid_amount` computed from payments (not stored) in R1 — a materialised column can be added if performance requires, maintained in the same transaction. Each money mutation writes audit in the same transaction. Idempotency keys on payment/refund creation. Reconciliation query (Σ payments − refunds per invoice) run in tests and as a nightly check.
+- **Consequences:** + exact, auditable. − Gapless numbering serialises invoice issue per org (negligible at this scale).
