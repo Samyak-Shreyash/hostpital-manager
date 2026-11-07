@@ -8,7 +8,7 @@ A commercial-grade Hospital Management System for small/medium multi-specialty c
 Solo developer + AI assistance. **Operational simplicity is a first-class constraint**: no Kubernetes, Kafka, Redis, microservices, or extra infra without a documented requirement.
 
 ## 2. Current status (update this section as work lands)
-- Phase: **M0 Skeleton — cleared to start (2026-11-07).** No application code exists yet; next issue is `[E0-1]` repo skeleton (#12).
+- Phase: **M0 Skeleton — cleared to start (2026-11-07).** Repo skeleton `[E0-1]` (#12) implemented: Spring Boot app starts, health only, all other paths denied. Next M0 issues: `[E0-2]`…`[E0-9]`.
 - Accepted ADRs (binding): 0001 modular monolith (ArchUnit only), 0003 single schema `hms`, 0004 UUIDv7, 0013 repo/build layout (monorepo, single Gradle project, Groovy DSL + version catalog, Vitest + ESLint), 0014 per-module observability. ADRs 0002 (baseline) and 0005–0012 as listed in `docs/adr/README.md` — Proposed ones are not binding.
 - Do **not** implement features of later milestones (M1+) until the Proposed ADRs they depend on (e.g. 0005 auth, 0006 RBAC, 0007 audit, 0010 isolation, 0012 money) are accepted.
 - Docs present: `docs/adr/`, `docs/product/prd.md`, `docs/architecture/{domain-model,hld}.md`, `docs/api/api-design.md`. Still missing (ask before inventing): `docs/architecture/database-design.md`, `docs/00-review-notes.md`, `docs/engineering/project-structure.md`, `docs/project-management/`.
@@ -66,8 +66,8 @@ Code + automated tests passing in CI · audit coverage where sensitive · Flyway
 ### Required test focus
 Concurrent bed allocation · duplicate patient registration · appointment conflicts · concurrent payments · invoice calculation accuracy · unauthorized patient access · cross-organization access (every endpoint returns 404 for another org's ids).
 
-## 8. Planned layout & commands
-> The scaffold does not exist yet (issue `[E0-1]`). Until it does, treat the commands below as the **intended** conventions and verify before relying on them.
+## 8. Layout & commands
+> Scaffolded by `[E0-1]`. Compose stack (`[E0-3]`) and e2e/perf tooling do not exist yet.
 
 ```
 backend/   Gradle (single project, modules as packages), src/{main,test,integrationTest,architectureTest}
@@ -76,10 +76,10 @@ e2e/       Playwright critical journeys     perf/  k6 scenarios
 infra/     docker, compose, proxy, monitoring, backup
 docs/      product, architecture, adr, api, engineering, operations, project-management
 ```
-Intended commands (confirm in `README.md` once scaffolded):
+Commands (verified; see `README.md`):
 - Backend: `./gradlew build`, `./gradlew test`, `./gradlew integrationTest` (needs Docker), `./gradlew architectureTest`
 - Frontend: `npm ci`, `npm run dev`, `npm run build`, `npm test`, `npm run lint`
-- Stack: `docker compose -f infra/compose/compose.yml up`
+- Stack (planned, `[E0-3]`): `docker compose -f infra/compose/compose.yml up`
 
 ## 9. Documentation map
 Source of truth for design — read before coding in that area, and keep in sync:
