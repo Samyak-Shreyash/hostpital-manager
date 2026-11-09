@@ -8,7 +8,7 @@ import org.springframework.boot.json.JsonWriter.ValueProcessor;
 
 /**
  * Defence-in-depth redaction for JSON log lines. The rule is still "never log PHI, passwords or tokens;
- * log ids, not names" (CLAUDE.md §6); this catches mistakes:
+ * log ids, not names" (CLAUDE.md); this catches mistakes:
  * <ul>
  *   <li>values of sensitive keys (MDC or key-value pairs such as {@code password}, {@code phone}) are replaced;</li>
  *   <li>in every other text value, email addresses, ABHA numbers, Aadhaar-like numbers and Indian mobile

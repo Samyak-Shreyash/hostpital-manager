@@ -42,7 +42,7 @@ Base path `/api/v1`. Full OpenAPI is generated from code (springdoc); this docum
 
 Framework errors without a domain code use the status name (e.g. `405 METHOD_NOT_ALLOWED`, `415 UNSUPPORTED_MEDIA_TYPE`). `type` is `https://hms.example/problems/<code in kebab-case>`. Field errors never echo the rejected value. Implemented by `com.hms.shared.web.ProblemDetailsHandler`; shared exceptions: `NotFoundException` (404), `ConflictException(code)` (409), `BusinessRuleException([code])` (422).
 
-Permission codes are listed per endpoint. `*` = see role mapping in PRD §3.
+Permission codes are listed per endpoint. `*` = see role mapping in PRD.
 
 ## 2. Authentication
 | Method & path | Purpose | Permission |

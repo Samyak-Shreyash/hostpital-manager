@@ -16,7 +16,7 @@
 | appointment | Appointment, AppointmentSchedule (slot config), QueueToken | Appointment |
 | clinical | Encounter, Observation, ClinicalNote, Diagnosis, TreatmentPlan, Prescription, PrescriptionItem | Encounter (owns notes, observations, diagnoses, plan); Prescription (owns items) |
 | admission | Admission, DischargeSummary | Admission |
-| bedmanagement | Ward, Bed, BedAssignment | Ward (owns beds); BedAssignment (own aggregate, see §5) |
+| bedmanagement | Ward, Bed, BedAssignment | Ward (owns beds); BedAssignment (own aggregate) |
 | billing | ServiceCatalogItem (+price versions), Invoice, InvoiceItem, CreditNote | Invoice (owns items), ServiceCatalogItem |
 | payment | Payment, Refund | Payment, Refund |
 | audit | AuditEvent | AuditEvent (append-only) |
@@ -149,12 +149,12 @@ Payment status on the invoice (UNPAID/PARTIAL/PAID) is derived; `CANCELLED` is v
 | I3 | ≤1 active admission per patient | Partial unique index on status in (ADMITTED, DISCHARGE_INITIATED) |
 | I4 | No overlapping active appointments per practitioner | `EXCLUDE USING gist (practitioner_id WITH =, tstzrange(start_at,end_at) WITH &&) WHERE status in active set` |
 | I5 | UHID unique per org | Unique `(organization_id, uhid)` |
-| I6 | Invoice number unique per org/FY, gapless | Unique + counter row locked `FOR UPDATE` at issue |
+| I6 | Invoice number unique per org/FY, gapless | Unique + `document_sequence` row locked by an upsert at issue, allocated last (database-design.md section 6) |
 | I7 | Issued invoice/items immutable | App state check + DB trigger rejecting UPDATE/DELETE on items of non-DRAFT invoices |
 | I8 | Payments/audit never updated or deleted | Triggers raise on UPDATE/DELETE; app role lacks privileges where practical |
 | I9 | Σ(payments) − Σ(refunds) ≤ invoice total | Invoice row locked `FOR UPDATE` during payment; CHECK on derived value in tests |
 | I10 | Finalized encounter immutable | App state + trigger on child tables |
-| I11 | Same-org references | Composite FK `(organization_id, id)` for cross-entity references inside the same module group (see database design §4) |
+| I11 | Same-org references | Composite FK `(organization_id, id)` for cross-entity references inside the same module group (see database-design.md section 4) |
 | I12 | Money ≥ 0, qty > 0 | CHECK constraints |
 
 ## 8. Domain events (in-process, transactional publication via Spring `ApplicationEventPublisher`; outbox deferred)
