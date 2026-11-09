@@ -85,6 +85,7 @@ jobs:
               -e 's/^HMS_PROXY_PORT=.*/HMS_PROXY_PORT=8080/' \
               .env.example > .env
           if grep -E '^[A-Z_]+=$' .env; then echo "unset variables above: add them to this step"; exit 1; fi
+<<<<<<< HEAD
       - name: Start stack and wait for healthchecks
         run: docker compose -f infra/compose/compose.yml --env-file .env up -d --build --wait --wait-timeout 300
       - name: Smoke test through the proxy
@@ -102,6 +103,8 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - run: cp .env.example .env
+=======
+>>>>>>> ab769fa (feat: enhance CI configuration to generate .env file with dynamic values and update README for clarity)
       - name: Start stack and wait for healthchecks
         run: docker compose -f infra/compose/compose.yml --env-file .env up -d --build --wait --wait-timeout 300
       - name: Smoke test through the proxy
