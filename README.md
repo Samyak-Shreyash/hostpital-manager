@@ -73,6 +73,7 @@ Prerequisites: JDK 21, Node.js 22+ (see `frontend/.nvmrc`), Docker (needed for P
 ```bash
 # Whole stack in Docker (Postgres + API + proxy serving the SPA), from the repo root:
 cp .env.example .env                              # then fill in every value (compose refuses to start with blanks)
+# DB roles (ADR-0015) are created on first start of an empty volume; a volume from before [E0-6] needs one `... down -v`.
 docker compose -f infra/compose/compose.yml --env-file .env up -d --build --wait
 # -> http://localhost:8080 (SPA; /api/* goes to the backend). Stop: ... down  (add -v to wipe the database)
 
@@ -83,7 +84,7 @@ docker compose -f infra/compose/compose.yml --env-file .env up -d db
 # 2. Backend: full build (unit + integration + architecture tests), then run
 cd backend
 ./gradlew build                                   # Windows: gradlew.bat build
-HMS_DB_PASSWORD=change-me-local-only ./gradlew bootRun
+HMS_DB_PASSWORD=<from .env> HMS_DB_MIGRATION_PASSWORD=<from .env> ./gradlew bootRun
 # -> http://localhost:8080/actuator/health returns {"status":"UP"}
 
 # 3. Frontend (separate terminal)
