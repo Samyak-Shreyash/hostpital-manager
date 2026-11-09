@@ -110,7 +110,9 @@ jobs:
       - name: Smoke test through the proxy
         run: |
           curl -fsS -o /dev/null http://localhost:8080/
-          test "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/api/v1/ping)" = 403  # reached Spring Security
+          # Reached Spring Security through the proxy: unauthenticated -> 401 Problem+JSON ([E0-5])
+          curl -s -D - -o body.json http://localhost:8080/api/v1/ping | grep -q '^HTTP/1.1 401'
+          grep -q '"code":"UNAUTHENTICATED"' body.json
       - if: failure()
         run: docker compose -f infra/compose/compose.yml --env-file .env logs
       - if: always()
