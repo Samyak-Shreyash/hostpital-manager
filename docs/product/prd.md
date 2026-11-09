@@ -14,7 +14,7 @@ Legend: **[C]** confirmed decision · **[P]** proposed recommendation · **[A]**
 
 ## 2. Scope
 **In (Release 1) [C]:** IAM, patients, practitioners/staff, appointments, OPD, basic IPD (wards, beds, admission, transfer, discharge), billing & payments, reporting, audit.
-**Out:** see10.
+**Out:** see section 10.
 **One facility, one organization** at launch. Schema carries `organization_id` everywhere [C]; `facility_id` is deferred to Stage 3 [P] (a single `facility` row per organization holds timezone/address; business rows reference organization only — avoids a second ownership axis before it is needed).
 
 ## 3. Personas
@@ -200,7 +200,7 @@ Daily registrations · appointments (by status/doctor) · OPD consultations · a
 Laboratory, pharmacy/inventory/procurement, emergency department, OT, nursing MAR/care plans, insurance/TPA, online payments, patient portal/app, telemedicine, SMS/WhatsApp, multi-facility, multi-tenant onboarding/subscription, **live ABDM integration** (R1 only stores ABHA number and designs FHIR mapping boundary), offline mode, patient merge UI, e-signature of documents.
 
 ## 11. Compliance posture (requires legal review — no compliance is claimed)
-DPDP Act 2023 / Rules 2025 and ABDM are design references. R1 builds: purpose-tagged audit of access, role-based least privilege, encryption in transit/at rest, retention fields and soft delete, data-correction workflow (patient update with audit), breach-response runbook. Needs counsel: lawful basis for health data processing by clinic as fiduciary/processor, consent notice wording, retention periods (state clinical-establishment rules, medico-legal), commencement dates, ABDM certification path. See charter7 for dates reported there (unverified in this session).
+DPDP Act 2023 / Rules 2025 and ABDM are design references. R1 builds: purpose-tagged audit of access, role-based least privilege, encryption in transit/at rest, retention fields and soft delete, data-correction workflow (patient update with audit), breach-response runbook. Needs counsel: lawful basis for health data processing by clinic as fiduciary/processor, consent notice wording, retention periods (state clinical-establishment rules, medico-legal), commencement dates, ABDM certification path. See charter section 7 for dates reported there (unverified in this session).
 
 ## 12. Risks (top; full register in `project-management/risk-register.md`)
 | ID | Risk | L | I | Mitigation |

@@ -8,7 +8,7 @@ Base path `/api/v1`. Full OpenAPI is generated from code (springdoc); this docum
 | Auth | Session cookie `HMSSESSION` (HttpOnly, Secure, SameSite=Lax). State-changing requests need header `X-XSRF-TOKEN` (value from `XSRF-TOKEN` cookie) |
 | Org scoping | Derived from session principal. Never accepted in body/query. Cross-org ids → `404` |
 | Content | `application/json; charset=utf-8`. camelCase. Instants ISO-8601 UTC (`2026-11-06T09:30:00Z`). Dates `YYYY-MM-DD`. Money = decimal **string** `"1250.00"` |
-| IDs | UUID strings |
+| IDs | Opaque strings (UUIDv7 server-side, ADR-0004); clients must not parse or validate their format. Patient-facing material uses business keys (UHID, invoice no.) |
 | Pagination | `?page=0&size=20` (max 100), `sort=field,dir`. Response envelope `{ "items": [], "page": 0, "size": 20, "totalItems": 134 }` |
 | Concurrency | Mutable resources return `version`; updates send `version`; mismatch → `409 CONCURRENT_MODIFICATION` |
 | Idempotency | `Idempotency-Key: <uuid>` required on `POST /payments`, `/refunds`, `/invoices/{id}/issue`; same key+payload returns original response |

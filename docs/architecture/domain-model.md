@@ -150,8 +150,8 @@ Payment status on the invoice (UNPAID/PARTIAL/PAID) is derived; `CANCELLED` is v
 | I4 | No overlapping active appointments per practitioner | `EXCLUDE USING gist (practitioner_id WITH =, tstzrange(start_at,end_at) WITH &&) WHERE status in active set` |
 | I5 | UHID unique per org | Unique `(organization_id, uhid)` |
 | I6 | Invoice number unique per org/FY, gapless | Unique + `document_sequence` row locked by an upsert at issue, allocated last (database-design.md section 6) |
-| I7 | Issued invoice/items immutable | App state check + DB trigger rejecting UPDATE/DELETE on items of non-DRAFT invoices |
-| I8 | Payments/audit never updated or deleted | Triggers raise on UPDATE/DELETE; app role lacks privileges where practical |
+| I7 | Issued invoice/items immutable | App state check + DB trigger rejecting UPDATE/DELETE on items of non-DRAFT invoices (raises `HM001`, database-design.md section 7) |
+| I8 | Payments/audit never updated or deleted | `hms.reject_modification()` trigger on UPDATE/DELETE/TRUNCATE; `hms_app` has no UPDATE/DELETE on these tables (ADR-0015, database-design.md sections 3 and 7) |
 | I9 | Σ(payments) − Σ(refunds) ≤ invoice total | Invoice row locked `FOR UPDATE` during payment; CHECK on derived value in tests |
 | I10 | Finalized encounter immutable | App state + trigger on child tables |
 | I11 | Same-org references | Composite FK `(organization_id, id)` for cross-entity references inside the same module group (see database-design.md section 4) |
