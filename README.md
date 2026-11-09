@@ -72,7 +72,7 @@ Prerequisites: JDK 21, Node.js 22+ (see `frontend/.nvmrc`), Docker (needed for P
 
 ```bash
 # Whole stack in Docker (Postgres + API + proxy serving the SPA), from the repo root:
-cp .env.example .env                              # then pick your own HMS_DB_PASSWORD
+cp .env.example .env                              # then fill in every value (compose refuses to start with blanks)
 docker compose -f infra/compose/compose.yml --env-file .env up -d --build --wait
 # -> http://localhost:8080 (SPA; /api/* goes to the backend). Stop: ... down  (add -v to wipe the database)
 
