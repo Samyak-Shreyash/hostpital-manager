@@ -18,6 +18,7 @@
 | [0012](0012-financial-data-integrity.md) | Financial data integrity | Proposed |
 | [0013](0013-repository-and-build-layout.md) | Repository and build layout | Accepted |
 | [0014](0014-per-module-observability.md) | Per-module observability (logging, metrics, monitoring) | Accepted |
+| [0015](0015-database-roles-and-migration-privileges.md) | Database roles and migration privileges | Accepted |
 
 ## Open ADR candidates (not yet written)
 Centralised log search (e.g. Loki; see ADR-0014), Backup/DR approach (pgBackRest vs managed PostgreSQL), hosting provider, frontend state/forms conventions, PDF generation library, search approach, ABDM adapter boundary (Stage 1.5), time zone handling for daily charges.
