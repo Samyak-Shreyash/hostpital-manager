@@ -4,7 +4,7 @@ spring:
     name: hms
   datasource:
     url: ${HMS_DB_URL:jdbc:postgresql://localhost:5432/hms}
-    username: ${HMS_DB_USERNAME:hms}
+    username: ${HMS_DB_USERNAME:hms_app} # runtime role: DML only (ADR-0015)
     password: ${HMS_DB_PASSWORD:}
   jpa:
     open-in-view: false # ADR-0002
@@ -12,6 +12,9 @@ spring:
       hibernate:
         default_schema: hms # ADR-0003
   flyway:
+    # Migrations run as the owner role (ADR-0015); the runtime datasource never has DDL rights.
+    user: ${HMS_DB_MIGRATION_USERNAME:hms_owner}
+    password: ${HMS_DB_MIGRATION_PASSWORD:}
     schemas: hms # ADR-0003
     default-schema: hms
     create-schemas: true

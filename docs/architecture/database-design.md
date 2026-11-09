@@ -8,10 +8,10 @@
 | Item | Status | Delivered by |
 |---|---|---|
 | Schema `hms`, Flyway config | Implemented (`application.yml`) | `[E0-1]` |
-| Roles and grants (section 3) | Planned | `[E0-6]` |
-| Extensions (section 5) | Planned | `[E0-6]` |
-| `document_sequence` (section 6) | Planned | `[E0-6]` |
-| `hms.reject_modification()` (section 7) | Planned | `[E0-6]` |
+| Roles and grants (section 3) | Implemented (`V1__baseline.sql`, `infra/docker/db-init/01-roles.sh`) | `[E0-6]` |
+| Extensions (section 5) | Implemented | `[E0-6]` |
+| `document_sequence` (section 6) | Table implemented; `DocumentNumberAllocator` comes with its first consumer | `[E0-6]` |
+| `hms.reject_modification()` (section 7) | Implemented; `HM001` → `409` mapping comes with its first consumer | `[E0-6]` |
 | Same-org composite FKs (section 4) | Planned | `[E1-6]` and each module |
 | RLS policies | Planned, depends on ADR-0010 (Proposed) | `[E1-2]`, `[E1-6]` |
 
@@ -61,7 +61,7 @@ ALTER DEFAULT PRIVILEGES FOR ROLE hms_owner IN SCHEMA hms
 ```
 - **`DELETE` is not a default grant.** No hard deletes is the rule; a table that genuinely needs `DELETE` (e.g. session rows, idempotency-key expiry) gets an explicit `GRANT DELETE` in its own migration with a comment why.
 - **Append-only tables** (`audit_event`, `payment`, `refund`, `credit_note`, issued-document tables) additionally `REVOKE UPDATE ON <table> FROM hms_app` in their migration **and** attach the trigger from section 7 (defence in depth, invariant I8).
-- `flyway_schema_history` is owned by `hms_owner`; `hms_app` gets only the default `SELECT` (harmless, lets the readiness check see migrations if ever needed).
+- `flyway_schema_history` is owned by `hms_owner` and is created before V1's default privileges exist, so `hms_app` has no access to it.
 - `TRUNCATE`, `REFERENCES`, `TRIGGER` are never granted to `hms_app`.
 
 **Application configuration change** (part of `[E0-6]`):
