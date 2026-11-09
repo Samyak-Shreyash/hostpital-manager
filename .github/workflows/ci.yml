@@ -1,5 +1,4 @@
 # CI gate (ADR-0013, [E0-1], [E0-2], [E0-3]). Required status checks on `main`: backend, frontend, secret-scan, image, compose.
-# CI gate (ADR-0013, [E0-1], [E0-2], [E0-3]). Required status checks on `main`: backend, frontend, secret-scan, image, compose.
 # Scanners run as pinned container images rather than third-party actions.
 name: CI
 
@@ -85,26 +84,6 @@ jobs:
               -e 's/^HMS_PROXY_PORT=.*/HMS_PROXY_PORT=8080/' \
               .env.example > .env
           if grep -E '^[A-Z_]+=$' .env; then echo "unset variables above: add them to this step"; exit 1; fi
-<<<<<<< HEAD
-      - name: Start stack and wait for healthchecks
-        run: docker compose -f infra/compose/compose.yml --env-file .env up -d --build --wait --wait-timeout 300
-      - name: Smoke test through the proxy
-        run: |
-          curl -fsS -o /dev/null http://localhost:8080/
-          test "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/api/v1/ping)" = 403  # reached Spring Security
-      - if: failure()
-        run: docker compose -f infra/compose/compose.yml --env-file .env logs
-      - if: always()
-        run: docker compose -f infra/compose/compose.yml --env-file .env down -v
-
-  # [E0-3] acceptance: the Compose dev stack comes up healthy and the proxy routes SPA + /api.
-  compose:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-      - run: cp .env.example .env
-=======
->>>>>>> ab769fa (feat: enhance CI configuration to generate .env file with dynamic values and update README for clarity)
       - name: Start stack and wait for healthchecks
         run: docker compose -f infra/compose/compose.yml --env-file .env up -d --build --wait --wait-timeout 300
       - name: Smoke test through the proxy
