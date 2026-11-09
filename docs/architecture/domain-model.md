@@ -17,14 +17,14 @@
 | clinical | Encounter, Observation, ClinicalNote, Diagnosis, TreatmentPlan, Prescription, PrescriptionItem | Encounter (owns notes, observations, diagnoses, plan); Prescription (owns items) |
 | admission | Admission, DischargeSummary | Admission |
 | bedmanagement | Ward, Bed, BedAssignment | Ward (owns beds); BedAssignment (own aggregate, see §5) |
-| billing | ServiceCatalogItem (+price versions), Invoice, InvoiceItem, CreditNote, InvoiceNumberSequence | Invoice (owns items), ServiceCatalogItem |
+| billing | ServiceCatalogItem (+price versions), Invoice, InvoiceItem, CreditNote | Invoice (owns items), ServiceCatalogItem |
 | payment | Payment, Refund | Payment, Refund |
 | audit | AuditEvent | AuditEvent (append-only) |
 | reporting | read models only (SQL views/queries) | — |
 
 Notes on deviations from the master list:
 - `AppointmentStatus` is an enum/state machine, not a table. `AppointmentSchedule` is modelled as practitioner slot configuration (slot length, max walk-ins) living with availability.
-- Added: `Observation` (vitals as structured rows), `CreditNote`, `AvailabilityException`, `QueueToken`, `InvoiceNumberSequence`, `PractitionerDepartment`. Justified by requirements OPD-2, BIL-4, PRC-4, APT-4, BR-B2, PRC-3.
+- Added: `Observation` (vitals as structured rows), `CreditNote`, `AvailabilityException`, `QueueToken`, `PractitionerDepartment`. Gapless numbering (BR-B2) uses the shared `document_sequence` table, not a billing entity (database-design.md section 6). Justified by requirements OPD-2, BIL-4, PRC-4, APT-4, BR-B2, PRC-3.
 - Split: `bedmanagement` module owns Ward/Bed/BedAssignment; `admission` owns the stay. Admission calls `BedManagement` through an interface so the bed invariant has a single owner.
 - Payment and Billing are two modules per the master module list; Payment depends on Billing's public API (`InvoiceQuery`, `InvoiceBalancePort`), not the reverse.
 
