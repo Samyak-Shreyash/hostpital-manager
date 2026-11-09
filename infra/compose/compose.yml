@@ -1,0 +1,51 @@
+# Dev stack ([E0-3]): Postgres, API, reverse proxy. All values come from the repo-root .env (no defaults here).
+# From the repo root:
+#   cp .env.example .env    # then set HMS_DB_PASSWORD
+#   docker compose -f infra/compose/compose.yml --env-file .env up -d --build --wait
+# App: http://localhost:${HMS_PROXY_PORT}  (only the proxy and Postgres publish ports, both on localhost)
+name: hms
+
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ${HMS_DB_NAME:?set HMS_DB_NAME in .env}
+      POSTGRES_USER: ${HMS_DB_USERNAME:?set HMS_DB_USERNAME in .env}
+      POSTGRES_PASSWORD: ${HMS_DB_PASSWORD:?set HMS_DB_PASSWORD in .env}
+    ports:
+      - "127.0.0.1:${HMS_DB_PORT:?set HMS_DB_PORT in .env}:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build:
+      context: ../../backend
+      dockerfile: ../infra/docker/backend.Dockerfile
+    # Every HMS_* variable from the root .env reaches the backend as-is...
+    env_file: ../../.env
+    environment:
+      # ...except these container-internal values: inside the network the database is the `db` service,
+    # and the healthcheck and proxy expect the API on 8080.
+      HMS_DB_URL: jdbc:postgresql://db:5432/${HMS_DB_NAME:?set HMS_DB_NAME in .env}
+      HMS_SERVER_PORT: "8080"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  proxy:
+    build:
+      context: ../..
+      dockerfile: infra/docker/proxy.Dockerfile
+    ports:
+      - "127.0.0.1:${HMS_PROXY_PORT:?set HMS_PROXY_PORT in .env}:8080"
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  db-data:

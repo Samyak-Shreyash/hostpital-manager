@@ -1,0 +1,7 @@
+# Context for infra/docker/proxy.Dockerfile (repo root)
+**/node_modules
+**/dist
+backend/
+.git/
+.env
+.env.*

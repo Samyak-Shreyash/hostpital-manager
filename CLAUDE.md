@@ -67,7 +67,7 @@ Code + automated tests passing in CI · audit coverage where sensitive · Flyway
 Concurrent bed allocation · duplicate patient registration · appointment conflicts · concurrent payments · invoice calculation accuracy · unauthorized patient access · cross-organization access (every endpoint returns 404 for another org's ids).
 
 ## 8. Layout & commands
-> Scaffolded by `[E0-1]`. Compose stack (`[E0-3]`) and e2e/perf tooling do not exist yet.
+> Scaffolded by `[E0-1]`; Compose dev stack by `[E0-3]`. e2e/perf tooling does not exist yet.
 
 ```
 backend/   Gradle (single project, modules as packages), src/{main,test,integrationTest,architectureTest}
@@ -79,7 +79,7 @@ docs/      product, architecture, adr, api, engineering, operations, project-man
 Commands (verified; see `README.md`):
 - Backend: `./gradlew build`, `./gradlew test`, `./gradlew integrationTest` (needs Docker), `./gradlew architectureTest`
 - Frontend: `npm ci`, `npm run dev`, `npm run build`, `npm test`, `npm run lint`
-- Stack (planned, `[E0-3]`): `docker compose -f infra/compose/compose.yml up`
+- Stack (`[E0-3]`, repo root): `docker compose -f infra/compose/compose.yml --env-file .env up -d --build --wait` → http://localhost:8080
 
 ## 9. Documentation map
 Source of truth for design — read before coding in that area, and keep in sync:
