@@ -19,4 +19,7 @@ WORKDIR /app
 COPY --from=build /workspace/app.jar app.jar
 USER hms
 EXPOSE 8080
+# curl ships with the base image; readiness = DB reachable + migrations applied.
+HEALTHCHECK --interval=10s --timeout=3s --start-period=60s --retries=3 \
+  CMD curl -fsS http://localhost:8080/actuator/health/readiness || exit 1
 ENTRYPOINT ["java", "-jar", "/app/app.jar"]

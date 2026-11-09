@@ -1,4 +1,4 @@
-# CI gate (ADR-0013, [E0-1], [E0-2]). Required status checks on `main`: backend, frontend, secret-scan, image.
+# CI gate (ADR-0013, [E0-1], [E0-2], [E0-3]). Required status checks on `main`: backend, frontend, secret-scan, image, compose.
 # Scanners run as pinned container images rather than third-party actions.
 name: CI
 
@@ -66,3 +66,20 @@ jobs:
         run: docker build -f infra/docker/backend.Dockerfile -t "$IMAGE" backend
       - name: Scan backend image
         run: docker run --rm -v /var/run/docker.sock:/var/run/docker.sock "$TRIVY" image $TRIVY_ARGS "$IMAGE"
+
+  # [E0-3] acceptance: the Compose dev stack comes up healthy and the proxy routes SPA + /api.
+  compose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - run: cp .env.example .env
+      - name: Start stack and wait for healthchecks
+        run: docker compose -f infra/compose/compose.yml --env-file .env up -d --build --wait --wait-timeout 300
+      - name: Smoke test through the proxy
+        run: |
+          curl -fsS -o /dev/null http://localhost:8080/
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/api/v1/ping)" = 403  # reached Spring Security
+      - if: failure()
+        run: docker compose -f infra/compose/compose.yml --env-file .env logs
+      - if: always()
+        run: docker compose -f infra/compose/compose.yml --env-file .env down -v
