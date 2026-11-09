@@ -1,0 +1,4 @@
+# Shell scripts must keep LF so they run inside Linux containers.
+*.sh text eol=lf
+backend/gradlew text eol=lf
+*.bat text eol=crlf
