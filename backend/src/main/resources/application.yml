@@ -28,3 +28,11 @@ management:
     health:
       probes:
         enabled: true
+
+# JSON logs (ADR-0014): module + correlationId on every line, PHI redaction as defence in depth.
+logging:
+  structured:
+    format:
+      console: logstash
+    json:
+      customizer: com.hms.shared.logging.HmsJsonLogCustomizer

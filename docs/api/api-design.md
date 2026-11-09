@@ -12,7 +12,7 @@ Base path `/api/v1`. Full OpenAPI is generated from code (springdoc); this docum
 | Pagination | `?page=0&size=20` (max 100), `sort=field,dir`. Response envelope `{ "items": [], "page": 0, "size": 20, "totalItems": 134 }` |
 | Concurrency | Mutable resources return `version`; updates send `version`; mismatch → `409 CONCURRENT_MODIFICATION` |
 | Idempotency | `Idempotency-Key: <uuid>` required on `POST /payments`, `/refunds`, `/invoices/{id}/issue`; same key+payload returns original response |
-| Correlation | Request `X-Request-Id` accepted/generated; echoed in response and in every error |
+| Correlation | Request `X-Request-Id` accepted (1–64 chars of `A-Za-z0-9._-`; anything else is replaced) or generated; echoed in the response header, as `requestId` in every error, and as `correlationId` in logs |
 | Errors | RFC 7807 (below) |
 | Methods | POST create/commands; PATCH partial update; no DELETE for clinical/financial data (use status commands) |
 
@@ -39,6 +39,8 @@ Base path `/api/v1`. Full OpenAPI is generated from code (springdoc); this docum
 | 423 | ACCOUNT_LOCKED |
 | 429 | RATE_LIMITED |
 | 500 | INTERNAL_ERROR (no internals leaked) |
+
+Framework errors without a domain code use the status name (e.g. `405 METHOD_NOT_ALLOWED`, `415 UNSUPPORTED_MEDIA_TYPE`). `type` is `https://hms.example/problems/<code in kebab-case>`. Field errors never echo the rejected value. Implemented by `com.hms.shared.web.ProblemDetailsHandler`; shared exceptions: `NotFoundException` (404), `ConflictException(code)` (409), `BusinessRuleException([code])` (422).
 
 Permission codes are listed per endpoint. `*` = see role mapping in PRD §3.
 
