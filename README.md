@@ -2,7 +2,7 @@
 
 A modern, modular Hospital Management System for small and medium multi-specialty clinics and nursing homes in India — designed to grow from a single clinic into a single hospital, and later a multi-tenant SaaS platform.
 
-> **Status: planning / pre-implementation.** The product and architecture foundation is drafted and awaiting review. There is no runnable application yet; sections marked *(planned)* describe the intended setup.
+> **Status: M0 skeleton.** The application builds and starts, but has no features yet.
 
 ## Release 1 scope
 | Area | Capabilities |
@@ -67,19 +67,36 @@ Design documents are the source of truth and are kept in sync with the code.
 
 Work is tracked as GitHub issues titled `[E<epic>-<n>] …`, grouped by epic and milestone on the project board.
 
-## Getting started *(planned)*
-Prerequisites: JDK 21, Node.js (LTS), Docker with Compose.
+## Getting started
+Prerequisites: JDK 21, Node.js 22+ (see `frontend/.nvmrc`), Docker (needed for PostgreSQL and the integration tests).
+
 ```bash
-# start PostgreSQL and supporting services
-docker compose -f infra/compose/compose.yml up -d
+# 1. PostgreSQL (until the Compose stack from [E0-3] exists)
+docker run -d --name hms-postgres -p 5432:5432   -e POSTGRES_DB=hms -e POSTGRES_USER=hms -e POSTGRES_PASSWORD=change-me-local-only   postgres:17-alpine
 
-# backend
-cd backend && ./gradlew build && ./gradlew bootRun
+# 2. Backend: full build (unit + integration + architecture tests), then run
+cd backend
+./gradlew build                                   # Windows: gradlew.bat build
+HMS_DB_PASSWORD=change-me-local-only ./gradlew bootRun
+# -> http://localhost:8080/actuator/health returns {"status":"UP"}
 
-# frontend
-cd frontend && npm ci && npm run dev
+# 3. Frontend (separate terminal)
+cd frontend
+npm ci
+npm run dev                                       # -> http://localhost:5173
 ```
-Configuration is read from environment variables; copy `.env.example` to `.env` for local development. These commands will be confirmed here once the scaffold (`[E0-1]`) lands.
+
+| Task | Command |
+|---|---|
+| Backend unit tests (no Docker) | `./gradlew test` |
+| Backend integration tests (Testcontainers) | `./gradlew integrationTest` |
+| Module-boundary rules (ArchUnit) | `./gradlew architectureTest` |
+| Frontend lint / test / build | `npm run lint` · `npm test` · `npm run build` |
+| Backend Docker image (repo root) | `docker build -f infra/docker/backend.Dockerfile -t hms-backend:$(git rev-parse HEAD) backend` |
+
+CI (`.github/workflows/ci.yml`) runs on every PR and push to `main`: `backend` (Gradle build incl. integration and architecture tests), `frontend` (lint, test, build), `secret-scan` (gitleaks over full history) and `image` (Trivy dependency scan, backend image tagged with the commit SHA, Trivy image scan). Scans fail on fixable HIGH/CRITICAL findings. Make all four required status checks on `main` so a red PR cannot merge.
+
+Configuration is read from environment variables; all variables are documented in `.env.example`. Copy it to `.env` for local use (git-ignored). Repository layout and build decisions: ADR-0013.
 
 ## Backlog bootstrap
 The repository includes a one-off tool to create the planned issues:

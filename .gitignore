@@ -1,1 +1,18 @@
 .claude/
+
+*.ps1
+# Build outputs
+backend/build/
+backend/.gradle/
+frontend/node_modules/
+frontend/dist/
+
+# Local config (see .env.example)
+.env
+.env.*
+!.env.example
+
+# IDE
+.idea/
+*.iml
+.vscode/
