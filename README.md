@@ -92,6 +92,9 @@ npm run dev                                       # -> http://localhost:5173
 | Backend integration tests (Testcontainers) | `./gradlew integrationTest` |
 | Module-boundary rules (ArchUnit) | `./gradlew architectureTest` |
 | Frontend lint / test / build | `npm run lint` · `npm test` · `npm run build` |
+| Backend Docker image (repo root) | `docker build -f infra/docker/backend.Dockerfile -t hms-backend:$(git rev-parse HEAD) backend` |
+
+CI (`.github/workflows/ci.yml`) runs on every PR and push to `main`: `backend` (Gradle build incl. integration and architecture tests), `frontend` (lint, test, build), `secret-scan` (gitleaks over full history) and `image` (Trivy dependency scan, backend image tagged with the commit SHA, Trivy image scan). Scans fail on fixable HIGH/CRITICAL findings. Make all four required status checks on `main` so a red PR cannot merge.
 
 Configuration is read from environment variables; all variables are documented in `.env.example`. Copy it to `.env` for local use (git-ignored). Repository layout and build decisions: ADR-0013.
 
