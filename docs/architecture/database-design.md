@@ -99,14 +99,14 @@ One generic gapless counter table for business keys that must be sequential: inv
 CREATE TABLE hms.document_sequence (
     organization_id uuid        NOT NULL,   -- FK to organization added by its migration (section 4)
     document_type   text        NOT NULL,
-    period_key      text        NOT NULL,   -- 'FY2026-27' for per-financial-year series; 'ALL' for never-resetting ones (UHID)
+    period_key      text        NOT NULL,   -- 'FY2026-27' per financial year; 'CY2026' per calendar year; 'ALL' never resets (UHID)
     next_value      bigint      NOT NULL DEFAULT 1,
     created_at      timestamptz NOT NULL,
     updated_at      timestamptz NOT NULL,
     CONSTRAINT pk_document_sequence PRIMARY KEY (organization_id, document_type, period_key),
-    CONSTRAINT ck_document_sequence_type CHECK (document_type IN ('UHID','INVOICE','CREDIT_NOTE','RECEIPT')),
+    CONSTRAINT ck_document_sequence_type CHECK (document_type IN ('UHID','ADMISSION','INVOICE','CREDIT_NOTE','RECEIPT')),
     CONSTRAINT ck_document_sequence_next CHECK (next_value >= 1),
-    CONSTRAINT ck_document_sequence_period CHECK (period_key = 'ALL' OR period_key ~ '^FY[0-9]{4}-[0-9]{2}$')
+    CONSTRAINT ck_document_sequence_period CHECK (period_key = 'ALL' OR period_key ~ '^(FY[0-9]{4}-[0-9]{2}|CY[0-9]{4})$')
 );
 ```
 - New `document_type` values are added by a later migration that replaces the CHECK.
@@ -121,8 +121,8 @@ CREATE TABLE hms.document_sequence (
   The row lock taken by the upsert is held until the business transaction commits; a rollback rolls the counter back, so **numbers are gapless** and concurrent issuers in the same org/type/period serialise (accepted cost, ADR-0012). Different orgs/types/periods never block each other.
 - **Lock order:** allocate the number **last**, after taking bed → admission → invoice locks (CLAUDE.md section 4), to keep the serialised section short and avoid deadlocks.
 - **Ownership:** a single `DocumentNumberAllocator` in the `shared` kernel (infrastructure adapter, plain JDBC — not a JPA entity) is the only code touching this table. Modules call it through the shared kernel; they never query the table. This replaces the billing-owned `InvoiceNumberSequence` entity listed in `domain-model.md` section 2 (section 10, D3).
-- **Formatting** (`INV/2026-27/000123`, `HMS-000123`) is done by the owning module; the table stores only the integer.
-- **Financial year:** April–March (BR-B2). `period_key` is derived from the issue instant converted to **Asia/Kolkata** (section 10, D2).
+- **Formatting** is done by the owning module; the table stores only the integer. Examples from `docs/api/api-design.md`: invoice `2026-27/000031` (FY), receipt `RCT-2026-27/000044` (FY), admission `ADM-2026-0042` (CY), UHID `HMS-000124` (ALL).
+- **Financial year:** April–March (BR-B2). `period_key` is derived from the issue instant converted to the **organization's time zone** (section 10, D2).
 - **Privileges:** default `SELECT, INSERT, UPDATE` to `hms_app`; **no** `DELETE`.
 
 ## 7. Immutability function — `hms.reject_modification()`
@@ -164,7 +164,7 @@ All test data synthetic (random UUIDs, no names).
 | ID | Decision |
 |---|---|
 | D1 | ADR-0015 accepted with option B: two roles, provisioned outside Flyway; Flyway runs in-process at startup with `hms_owner` credentials. Separate migration job (option D) deferred. |
-| D2 | Financial year and business date use **Asia/Kolkata** as a constant in R1; a per-organization setting is revisited for multi-tenancy (Stage 3). |
+| D2 | Financial year and business date use the **organization's time zone** (default `Asia/Kolkata`), as already specified upstream: PRD section 5 "Time" and assumption A3, `PATCH /organization` timezone in api-design.md section 4. Until the `organization` table exists (M1), callers pass `Asia/Kolkata`. *Corrected 2026-11-09: the first draft said "constant", which contradicted the PRD.* |
 | D3 | The shared `document_sequence` table replaces billing's `InvoiceNumberSequence` entity (domain-model.md updated). |
 | D4 | The immutability trigger also binds `hms_owner`. An emergency correction is a reviewed migration that disables the trigger for one statement and records why. |
 | D5 | `btree_gist` and `pg_trgm` are installed in V1, before first use. |
