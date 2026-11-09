@@ -22,7 +22,7 @@ C4Container
     Container(proxy, "Reverse proxy", "Caddy or Nginx", "TLS termination, static SPA, /api routing, rate limit")
     Container(spa, "Web SPA", "React + TypeScript", "Static assets served by proxy")
     Container(api, "HMS API", "Java 21, Spring Boot", "Modular monolith, REST /api/v1")
-    ContainerDb(db, "PostgreSQL 16", "RDBMS", "Single DB, Flyway-managed")
+    ContainerDb(db, "PostgreSQL 17", "RDBMS", "Single DB, schema hms, Flyway-managed; roles hms_owner (migrations) and hms_app (runtime)")
     Container(prom, "Prometheus + Grafana", "Monitoring", "Metrics, dashboards, alerts")
     Container(backup, "Backup agent", "pgBackRest or managed PITR", "Base backup + WAL archive, encrypted off-host copy")
   }
@@ -228,7 +228,7 @@ Environments: local compose → staging (synthetic data only) → production. CI
 | Errors | RFC 7807 `application/problem+json` with stable `code` |
 | Observability | JSON logs with `correlationId`, `userId`, `orgId`; no PHI in logs (log filter + tests); Micrometer → Prometheus; health: liveness/readiness; per-module attribution, dashboards and alerts per ADR-0014 |
 | Configuration | 12-factor env vars; secrets via env from secret store/docker secrets; never in repo |
-| Time | `Clock` injected; all `Instant`; facility TZ only for day boundaries |
+| Time | `Clock` injected; all `Instant`; facility TZ (Asia/Kolkata constant in R1, database-design.md D2) only for day and financial-year boundaries |
 | Money | `Money` value object over `BigDecimal` (scale 2) |
 | API docs | springdoc-openapi; spec checked in CI for breaking changes |
 | Idempotency | `Idempotency-Key` header on payment/refund/invoice-issue POSTs |
