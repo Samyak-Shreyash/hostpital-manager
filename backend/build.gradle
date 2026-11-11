@@ -27,6 +27,7 @@ dependencies {
     implementation libs.flyway.postgresql
     implementation libs.springdoc.openapi
     runtimeOnly libs.postgresql
+    runtimeOnly libs.micrometer.registry.prometheus // /actuator/prometheus scrape endpoint (ADR-0014, [E0-7])
 
     testImplementation libs.spring.boot.starter.test
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'

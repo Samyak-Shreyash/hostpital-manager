@@ -9,8 +9,8 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.web.servlet.HandlerExceptionResolver;
 
 /**
- * Skeleton security: only health probes are public, everything else is denied until
- * authentication (ADR-0005) and RBAC (ADR-0006) land in M1.
+ * Skeleton security: only health probes and the Prometheus scrape endpoint are public, everything
+ * else is denied until authentication (ADR-0005) and RBAC (ADR-0006) land in M1.
  */
 @Configuration
 @EnableMethodSecurity
@@ -27,6 +27,8 @@ public class SecurityConfig {
         return http
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
+                        // Scraped by Prometheus inside the network; never routed by the reverse proxy.
+                        .requestMatchers("/actuator/prometheus").permitAll()
                         .anyRequest().denyAll())
                 .exceptionHandling(ex -> ex
                         .authenticationEntryPoint((request, response, e) ->
