@@ -1,0 +1,10 @@
+# Dev Prometheus ([E0-7], ADR-0014). Scrapes the API inside the Compose network; /actuator is not routed by the proxy.
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: hms-api
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["api:8080"]

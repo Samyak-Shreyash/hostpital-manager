@@ -83,18 +83,26 @@ jobs:
               -e 's/^HMS_DB_PORT=.*/HMS_DB_PORT=5432/' \
               -e 's|^HMS_DB_URL=.*|HMS_DB_URL=jdbc:postgresql://localhost:5432/hms|' \
               -e 's/^HMS_SERVER_PORT=.*/HMS_SERVER_PORT=8080/' \
-              -e 's/^HMS_PROXY_PORT=.*/HMS_PROXY_PORT=8080/' \
+              -e 's/^HMS_PROXY_PORT=.*/HMS_PROXY_PORT=8080/'               -e 's/^HMS_GRAFANA_ADMIN_USERNAME=.*/HMS_GRAFANA_ADMIN_USERNAME=admin/'               -e "s/^HMS_GRAFANA_ADMIN_PASSWORD=.*/HMS_GRAFANA_ADMIN_PASSWORD=$(openssl rand -hex 16)/"               -e 's/^HMS_GRAFANA_PORT=.*/HMS_GRAFANA_PORT=3000/' \
               .env.example > .env
           if grep -E '^[A-Z_]+=$' .env; then echo "unset variables above: add them to this step"; exit 1; fi
       - name: Start stack and wait for healthchecks
-        run: docker compose -f infra/compose/compose.yml --env-file .env up -d --build --wait --wait-timeout 300
+        run: docker compose -f infra/compose/compose.yml --env-file .env --profile monitoring up -d --build --wait --wait-timeout 300
       - name: Smoke test through the proxy
         run: |
           curl -fsS -o /dev/null http://localhost:8080/
           # Reached Spring Security through the proxy: unauthenticated -> 401 Problem+JSON ([E0-5])
           curl -s -D - -o body.json http://localhost:8080/api/v1/ping | grep -q '^HTTP/1.1 401'
           grep -q '"code":"UNAUTHENTICATED"' body.json
+      - name: Prometheus scrapes the API ([E0-7])
+        run: |
+          for i in $(seq 1 12); do
+            docker compose -f infra/compose/compose.yml --env-file .env exec -T prometheus \
+              wget -qO- 'http://localhost:9090/api/v1/query?query=up{job="hms-api"}' | grep -q '"value":\[[0-9.]*,"1"\]' && exit 0
+            sleep 5
+          done
+          echo "Prometheus never scraped hms-api successfully"; exit 1
       - if: failure()
-        run: docker compose -f infra/compose/compose.yml --env-file .env logs
+        run: docker compose -f infra/compose/compose.yml --env-file .env --profile monitoring logs
       - if: always()
-        run: docker compose -f infra/compose/compose.yml --env-file .env down -v
+        run: docker compose -f infra/compose/compose.yml --env-file .env --profile monitoring down -v
