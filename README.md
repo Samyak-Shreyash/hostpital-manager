@@ -76,6 +76,9 @@ cp .env.example .env                              # then fill in every value (co
 # DB roles (ADR-0015) are created on first start of an empty volume; a volume from before [E0-6] needs one `... down -v`.
 docker compose -f infra/compose/compose.yml --env-file .env up -d --build --wait
 # -> http://localhost:8080 (SPA; /api/* goes to the backend). Stop: ... down  (add -v to wipe the database)
+# Monitoring ([E0-7]): add `--profile monitoring` to up/down. Prometheus scrapes api:8080/actuator/prometheus
+# inside the network (the proxy never routes /actuator); Grafana with the "HMS overview" dashboard on
+# http://localhost:${HMS_GRAFANA_PORT}.
 
 # Or develop locally against just the database:
 # 1. PostgreSQL
@@ -102,7 +105,7 @@ npm run dev                                       # -> http://localhost:5173
 | Proxy + SPA Docker image (repo root) | `docker build -f infra/docker/proxy.Dockerfile -t hms-proxy:$(git rev-parse HEAD) .` |
 | Backend Docker image (repo root) | `docker build -f infra/docker/backend.Dockerfile -t hms-backend:$(git rev-parse HEAD) backend` |
 
-CI (`.github/workflows/ci.yml`) runs on every PR and push to `main`: `backend` (Gradle build incl. integration and architecture tests), `frontend` (lint, test, build), `secret-scan` (gitleaks over full history) `image` (Trivy dependency scan, backend image tagged with the commit SHA, Trivy image scan) and `compose` (dev stack comes up healthy). Scans fail on fixable HIGH/CRITICAL findings. All five are required status checks on `main` (admins included), so a red PR cannot merge.
+CI (`.github/workflows/ci.yml`) runs on every PR and push to `main`: `backend` (Gradle build incl. integration and architecture tests), `frontend` (lint, test, build), `secret-scan` (gitleaks over full history) `image` (Trivy dependency scan, backend image tagged with the commit SHA, Trivy image scan) and `compose` (dev stack incl. monitoring profile comes up healthy, Prometheus scrapes the API). Scans fail on fixable HIGH/CRITICAL findings. All five are required status checks on `main` (admins included), so a red PR cannot merge.
 
 Configuration is read from environment variables; all variables are documented in `.env.example`. Copy it to `.env` for local use (git-ignored). Repository layout and build decisions: ADR-0013.
 

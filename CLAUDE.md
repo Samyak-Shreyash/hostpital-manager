@@ -8,7 +8,7 @@ A commercial-grade Hospital Management System for small/medium multi-specialty c
 Solo developer + AI assistance. **Operational simplicity is a first-class constraint**: no Kubernetes, Kafka, Redis, microservices, or extra infra without a documented requirement.
 
 ## 2. Current status (update this section as work lands)
-- Phase: **M0 Skeleton — cleared to start (2026-11-07).** Repo skeleton `[E0-1]` (#12) implemented: Spring Boot app starts, health only, all other paths denied. Next M0 issues: `[E0-2]`…`[E0-9]`.
+- Phase: **M0 Skeleton — cleared to start (2026-11-07).** Repo skeleton `[E0-1]` (#12) implemented: Spring Boot app starts, health only, all other paths denied. `[E0-3]`, `[E0-5]`, `[E0-6]` merged; `[E0-7]` observability baseline (Prometheus scrape + Grafana profile) on branch.
 - Accepted ADRs (binding): 0001 modular monolith (ArchUnit only), 0003 single schema `hms`, 0004 UUIDv7, 0013 repo/build layout (monorepo, single Gradle project, Groovy DSL + version catalog, Vitest + ESLint), 0014 per-module observability, 0015 database roles (`hms_owner` migrates, `hms_app` runtime DML only). ADRs 0002 (baseline) and 0005–0012 as listed in `docs/adr/README.md` — Proposed ones are not binding.
 - Do **not** implement features of later milestones (M1+) until the Proposed ADRs they depend on (e.g. 0005 auth, 0006 RBAC, 0007 audit, 0010 isolation, 0012 money) are accepted.
 - Docs present: `docs/adr/`, `docs/product/prd.md`, `docs/architecture/{domain-model,hld}.md`, `docs/architecture/database-design.md` (v0.1, M0 baseline approved), `docs/api/api-design.md`. Still missing (ask before inventing): `docs/00-review-notes.md`, `docs/engineering/project-structure.md`, `docs/project-management/`.
