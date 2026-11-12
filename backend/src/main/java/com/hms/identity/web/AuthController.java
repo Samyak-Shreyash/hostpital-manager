@@ -43,6 +43,9 @@ class AuthController {
     @PreAuthorize("permitAll()")
     LoginResponse login(@Valid @RequestBody LoginRequest request,
             HttpServletRequest httpRequest, HttpServletResponse httpResponse) {
+        // A login attempt acts as nobody until it succeeds: an identity already in this session must not lend
+        // its organization to the attempt (ADR-0010). The stored session is untouched unless login succeeds.
+        SecurityContextHolder.clearContext();
         return switch (authentication.login(request.email(), request.password())) {
             case LoginResult.Succeeded ok -> {
                 startSession(ok.principal(), httpRequest, httpResponse);

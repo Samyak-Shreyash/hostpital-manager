@@ -1,5 +1,6 @@
 package com.hms.identity.api;
 
+import com.hms.shared.tenancy.OrganizationPrincipal;
 import java.io.Serializable;
 import java.util.List;
 import java.util.Objects;
@@ -12,7 +13,7 @@ import java.util.UUID;
  * at login (ADR-0006) and stay fixed for the life of the session.
  */
 public record AuthenticatedPrincipal(UUID userId, UUID organizationId, String email, String fullName,
-        List<String> roles, List<String> permissions) implements Serializable {
+        List<String> roles, List<String> permissions) implements Serializable, OrganizationPrincipal {
 
     public AuthenticatedPrincipal {
         Objects.requireNonNull(userId, "userId");

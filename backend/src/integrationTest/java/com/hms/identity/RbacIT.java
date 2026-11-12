@@ -11,7 +11,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.hms.identity.api.Permissions;
 import com.hms.identity.api.RoleProvisioning;
 import com.hms.identity.domain.DefaultRoleTemplates;
+import com.hms.shared.tenancy.OrganizationContext;
 import com.hms.support.PostgresIT;
+import com.hms.support.TestOrganizations;
 import jakarta.servlet.http.Cookie;
 import java.util.List;
 import java.util.Map;
@@ -33,6 +35,8 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.ResultActions;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -71,6 +75,12 @@ class RbacIT extends PostgresIT {
     @Autowired
     RoleProvisioning roleProvisioning;
 
+    @Autowired
+    OrganizationContext organizationContext;
+
+    @Autowired
+    PlatformTransactionManager transactionManager;
+
     private static String passwordHash;
     private UUID org;
     private UUID userId;
@@ -81,7 +91,7 @@ class RbacIT extends PostgresIT {
         if (passwordHash == null) {
             passwordHash = passwordEncoder.encode(PASSWORD);
         }
-        org = UUID.randomUUID();
+        org = TestOrganizations.create(jdbc);
         userId = UUID.randomUUID();
         email = "rbac-" + userId + "@demo-clinic.example";
         insertUser(org, userId, email);
@@ -151,7 +161,7 @@ class RbacIT extends PostgresIT {
 
     @Test
     void roleOfAnotherOrganizationCannotBeAssignedOrGranted() {
-        UUID otherOrg = UUID.randomUUID();
+        UUID otherOrg = TestOrganizations.create(jdbc);
         UUID foreignRole = insertRole(otherOrg, "FOREIGN", Permissions.PATIENT_READ);
 
         assertThatThrownBy(() -> assignRole(org, userId, foreignRole))
@@ -178,14 +188,14 @@ class RbacIT extends PostgresIT {
         roleProvisioning.provisionDefaultRoles(org);
         roleProvisioning.provisionDefaultRoles(org);
 
-        Map<String, Set<String>> stored = jdbc.sql("""
+        Map<String, Set<String>> stored = inOrg(org, () -> jdbc.sql("""
                 SELECT r.code, rp.permission_code FROM hms.role r
                 JOIN hms.role_permission rp ON rp.organization_id = r.organization_id AND rp.role_id = r.id
                 WHERE r.organization_id = ?
                 """)
                 .param(org)
                 .query((rs, n) -> Map.entry(rs.getString(1), rs.getString(2)))
-                .list().stream()
+                .list()).stream()
                 .collect(Collectors.groupingBy(Map.Entry::getKey,
                         Collectors.mapping(Map.Entry::getValue, Collectors.toSet())));
         Map<String, Set<String>> expected = DefaultRoleTemplates.ALL.stream()
@@ -229,12 +239,12 @@ class RbacIT extends PostgresIT {
 
     private UUID insertRole(UUID organizationId, String code, String... permissions) {
         UUID id = UUID.randomUUID();
-        jdbc.sql("""
+        inOrg(organizationId, () -> jdbc.sql("""
                 INSERT INTO hms.role (id, organization_id, code, name, created_at, updated_at)
                 VALUES (?, ?, ?, ?, now(), now())
                 """)
                 .params(id, organizationId, code, "Demo " + code)
-                .update();
+                .update());
         for (String permission : permissions) {
             grant(organizationId, id, permission);
         }
@@ -242,14 +252,22 @@ class RbacIT extends PostgresIT {
     }
 
     private void grant(UUID organizationId, UUID roleId, String permission) {
-        jdbc.sql("INSERT INTO hms.role_permission (organization_id, role_id, permission_code) VALUES (?, ?, ?)")
+        inOrg(organizationId, () -> jdbc.sql(
+                        "INSERT INTO hms.role_permission (organization_id, role_id, permission_code) VALUES (?, ?, ?)")
                 .params(organizationId, roleId, permission)
-                .update();
+                .update());
     }
 
     private void assignRole(UUID organizationId, UUID user, UUID roleId) {
-        jdbc.sql("INSERT INTO hms.user_role (organization_id, user_id, role_id) VALUES (?, ?, ?)")
+        inOrg(organizationId, () -> jdbc.sql(
+                        "INSERT INTO hms.user_role (organization_id, user_id, role_id) VALUES (?, ?, ?)")
                 .params(organizationId, user, roleId)
-                .update();
+                .update());
+    }
+
+    /** The role tables are under RLS ([E1-6]): fixtures write them in the owning organization's context. */
+    private <T> T inOrg(UUID organizationId, java.util.function.Supplier<T> work) {
+        return organizationContext.runAs(organizationId,
+                () -> new TransactionTemplate(transactionManager).execute(status -> work.get()));
     }
 }

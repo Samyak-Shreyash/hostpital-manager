@@ -7,6 +7,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.hms.support.PostgresIT;
+import com.hms.support.TestOrganizations;
 import jakarta.servlet.http.Cookie;
 import java.util.List;
 import java.util.UUID;
@@ -75,7 +76,7 @@ class PasswordChangeIT extends PostgresIT {
                     must_change_password, created_at, updated_at)
                 VALUES (?, ?, ?, 'Demo User', ?, 'ACTIVE', true, now(), now())
                 """)
-                .params(userId, UUID.randomUUID(), email, oldHash)
+                .params(userId, TestOrganizations.create(jdbc), email, oldHash)
                 .update();
     }
 

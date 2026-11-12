@@ -73,11 +73,11 @@ ALTER DEFAULT PRIVILEGES FOR ROLE hms_owner IN SCHEMA hms
 
 Flyway runs in-process at startup with the migration credentials (Spring Boot `spring.flyway.user`). Running migrations as a separate job is deferred until a deployment needs it.
 
-## 4. Organization ownership and same-org references (Planned)
-Referenced by domain-model invariant I11. Detail is written by `[E1-6]`; the intent fixed now so V1 does not contradict it:
-- Every business table has `organization_id uuid NOT NULL`, FK to `hms.organization(id)` once that table exists.
+## 4. Organization ownership and same-org references
+Referenced by domain-model invariant I11. Implemented by `[E1-6]` (V5, section 14):
+- Every business table has `organization_id uuid NOT NULL`, FK to `hms.organization(id)`.
 - High-risk parent tables expose `UNIQUE (organization_id, id)`; children reference them with composite FKs `(organization_id, <parent>_id) REFERENCES parent (organization_id, id)` so a row can never point at another org's row.
-- RLS is **not** part of the baseline; `[E1-6]` introduces it. The `[E1-2]` spike confirmed it works through HikariCP and JPA (ADR-0010, spike outcome). Pattern per business table: `ENABLE` + `FORCE ROW LEVEL SECURITY`; one policy `USING`/`WITH CHECK (organization_id = NULLIF(current_setting('app.organization_id', true), '')::uuid)`; the app sets the value per transaction with `set_config(..., true)`, never session-level. V1 keeps `hms_app` `NOBYPASSRLS` and non-owner so this can be enforced.
+- RLS is **not** part of the baseline; `[E1-6]` introduced it (V5, section 14, including the tables excluded from it). The `[E1-2]` spike confirmed it works through HikariCP and JPA (ADR-0010, spike outcome). Pattern per business table: `ENABLE` + `FORCE ROW LEVEL SECURITY`; one policy `USING`/`WITH CHECK (organization_id = NULLIF(current_setting('app.organization_id', true), '')::uuid)`; the app sets the value per transaction with `set_config(..., true)`, never session-level. V1 keeps `hms_app` `NOBYPASSRLS` and non-owner so this can be enforced.
 
 ## 5. Extensions
 | Extension | Why | Needed by |
@@ -147,7 +147,7 @@ REVOKE ALL ON FUNCTION hms.reject_modification() FROM PUBLIC;
 ## 8. Baseline migration (`V1__baseline.sql`) and order
 V1 contains, in order: extensions (section 5) → schema privileges and default privileges (section 3) → `hms.reject_modification()` (section 7) → `hms.document_sequence` (section 6). It creates no business tables.
 
-Applied: V2 `audit_event` + partitions `[E1-1]` (section 11); V3 `app_user` + Spring Session tables `[E1-3]` (section 12); V4 RBAC tables `[E1-5]` (section 13). Planned next (each in its issue): `organization`, FKs on `document_sequence`/`app_user` `[E1-6]` → roles, permissions `[E1-5]` → RLS policies `[E1-6]` (if ADR-0010 accepted) → M2+ modules.
+Applied: V2 `audit_event` + partitions `[E1-1]` (section 11); V3 `app_user` + Spring Session tables `[E1-3]` (section 12); V4 RBAC tables `[E1-5]` (section 13); V5 `organization`, organization FKs and RLS policies `[E1-6]` (section 14). Planned next: M2+ modules, each table with its RLS policy in the same migration.
 
 ## 9. Tests required for `[E0-6]`
 Integration tests (Testcontainers `postgres:17-alpine` with the role init script from section 3):
@@ -221,4 +221,16 @@ ADR-0007, PRD AUD-1/2/4, invariant I8. Written only through `audit.api.AuditReco
 
 - Login loads the user's role codes and the union of their permissions into the session principal; the permissions become the Spring authorities. A change to a role takes effect on the user's next login (sessions are revoked on role change by role/user management).
 - Default roles (PRD section 3 personas: `SYSTEM_ADMIN`, `FACILITY_ADMIN`, `DOCTOR`, `NURSE`, `RECEPTIONIST`, `ACCOUNTANT`) are code templates (`DefaultRoleTemplates`) copied into an organization by `RoleProvisioning.provisionDefaultRoles`, not seeded by the migration (no organization exists at migration time). The PRD's `report:read` maps to `report:clinical`.
-- `DELETE` on `role_permission` / `user_role` is not granted yet; it comes with role/user management. FK to `organization` and RLS policies come with `[E1-6]`.
+- `DELETE` on `role_permission` / `user_role` is not granted yet; it comes with role/user management. FK to `organization` and RLS policies were added by `[E1-6]` (section 14).
+
+## 14. Organization and row-level security (`V5__organization_rls.sql`, `[E1-6]`, ADR-0010)
+| Table | Columns | Notes |
+|---|---|---|
+| `organization` | `id`, `name`, `status` (`ACTIVE`/`INACTIVE`), `version`, `created_at`, `updated_at` | Minimal for M1; settings such as time zone come with organization management. No DELETE grant. |
+
+- FKs to `organization(id)` from `document_sequence`, `app_user`, `role`, `role_permission`, `user_role` and `audit_event`. V5 backfills an `organization` row for any `organization_id` already present (dev databases) before adding them.
+- **RLS tables** (`ENABLE` + `FORCE`, policy `org_isolation` with `USING` and `WITH CHECK` on `organization_id = NULLIF(current_setting('app.organization_id', true), '')::uuid`): `document_sequence`, `role`, `role_permission`, `user_role`. Every later org-owned table gets the same policy in the migration that creates it; `OrganizationIsolationIT` fails if a table with an `organization_id` column is neither under forced RLS nor listed below.
+- **Excluded from RLS (ruling, 2026-11-12):** `organization` (it is the tenant itself), `app_user` (login looks the user up by email before any organization is known), `audit_event` (written by unauthenticated login flows; read only through the org-scoped audit viewer) and `spring_session` / `spring_session_attributes` (technical rows, no `organization_id`). `permission` is global reference data. App-level scoping by the principal's organization still applies to every query on these tables.
+- **Context:** `OrganizationContext` (`com.hms.shared.tenancy`) yields the principal's organization (via `OrganizationPrincipal`, implemented by `AuthenticatedPrincipal`); `OrganizationTransactionListener` runs `set_config('app.organization_id', <org>, true)` as the first statement of every new transaction that has one. System or unauthenticated flows use `OrganizationContext.runAs(org, work)` or, when the organization is only learnt mid-transaction, `bindToCurrentTransaction(org)` (login after the email lookup; `RoleProvisioning.provisionDefaultRoles`). Both refuse an organization other than an authenticated principal's. No context means RLS tables return no rows (fail-closed).
+- **Jobs:** audit partition maintenance runs without a principal; it touches only `audit_event` through a `SECURITY DEFINER` function, so it needs no context. Future jobs that touch RLS tables iterate organizations with `runAs`.
+- **Migrations:** `FORCE` binds `hms_owner` too, so a migration that seeds or backfills rows of an RLS table must `set_config('app.organization_id', <org>, true)` per organization first.

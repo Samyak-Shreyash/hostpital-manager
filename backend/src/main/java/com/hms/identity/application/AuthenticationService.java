@@ -7,6 +7,7 @@ import com.hms.identity.api.AuthenticatedPrincipal;
 import com.hms.identity.domain.LoginLockout;
 import com.hms.identity.domain.PasswordPolicy;
 import com.hms.shared.domain.BusinessRuleException;
+import com.hms.shared.tenancy.OrganizationContext;
 import com.hms.identity.infrastructure.AppUserEntity;
 import com.hms.identity.infrastructure.AppUserRepository;
 import com.hms.identity.infrastructure.RbacRepository;
@@ -33,17 +34,19 @@ public class AuthenticationService {
     private final PasswordEncoder passwordEncoder;
     private final AuditRecorder audit;
     private final RbacRepository rbac;
+    private final OrganizationContext organizationContext;
     private final Clock clock;
     /** Compared against when the email is unknown, so both failure paths cost one BCrypt check. */
     private final String timingEqualiserHash;
 
     public AuthenticationService(
             AppUserRepository users, PasswordEncoder passwordEncoder, AuditRecorder audit, RbacRepository rbac,
-            Clock clock) {
+            OrganizationContext organizationContext, Clock clock) {
         this.users = users;
         this.passwordEncoder = passwordEncoder;
         this.audit = audit;
         this.rbac = rbac;
+        this.organizationContext = organizationContext;
         this.clock = clock;
         this.timingEqualiserHash = passwordEncoder.encode("timing-equaliser-not-a-password");
     }
@@ -58,6 +61,9 @@ public class AuthenticationService {
             return new LoginResult.InvalidCredentials();
         }
         AppUserEntity user = found.get();
+        // app_user is outside RLS (the org is unknown until this lookup); the role tables are not, so the rest
+        // of this transaction runs in the user's organization (ADR-0010, database-design.md section 14).
+        organizationContext.bindToCurrentTransaction(user.getOrganizationId());
 
         if (LoginLockout.isLocked(user.getLockedUntil(), now)) {
             record(user, null, "LOGIN_FAILED", AuditOutcome.DENIED);

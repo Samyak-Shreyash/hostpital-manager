@@ -8,7 +8,9 @@ import com.hms.audit.api.AuditOutcome;
 import com.hms.audit.api.AuditRecorder;
 import com.hms.audit.infrastructure.AuditPartitionMaintenance;
 import com.hms.shared.web.CorrelationIdFilter;
+import com.hms.shared.tenancy.OrganizationContext;
 import com.hms.support.PostgresIT;
+import com.hms.support.TestOrganizations;
 import java.sql.Array;
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -54,6 +56,9 @@ class AuditRecorderIT extends PostgresIT {
     @Autowired
     PlatformTransactionManager transactionManager;
 
+    @Autowired
+    OrganizationContext organizationContext;
+
     /** actor_id references app_user ([E1-3]), so audited actions need a real (synthetic) user. */
     private static final UUID ACTOR = UUID.fromString("0190d000-0000-7000-8000-00000000000d");
 
@@ -63,7 +68,7 @@ class AuditRecorderIT extends PostgresIT {
                 INSERT INTO hms.app_user (id, organization_id, email, full_name, password_hash, created_at, updated_at)
                 VALUES (?, ?, 'audit-actor@demo-clinic.example', 'Audit Actor', 'not-a-hash', now(), now())
                 ON CONFLICT (id) DO NOTHING""")
-                .params(ACTOR, UUID.randomUUID())
+                .params(ACTOR, TestOrganizations.create(jdbc))
                 .update();
     }
 
@@ -76,7 +81,7 @@ class AuditRecorderIT extends PostgresIT {
 
     @Test
     void appRoleHasNoUpdateDeleteOrTruncatePrivilege() throws SQLException {
-        UUID org = UUID.randomUUID();
+        UUID org = TestOrganizations.create(jdbc);
         inTransaction(() -> recorder.record(viewed(org)));
         try (Connection app = connect(APP, APP_PASSWORD)) {
             assertSqlState(() -> app.createStatement().execute(
@@ -92,7 +97,7 @@ class AuditRecorderIT extends PostgresIT {
     /** Triggers fire for every role, so even the owner (or an operator) cannot rewrite history. */
     @Test
     void triggersRejectUpdateDeleteAndTruncateEvenForOwner() throws SQLException {
-        UUID org = UUID.randomUUID();
+        UUID org = TestOrganizations.create(jdbc);
         inTransaction(() -> recorder.record(viewed(org)));
         try (Connection owner = connect(OWNER, OWNER_PASSWORD)) {
             assertSqlState(() -> owner.createStatement().execute(
@@ -119,7 +124,7 @@ class AuditRecorderIT extends PostgresIT {
 
     @Test
     void auditCommitsWithTheBusinessChange() {
-        UUID org = UUID.randomUUID();
+        UUID org = TestOrganizations.create(jdbc);
         inTransaction(() -> {
             businessWrite(org);
             recorder.record(viewed(org));
@@ -130,7 +135,7 @@ class AuditRecorderIT extends PostgresIT {
 
     @Test
     void auditRollsBackWithTheBusinessChange() {
-        UUID org = UUID.randomUUID();
+        UUID org = TestOrganizations.create(jdbc);
         assertThatThrownBy(() -> inTransaction(() -> {
             businessWrite(org);
             recorder.record(viewed(org));
@@ -142,7 +147,7 @@ class AuditRecorderIT extends PostgresIT {
 
     @Test
     void failingAuditWriteRollsBackTheBusinessChange() {
-        UUID org = UUID.randomUUID();
+        UUID org = TestOrganizations.create(jdbc);
         // A correlation id the DB check rejects makes the audit INSERT fail at flush, inside the same transaction.
         MDC.put(CorrelationIdFilter.MDC_KEY, "not allowed!");
         assertThatThrownBy(() -> inTransaction(() -> {
@@ -155,14 +160,14 @@ class AuditRecorderIT extends PostgresIT {
 
     @Test
     void recordingOutsideATransactionIsRefused() {
-        UUID org = UUID.randomUUID();
+        UUID org = TestOrganizations.create(jdbc);
         assertThatThrownBy(() -> recorder.record(viewed(org))).isInstanceOf(IllegalTransactionStateException.class);
         assertThat(countFor(org)).isZero();
     }
 
     @Test
     void storesActorEntityOutcomeAndCorrelationId() {
-        UUID org = UUID.randomUUID();
+        UUID org = TestOrganizations.create(jdbc);
         UUID actor = ACTOR;
         UUID patient = UUID.randomUUID();
         MDC.put(CorrelationIdFilter.MDC_KEY, "it-audit-1");
@@ -183,7 +188,7 @@ class AuditRecorderIT extends PostgresIT {
 
     @Test
     void metadataHoldsFieldNamesOnly() throws SQLException {
-        UUID org = UUID.randomUUID();
+        UUID org = TestOrganizations.create(jdbc);
         inTransaction(() -> recorder.record(new AuditEntry(org, ACTOR, "PATIENT_UPDATED", "PATIENT",
                 UUID.randomUUID(), AuditOutcome.SUCCESS, List.of("phone", "address.city"))));
 
@@ -208,7 +213,7 @@ class AuditRecorderIT extends PostgresIT {
 
     @Test
     void recorderRejectsValuesInChangedFieldsBeforeTouchingTheDatabase() {
-        UUID org = UUID.randomUUID();
+        UUID org = TestOrganizations.create(jdbc);
         assertThatThrownBy(() -> inTransaction(() -> recorder.record(new AuditEntry(org, null, "PATIENT_UPDATED",
                 "PATIENT", UUID.randomUUID(), AuditOutcome.SUCCESS, List.of("9000000001")))))
                 .isInstanceOf(IllegalArgumentException.class)
@@ -222,6 +227,7 @@ class AuditRecorderIT extends PostgresIT {
         String insert = """
                 INSERT INTO hms.audit_event (id, organization_id, occurred_at, action, entity_type, outcome, changed_fields)
                 VALUES (?, ?, now(), 'PATIENT_UPDATED', 'PATIENT', 'SUCCESS', ?)""";
+        UUID org = TestOrganizations.create(jdbc);
         try (Connection app = connect(APP, APP_PASSWORD)) {
             for (String value : new String[] {"9000000001", "test.user@example.invalid", "Fever since three days"}) {
                 assertSqlState(() -> {
@@ -236,7 +242,7 @@ class AuditRecorderIT extends PostgresIT {
             // Same statement with field names only succeeds, so the negative case fails for the right reason.
             try (PreparedStatement ps = app.prepareStatement(insert)) {
                 ps.setObject(1, UUID.randomUUID());
-                ps.setObject(2, UUID.randomUUID());
+                ps.setObject(2, org);
                 ps.setArray(3, app.createArrayOf("text", new String[] {"phone", "address.city"}));
                 assertThat(ps.executeUpdate()).isEqualTo(1);
             }
@@ -280,6 +286,7 @@ class AuditRecorderIT extends PostgresIT {
 
     /** Stand-in for a module's own write: a row in the only business table V1 has. */
     private void businessWrite(UUID org) {
+        organizationContext.bindToCurrentTransaction(org); // document_sequence is under RLS ([E1-6])
         jdbc.sql("""
                         INSERT INTO hms.document_sequence (organization_id, document_type, period_key, created_at, updated_at)
                         VALUES (:org, 'UHID', 'ALL', now(), now())""")
@@ -288,8 +295,9 @@ class AuditRecorderIT extends PostgresIT {
     }
 
     private int businessRows(UUID org) {
-        return jdbc.sql("SELECT count(*) FROM hms.document_sequence WHERE organization_id = :org")
-                .param("org", org).query(Integer.class).single();
+        return organizationContext.runAs(org, () -> new TransactionTemplate(transactionManager).execute(status ->
+                jdbc.sql("SELECT count(*) FROM hms.document_sequence WHERE organization_id = :org")
+                        .param("org", org).query(Integer.class).single()));
     }
 
     private int countFor(UUID org) {

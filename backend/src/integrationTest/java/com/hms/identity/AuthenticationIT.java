@@ -7,6 +7,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.hms.support.PostgresIT;
+import com.hms.support.TestOrganizations;
 import jakarta.servlet.http.Cookie;
 import java.time.Instant;
 import java.util.List;
@@ -54,6 +55,7 @@ class AuthenticationIT extends PostgresIT {
         if (passwordHash == null) {
             passwordHash = passwordEncoder.encode(PASSWORD);
         }
+        TestOrganizations.ensure(jdbc, ORG);
         userId = UUID.randomUUID();
         email = "user-" + userId + "@demo-clinic.example";
         insertUser(userId, email, "ACTIVE");
