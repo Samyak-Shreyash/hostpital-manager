@@ -1,6 +1,8 @@
 package com.hms.identity.web;
 
 import com.hms.identity.api.AuthenticatedPrincipal;
+import com.hms.organization.api.OrganizationDirectory;
+import com.hms.organization.api.OrganizationSummary;
 import com.hms.identity.application.AuthenticationService;
 import com.hms.identity.application.ChangePasswordResult;
 import com.hms.identity.application.LoginResult;
@@ -33,8 +35,11 @@ class AuthController {
 
     private final AuthenticationService authentication;
     private final SecurityContextRepository securityContextRepository;
+    private final OrganizationDirectory organizations;
 
-    AuthController(AuthenticationService authentication, SecurityContextRepository securityContextRepository) {
+    AuthController(AuthenticationService authentication, SecurityContextRepository securityContextRepository,
+            OrganizationDirectory organizations) {
+        this.organizations = organizations;
         this.authentication = authentication;
         this.securityContextRepository = securityContextRepository;
     }
@@ -49,7 +54,7 @@ class AuthController {
         return switch (authentication.login(request.email(), request.password())) {
             case LoginResult.Succeeded ok -> {
                 startSession(ok.principal(), httpRequest, httpResponse);
-                yield LoginResponse.of(ok.principal(), ok.mustChangePassword());
+                yield LoginResponse.of(ok.principal(), ok.mustChangePassword(), organization(ok.principal()));
             }
             case LoginResult.InvalidCredentials ignored -> throw new ProblemException(
                     HttpStatus.UNAUTHORIZED, "INVALID_CREDENTIALS", "Email or password is incorrect.");
@@ -75,7 +80,8 @@ class AuthController {
     @GetMapping("/me")
     @PreAuthorize("isAuthenticated()")
     LoginResponse me(@AuthenticationPrincipal AuthenticatedPrincipal principal) {
-        return LoginResponse.of(principal, authentication.isPasswordChangeRequired(principal.userId()));
+        return LoginResponse.of(principal, authentication.isPasswordChangeRequired(principal.userId()),
+                organization(principal));
     }
 
     @PostMapping("/change-password")
@@ -108,5 +114,10 @@ class AuthController {
         context.setAuthentication(UsernamePasswordAuthenticationToken.authenticated(principal, null, authorities));
         SecurityContextHolder.setContext(context);
         securityContextRepository.saveContext(context, request, response);
+    }
+
+    private OrganizationSummary organization(AuthenticatedPrincipal principal) {
+        return organizations.find(principal.organizationId())
+                .orElseThrow(() -> new IllegalStateException("organization of a logged-in user is missing"));
     }
 }

@@ -83,6 +83,8 @@ class OrganizationIsolationIT extends PostgresIT {
             "GET /api/v1/roles",
             "POST /api/v1/roles",
             "GET /api/v1/permissions",
+            "GET /api/v1/organization", // the caller's own organization: no id in the path
+            "PATCH /api/v1/organization",
             "GET /v3/api-docs",
             "GET /v3/api-docs.yaml",
             "GET /v3/api-docs/swagger-config",

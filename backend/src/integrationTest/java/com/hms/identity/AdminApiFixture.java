@@ -24,14 +24,14 @@ import org.springframework.transaction.support.TransactionTemplate;
  * Test fixture for the user and role management ITs: synthetic organizations with the default roles, users with
  * given roles, and logged-in sessions. Every test builds its own organization, so nothing leaks between tests.
  */
-final class AdminApiFixture {
+public final class AdminApiFixture {
 
     static final String PASSWORD = "Synthetic-Pass-123";
     private static final String SESSION_COOKIE = "HMSSESSION";
 
     /** A logged-in session plus the CSRF token, applied to any request. */
-    record Session(UUID userId, String email, Cookie session, Cookie csrf) {
-        MockHttpServletRequestBuilder apply(MockHttpServletRequestBuilder request) {
+    public record Session(UUID userId, String email, Cookie session, Cookie csrf) {
+        public MockHttpServletRequestBuilder apply(MockHttpServletRequestBuilder request) {
             return request.cookie(session, csrf).header("X-XSRF-TOKEN", csrf.getValue());
         }
     }
@@ -44,7 +44,7 @@ final class AdminApiFixture {
     private final PlatformTransactionManager transactionManager;
     private final String passwordHash;
 
-    AdminApiFixture(MockMvc mockMvc, JdbcClient jdbc, PasswordEncoder passwordEncoder,
+    public AdminApiFixture(MockMvc mockMvc, JdbcClient jdbc, PasswordEncoder passwordEncoder,
             RoleProvisioning roleProvisioning, OrganizationContext organizationContext,
             PlatformTransactionManager transactionManager) {
         this.mockMvc = mockMvc;
@@ -56,14 +56,14 @@ final class AdminApiFixture {
         this.passwordHash = passwordEncoder.encode(PASSWORD);
     }
 
-    UUID organization() {
+    public UUID organization() {
         UUID org = TestOrganizations.create(jdbc);
         roleProvisioning.provisionDefaultRoles(org);
         return org;
     }
 
     /** An active user (no forced password change) holding the given role codes of the organization. */
-    UUID user(UUID org, String email, String... roleCodes) {
+    public UUID user(UUID org, String email, String... roleCodes) {
         UUID id = UUID.randomUUID();
         jdbc.sql("""
                 INSERT INTO hms.app_user (id, organization_id, email, full_name, password_hash, status,
@@ -79,12 +79,12 @@ final class AdminApiFixture {
         return id;
     }
 
-    String uniqueEmail(String prefix) {
+    public String uniqueEmail(String prefix) {
         return prefix + "-" + UUID.randomUUID() + "@demo-clinic.example";
     }
 
     /** A custom role holding exactly the given permissions. */
-    void role(UUID org, String code, String... permissions) {
+    public void role(UUID org, String code, String... permissions) {
         UUID roleId = UUID.randomUUID();
         inOrg(org, () -> {
             jdbc.sql("""
@@ -99,16 +99,16 @@ final class AdminApiFixture {
         });
     }
 
-    UUID roleId(UUID org, String code) {
+    public UUID roleId(UUID org, String code) {
         return inOrg(org, () -> jdbc.sql("SELECT id FROM hms.role WHERE organization_id = ? AND code = ?")
                 .params(org, code).query(UUID.class).single());
     }
 
-    Session login(UUID userId, String email) throws Exception {
+    public Session login(UUID userId, String email) throws Exception {
         return login(userId, email, PASSWORD);
     }
 
-    Session login(UUID userId, String email, String password) throws Exception {
+    public Session login(UUID userId, String email, String password) throws Exception {
         Cookie csrf = csrf();
         MvcResult result = mockMvc.perform(post("/api/v1/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -123,32 +123,32 @@ final class AdminApiFixture {
     }
 
     /** Creates a user with the given roles and logs them in. */
-    Session loggedIn(UUID org, String prefix, String... roleCodes) throws Exception {
+    public Session loggedIn(UUID org, String prefix, String... roleCodes) throws Exception {
         String email = uniqueEmail(prefix);
         return login(user(org, email, roleCodes), email);
     }
 
-    Cookie csrf() throws Exception {
+    public Cookie csrf() throws Exception {
         Cookie csrf = mockMvc.perform(get("/api/v1/auth/me")).andReturn().getResponse().getCookie("XSRF-TOKEN");
         assertThat(csrf).isNotNull();
         return csrf;
     }
 
-    long version(UUID userId) {
+    public long version(UUID userId) {
         return jdbc.sql("SELECT version FROM hms.app_user WHERE id = ?").param(userId).query(Long.class).single();
     }
 
-    int sessionCount(UUID userId) {
+    public int sessionCount(UUID userId) {
         return jdbc.sql("SELECT count(*) FROM hms.spring_session WHERE principal_name = ?")
                 .param(userId.toString()).query(Integer.class).single();
     }
 
-    List<String> auditActions(UUID entityId) {
+    public List<String> auditActions(UUID entityId) {
         return jdbc.sql("SELECT action FROM hms.audit_event WHERE entity_id = ? ORDER BY occurred_at, id")
                 .param(entityId).query(String.class).list();
     }
 
-    <T> T inOrg(UUID org, java.util.function.Supplier<T> work) {
+    public <T> T inOrg(UUID org, java.util.function.Supplier<T> work) {
         return organizationContext.runAs(org, () -> new TransactionTemplate(transactionManager)
                 .execute(status -> work.get()));
     }

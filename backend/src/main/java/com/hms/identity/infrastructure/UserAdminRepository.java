@@ -37,6 +37,11 @@ public class UserAdminRepository {
         this.jdbc = jdbc;
     }
 
+    /** Serializes first-run bootstrap across application instances; released at the end of the transaction. */
+    public void lockBootstrap() {
+        jdbc.sql("SELECT pg_advisory_xact_lock(hashtext('hms.bootstrap'))").query().singleValue();
+    }
+
     /** Null filters are ignored. {@code likePattern} is already lower-cased, escaped and wrapped in %. */
     public List<UserRow> list(UUID organizationId, String status, String roleCode, String likePattern,
             int limit, long offset) {

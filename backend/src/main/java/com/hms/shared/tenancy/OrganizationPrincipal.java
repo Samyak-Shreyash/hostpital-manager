@@ -9,4 +9,7 @@ import java.util.UUID;
 public interface OrganizationPrincipal {
 
     UUID organizationId();
+
+    /** The acting user, for audit attribution. */
+    UUID userId();
 }

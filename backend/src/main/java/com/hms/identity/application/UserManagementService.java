@@ -101,13 +101,30 @@ public class UserManagementService {
     @Transactional
     public UserWithTemporaryPassword create(AuthenticatedPrincipal actor, String email, String fullName,
             List<String> roleCodes) {
-        UUID org = actor.organizationId();
+        String temporaryPassword = TemporaryPassword.generate();
+        UserView view = insertUser(actor.organizationId(), actor.userId(), email, fullName, roleCodes,
+                temporaryPassword);
+        return new UserWithTemporaryPassword(view, temporaryPassword);
+    }
+
+    /**
+     * First-run bootstrap: the System Administrator of a freshly created organization, with the given temporary
+     * password (the caller delivers it out of band and never logs it). Must run in the transaction that
+     * provisioned the organization's roles. Audited as the system (no actor); the password is not part of the audit.
+     */
+    @Transactional
+    public UserView createInitialAdministrator(UUID organizationId, String email, String fullName,
+            String temporaryPassword) {
+        return insertUser(organizationId, null, email, fullName, List.of("SYSTEM_ADMIN"), temporaryPassword);
+    }
+
+    private UserView insertUser(UUID org, UUID actorId, String email, String fullName, List<String> roleCodes,
+            String temporaryPassword) {
         String normalisedEmail = email.trim().toLowerCase(Locale.ROOT);
         if (users.existsByEmail(normalisedEmail)) {
             throw duplicateEmail();
         }
         Map<String, UUID> roleIds = resolveRoles(org, roleCodes);
-        String temporaryPassword = TemporaryPassword.generate();
         PasswordPolicy.require(temporaryPassword, normalisedEmail);
         Instant now = clock.instant();
         AppUserEntity user = AppUserEntity.create(ids.next(), org, normalisedEmail, fullName.trim(),
@@ -119,10 +136,9 @@ public class UserManagementService {
             throw duplicateEmail();
         }
         roleIds.values().forEach(roleId -> rbac.insertUserRole(org, user.getId(), roleId));
-        audit.record(new AuditEntry(org, actor.userId(), "USER_CREATED", ENTITY, user.getId(), AuditOutcome.SUCCESS,
+        audit.record(new AuditEntry(org, actorId, "USER_CREATED", ENTITY, user.getId(), AuditOutcome.SUCCESS,
                 List.of("email", "fullName", "mustChangePassword", "roles", "status")));
-        return new UserWithTemporaryPassword(view(user, List.copyOf(new TreeSet<>(roleIds.keySet()))),
-                temporaryPassword);
+        return view(user, List.copyOf(new TreeSet<>(roleIds.keySet())));
     }
 
     /**
