@@ -3,6 +3,7 @@ package com.hms.shared.tenancy;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -77,6 +78,11 @@ class OrganizationIsolationIT extends PostgresIT {
             "POST /api/v1/auth/logout",
             "GET /api/v1/auth/me",
             "POST /api/v1/auth/change-password",
+            "GET /api/v1/users",
+            "POST /api/v1/users",
+            "GET /api/v1/roles",
+            "POST /api/v1/roles",
+            "GET /api/v1/permissions",
             "GET /v3/api-docs",
             "GET /v3/api-docs.yaml",
             "GET /v3/api-docs/swagger-config",
@@ -92,14 +98,28 @@ class OrganizationIsolationIT extends PostgresIT {
      * Cross-org cases, keyed "METHOD pattern". Each builds the request for a given entity of the fixture.
      * Later modules add their id-taking endpoints here (or the reflection test fails).
      */
+    private static final String PATCH_BODY = "{\"version\":0,\"fullName\":\"Renamed User\"}";
+    private static final String ROLE_PATCH_BODY = "{\"version\":0,\"name\":\"Renamed Role\"}";
+
     private static final Map<String, CrossOrgCase> CROSS_ORG_CASES = Map.of(
-            "GET " + PROBE, new CrossOrgCase(org -> get(PROBE, org.roleId())));
+            "GET " + PROBE, new CrossOrgCase(org -> get(PROBE, org.roleId())),
+            "GET /api/v1/users/{id}", new CrossOrgCase(org -> get("/api/v1/users/{id}", org.lifecycleUserId())),
+            "PATCH /api/v1/users/{id}", new CrossOrgCase(org -> patch("/api/v1/users/{id}", org.patchUserId())
+                    .contentType(MediaType.APPLICATION_JSON).content(PATCH_BODY)),
+            "POST /api/v1/users/{id}/activate",
+            new CrossOrgCase(org -> post("/api/v1/users/{id}/activate", org.lifecycleUserId())),
+            "POST /api/v1/users/{id}/deactivate",
+            new CrossOrgCase(org -> post("/api/v1/users/{id}/deactivate", org.lifecycleUserId())),
+            "POST /api/v1/users/{id}/reset-password",
+            new CrossOrgCase(org -> post("/api/v1/users/{id}/reset-password", org.lifecycleUserId())),
+            "PATCH /api/v1/roles/{id}", new CrossOrgCase(org -> patch("/api/v1/roles/{id}", org.roleId())
+                    .contentType(MediaType.APPLICATION_JSON).content(ROLE_PATCH_BODY)));
 
     record CrossOrgCase(Function<OrgFixture, MockHttpServletRequestBuilder> request) {
     }
 
     /** One organization's ids that endpoints can be called with. Extend as modules add entities. */
-    record OrgFixture(UUID organizationId, UUID roleId) {
+    record OrgFixture(UUID organizationId, UUID roleId, UUID lifecycleUserId, UUID patchUserId) {
     }
 
     /**
@@ -320,7 +340,22 @@ class OrganizationIsolationIT extends PostgresIT {
                 INSERT INTO hms.role (id, organization_id, code, name, created_at, updated_at)
                 VALUES (?, ?, 'ALL_ACCESS', 'Demo Role', now(), now())""")
                 .params(roleId, organizationId).update());
-        return new OrgFixture(organizationId, roleId);
+        // Users other than the caller: lifecycle endpoints are idempotent so they can be called in any order;
+        // the patch target is touched by the PATCH case only, so its version stays 0.
+        UUID lifecycleUserId = insertUser(organizationId);
+        UUID patchUserId = insertUser(organizationId);
+        return new OrgFixture(organizationId, roleId, lifecycleUserId, patchUserId);
+    }
+
+    private UUID insertUser(UUID organizationId) {
+        UUID id = UUID.randomUUID();
+        jdbc.sql("""
+                INSERT INTO hms.app_user (id, organization_id, email, full_name, password_hash, status,
+                    must_change_password, created_at, updated_at)
+                VALUES (?, ?, ?, 'Demo Target', ?, 'ACTIVE', false, now(), now())
+                """)
+                .params(id, organizationId, "target-" + id + "@demo-clinic.example", passwordHash).update();
+        return id;
     }
 
     private <T> T inOrg(UUID organizationId, Supplier<T> work) {

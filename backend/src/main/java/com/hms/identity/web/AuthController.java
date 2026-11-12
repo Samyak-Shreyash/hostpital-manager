@@ -82,8 +82,10 @@ class AuthController {
     @PreAuthorize("isAuthenticated()")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     void changePassword(@AuthenticationPrincipal AuthenticatedPrincipal principal,
-            @Valid @RequestBody ChangePasswordRequest request) {
-        switch (authentication.changePassword(principal.userId(), request.currentPassword(), request.newPassword())) {
+            @Valid @RequestBody ChangePasswordRequest request, HttpServletRequest httpRequest) {
+        String sessionId = httpRequest.getSession().getId();
+        switch (authentication.changePassword(principal.userId(), request.currentPassword(), request.newPassword(),
+                sessionId)) {
             case ChangePasswordResult.Changed ignored -> { }
             case ChangePasswordResult.WrongCurrentPassword ignored -> throw new BusinessRuleException(
                     "INVALID_CURRENT_PASSWORD", "The current password is incorrect.");

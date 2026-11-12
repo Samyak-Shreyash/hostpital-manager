@@ -83,7 +83,16 @@ POST /users
 { "email": "dr.rao@demo-clinic.example", "fullName": "Dr. A. Rao", "roleCodes": ["DOCTOR"] }
 → 201 { "id": "…", "status": "ACTIVE", "mustChangePassword": true, "temporaryPassword": "shown-once", "version": 0 }
 ```
-Rules: email unique across **all** organizations, case-insensitive (`409 DUPLICATE_EMAIL`), because login is email-only (owner decision 2026-11-12; an org selector would be needed before relaxing this for multi-tenant SaaS); cannot deactivate self; cannot remove last active system administrator. Temporary password is returned once and never logged/audited.
+Rules: email unique across **all** organizations, case-insensitive (`409 DUPLICATE_EMAIL`), because login is email-only (owner decision 2026-11-12; an org selector would be needed before relaxing this for multi-tenant SaaS); cannot deactivate self (`409 CANNOT_DEACTIVATE_SELF`); cannot remove last active system administrator (`409 LAST_ADMINISTRATOR`). Temporary password is returned once (create and reset-password responses, `Cache-Control: no-store`) and never logged/audited; it is 16 characters, meets the password policy, and sets `mustChangePassword`.
+
+Implementation notes (`[E1-7]`, `UserController`, `RoleController`):
+- List `GET /users ?status=ACTIVE|INACTIVE &role=<roleCode> &q=<substring of name or email> &page &size` uses the section 1 envelope; detail and list rows carry `id, email, fullName, status, mustChangePassword, roleCodes, version, createdAt, updatedAt`. Detail is audited (`USER_VIEWED`), the list is not.
+- `PATCH /users/{id}` `{ "version", "fullName"?, "roleCodes"? }`: `version` is required (`409 CONCURRENT_MODIFICATION` on mismatch); `roleCodes`, when present, replaces the whole set; unknown codes (including another organization's) are `422 UNKNOWN_ROLE`; at least one of the two fields is required.
+- `activate` / `deactivate` are idempotent (no change, no audit when already in that state). Deactivation deletes all of the user's `spring_session` rows.
+- `reset-password` returns the full user plus `temporaryPassword`, clears the lockout and ends the user's other sessions. A role change ends the user's sessions too (so it applies immediately instead of at next login); a user changing their own account keeps the current session. `POST /auth/change-password` also ends the user's other sessions and keeps the current one.
+- "System administrator" is defined by permission, not role name: an active user whose roles together grant both `user:update` and `role:manage`. Any change (deactivation, role replacement, editing a role's permissions) that would take the count from at least one to zero is `409 LAST_ADMINISTRATOR`; such changes serialize on a lock of the organization row.
+- Roles: `GET /roles` returns `[{ id, code, name, permissions[], version, createdAt, updatedAt }]` of the caller's organization; `GET /permissions` returns the catalogue as a JSON array of codes. `POST /roles` `{ code ^[A-Z][A-Z0-9_]{0,49}$, name, permissionCodes[] }` -> `201` (`409 DUPLICATE_ROLE_CODE`, `422 UNKNOWN_PERMISSION`); `PATCH /roles/{id}` `{ version, name?, permissionCodes? }` replaces the permission set and ends the sessions of every holder. Roles are never deleted and have no status.
+- Audit actions (entity `APP_USER` / `ROLE`, field names only): `USER_CREATED`, `USER_UPDATED`, `USER_ACTIVATED`, `USER_DEACTIVATED`, `USER_PASSWORD_RESET`, `USER_VIEWED`, `ROLE_CREATED`, `ROLE_UPDATED`.
 
 ## 4. Organization, departments, specialties
 | Method & path | Permission |

@@ -11,6 +11,7 @@ import com.hms.shared.tenancy.OrganizationContext;
 import com.hms.identity.infrastructure.AppUserEntity;
 import com.hms.identity.infrastructure.AppUserRepository;
 import com.hms.identity.infrastructure.RbacRepository;
+import com.hms.identity.infrastructure.UserAdminRepository;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
@@ -34,6 +35,7 @@ public class AuthenticationService {
     private final PasswordEncoder passwordEncoder;
     private final AuditRecorder audit;
     private final RbacRepository rbac;
+    private final UserAdminRepository userAdmin;
     private final OrganizationContext organizationContext;
     private final Clock clock;
     /** Compared against when the email is unknown, so both failure paths cost one BCrypt check. */
@@ -41,11 +43,12 @@ public class AuthenticationService {
 
     public AuthenticationService(
             AppUserRepository users, PasswordEncoder passwordEncoder, AuditRecorder audit, RbacRepository rbac,
-            OrganizationContext organizationContext, Clock clock) {
+            UserAdminRepository userAdmin, OrganizationContext organizationContext, Clock clock) {
         this.users = users;
         this.passwordEncoder = passwordEncoder;
         this.audit = audit;
         this.rbac = rbac;
+        this.userAdmin = userAdmin;
         this.organizationContext = organizationContext;
         this.clock = clock;
         this.timingEqualiserHash = passwordEncoder.encode("timing-equaliser-not-a-password");
@@ -112,10 +115,12 @@ public class AuthenticationService {
     /**
      * Own password change (IAM-4). The new password must satisfy {@link PasswordPolicy} and differ from the
      * current one. A wrong current password counts towards the login lockout, so a hijacked session cannot
-     * be used to guess the password. Audit carries the field names only.
+     * be used to guess the password. Audit carries the field names only. The user's other sessions end on success;
+     * {@code currentSessionId} (the caller's own) is kept.
      */
     @Transactional
-    public ChangePasswordResult changePassword(UUID userId, String currentPassword, String newPassword) {
+    public ChangePasswordResult changePassword(UUID userId, String currentPassword, String newPassword,
+            String currentSessionId) {
         Instant now = clock.instant();
         AppUserEntity user = users.findByIdForUpdate(userId).orElseThrow();
         if (LoginLockout.isLocked(user.getLockedUntil(), now)) {
@@ -135,6 +140,8 @@ public class AuthenticationService {
                     "Password must be different from the current password.");
         }
         user.changePassword(passwordEncoder.encode(newPassword), now);
+        // Anyone holding an older session (e.g. a stolen cookie) is signed out; this session stays.
+        userAdmin.deleteSessions(userId, currentSessionId);
         audit.record(new AuditEntry(user.getOrganizationId(), userId, "PASSWORD_CHANGED", ENTITY, userId,
                 AuditOutcome.SUCCESS, List.of("passwordHash", "mustChangePassword")));
         return new ChangePasswordResult.Changed();
