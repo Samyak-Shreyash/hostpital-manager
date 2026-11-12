@@ -1,3 +1,3 @@
 # ADR-0011: Transaction boundaries
-- **Status:** Proposed
+- **Status:** Accepted (2026-11-12, owner)
 - **Decision:** Transactions start at application-service methods (`@Transactional`), default READ COMMITTED, read-only for queries. One use case = one transaction including its audit write and in-process event handlers that must be atomic (billing charge posting, bed release). Row locks (`FOR UPDATE`) in a documented order (bed → admission → invoice) to prevent deadlocks. No distributed transactions. No remote calls inside transactions (future ABDM calls go through an outbox). Optimistic locking for user-edited aggregates; retry only on idempotent operations.
