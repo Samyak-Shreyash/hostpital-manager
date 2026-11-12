@@ -1,7 +1,7 @@
 package com.hms.identity.web;
 
 import com.hms.identity.api.AuthenticatedPrincipal;
-import com.hms.identity.application.PageResult;
+import com.hms.shared.PageResult;
 import com.hms.identity.application.UserManagementService;
 import com.hms.identity.application.UserView;
 import jakarta.servlet.http.HttpServletRequest;

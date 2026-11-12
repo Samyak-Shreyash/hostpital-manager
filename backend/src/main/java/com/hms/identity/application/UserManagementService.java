@@ -11,6 +11,7 @@ import com.hms.identity.infrastructure.AppUserRepository;
 import com.hms.identity.infrastructure.RbacRepository;
 import com.hms.identity.infrastructure.UserAdminRepository;
 import com.hms.identity.infrastructure.UserAdminRepository.UserRow;
+import com.hms.shared.PageResult;
 import com.hms.shared.domain.BusinessRuleException;
 import com.hms.shared.domain.ConflictException;
 import com.hms.shared.domain.NotFoundException;

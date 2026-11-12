@@ -1,4 +1,4 @@
-package com.hms.identity.application;
+package com.hms.shared;
 
 import java.util.List;
 

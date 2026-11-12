@@ -81,6 +81,10 @@ class OrganizationIsolationIT extends PostgresIT {
             "GET /api/v1/users",
             "POST /api/v1/users",
             "GET /api/v1/roles",
+            "GET /api/v1/departments", // lists are scoped by the principal
+            "POST /api/v1/departments",
+            "GET /api/v1/specialties",
+            "POST /api/v1/specialties",
             "POST /api/v1/roles",
             "GET /api/v1/permissions",
             "GET /api/v1/organization", // the caller's own organization: no id in the path
@@ -103,6 +107,8 @@ class OrganizationIsolationIT extends PostgresIT {
     private static final String PATCH_BODY = "{\"version\":0,\"fullName\":\"Renamed User\"}";
     private static final String ROLE_PATCH_BODY = "{\"version\":0,\"name\":\"Renamed Role\"}";
 
+    private static final String CATALOG_PATCH_BODY = "{\"version\":0,\"name\":\"Renamed Entry\"}";
+
     private static final Map<String, CrossOrgCase> CROSS_ORG_CASES = Map.of(
             "GET " + PROBE, new CrossOrgCase(org -> get(PROBE, org.roleId())),
             "GET /api/v1/users/{id}", new CrossOrgCase(org -> get("/api/v1/users/{id}", org.lifecycleUserId())),
@@ -115,13 +121,18 @@ class OrganizationIsolationIT extends PostgresIT {
             "POST /api/v1/users/{id}/reset-password",
             new CrossOrgCase(org -> post("/api/v1/users/{id}/reset-password", org.lifecycleUserId())),
             "PATCH /api/v1/roles/{id}", new CrossOrgCase(org -> patch("/api/v1/roles/{id}", org.roleId())
-                    .contentType(MediaType.APPLICATION_JSON).content(ROLE_PATCH_BODY)));
+                    .contentType(MediaType.APPLICATION_JSON).content(ROLE_PATCH_BODY)),
+            "PATCH /api/v1/departments/{id}", new CrossOrgCase(org -> patch("/api/v1/departments/{id}",
+                    org.departmentId()).contentType(MediaType.APPLICATION_JSON).content(CATALOG_PATCH_BODY)),
+            "PATCH /api/v1/specialties/{id}", new CrossOrgCase(org -> patch("/api/v1/specialties/{id}",
+                    org.specialtyId()).contentType(MediaType.APPLICATION_JSON).content(CATALOG_PATCH_BODY)));
 
     record CrossOrgCase(Function<OrgFixture, MockHttpServletRequestBuilder> request) {
     }
 
     /** One organization's ids that endpoints can be called with. Extend as modules add entities. */
-    record OrgFixture(UUID organizationId, UUID roleId, UUID lifecycleUserId, UUID patchUserId) {
+    record OrgFixture(UUID organizationId, UUID roleId, UUID lifecycleUserId, UUID patchUserId, UUID departmentId,
+            UUID specialtyId) {
     }
 
     /**
@@ -299,7 +310,8 @@ class OrganizationIsolationIT extends PostgresIT {
                 """).query(String.class).list();
         Set<String> expected = new TreeSet<>(orgOwned);
         expected.removeAll(RLS_EXCLUDED);
-        assertThat(expected).contains("role", "role_permission", "user_role", "document_sequence");
+        assertThat(expected).contains("role", "role_permission", "user_role", "document_sequence", "department",
+                "specialty");
         assertThat(new TreeSet<>(rlsTables())).isEqualTo(expected);
     }
 
@@ -346,7 +358,19 @@ class OrganizationIsolationIT extends PostgresIT {
         // the patch target is touched by the PATCH case only, so its version stays 0.
         UUID lifecycleUserId = insertUser(organizationId);
         UUID patchUserId = insertUser(organizationId);
-        return new OrgFixture(organizationId, roleId, lifecycleUserId, patchUserId);
+        UUID departmentId = UUID.randomUUID();
+        UUID specialtyId = UUID.randomUUID();
+        inOrg(organizationId, () -> {
+            jdbc.sql("""
+                    INSERT INTO hms.department (id, organization_id, code, name, created_at, updated_at)
+                    VALUES (?, ?, 'GENMED', 'General Medicine', now(), now())""")
+                    .params(departmentId, organizationId).update();
+            return jdbc.sql("""
+                    INSERT INTO hms.specialty (id, organization_id, code, name, created_at, updated_at)
+                    VALUES (?, ?, 'GENMED', 'General Medicine', now(), now())""")
+                    .params(specialtyId, organizationId).update();
+        });
+        return new OrgFixture(organizationId, roleId, lifecycleUserId, patchUserId, departmentId, specialtyId);
     }
 
     private UUID insertUser(UUID organizationId) {
