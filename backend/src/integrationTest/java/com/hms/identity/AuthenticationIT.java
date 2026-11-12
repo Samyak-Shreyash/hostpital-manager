@@ -32,7 +32,8 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
 class AuthenticationIT extends PostgresIT {
 
     private static final UUID ORG = UUID.fromString("0190c000-0000-7000-8000-00000000000c");
-    private static final String PASSWORD = "Synthetic-Pass-123";
+    /** Generated per run so no credential-shaped literal lives in source (gitleaks). */
+    private static final String PASSWORD = "Pw-" + UUID.randomUUID();
     private static final String SESSION_COOKIE = "HMSSESSION";
     private static final String CSRF_COOKIE = "XSRF-TOKEN";
 
