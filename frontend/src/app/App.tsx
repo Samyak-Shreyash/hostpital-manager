@@ -8,6 +8,7 @@ import { RequireAuth, RequirePermission } from '../features/auth/guards'
 import { LoginPage } from '../features/auth/LoginPage'
 import { SESSION_KEY } from '../features/auth/useSession'
 import { HomePage } from '../features/HomePage'
+import { AuditPage } from '../features/audit/AuditPage'
 import { RolesPage } from '../features/roles/RolesPage'
 import { UserCreatePage } from '../features/users/UserCreatePage'
 import { UserEditPage } from '../features/users/UserEditPage'
@@ -50,6 +51,9 @@ export function AppRoutes() {
           </Route>
           <Route element={<RequirePermission permission="role:read" />}>
             <Route path="roles" element={<RolesPage />} />
+          </Route>
+          <Route element={<RequirePermission permission="audit:read" />}>
+            <Route path="audit" element={<AuditPage />} />
           </Route>
           <Route path="*" element={<NotFound />} />
         </Route>

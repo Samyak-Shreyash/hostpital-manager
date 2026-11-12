@@ -30,6 +30,7 @@ export function AppLayout() {
           <NavLink to="/" end className={linkClass}>Home</NavLink>
           {can('user:read') && <NavLink to="/users" className={linkClass}>Users</NavLink>}
           {can('role:read') && <NavLink to="/roles" className={linkClass}>Roles</NavLink>}
+          {can('audit:read') && <NavLink to="/audit" className={linkClass}>Audit</NavLink>}
         </nav>
         <span className="ml-auto text-sm text-slate-600">{data?.user.fullName}</span>
         <button type="button" className={secondaryButton} onClick={() => signOut.mutate()} disabled={signOut.isPending}>
