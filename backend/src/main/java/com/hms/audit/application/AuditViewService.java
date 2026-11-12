@@ -47,7 +47,9 @@ public class AuditViewService {
 
     /** Writes an audit event (the view itself), so not read-only. */
     @Transactional
-    public PageResult<AuditEventView> list(OrganizationPrincipal actor, Query query, int page, int size) {
+    public PageResult<AuditEventView> list(OrganizationPrincipal actor, Query query, String pageText, String sizeText) {
+        int page = number(pageText, "page");
+        int size = number(sizeText, "size");
         if (page < 0 || size < 1 || size > MAX_PAGE_SIZE) {
             throw invalid("page must be 0 or more and size 1 to " + MAX_PAGE_SIZE + ".");
         }
@@ -109,6 +111,14 @@ public class AuditViewService {
             return parsed;
         } catch (DateTimeParseException e) {
             throw invalid(name + " must be a UTC ISO-8601 instant, e.g. 2026-01-31T00:00:00Z.");
+        }
+    }
+
+    private static int number(String value, String name) {
+        try {
+            return Integer.parseInt(value.trim());
+        } catch (NumberFormatException e) {
+            throw invalid(name + " must be a whole number.");
         }
     }
 

@@ -19,7 +19,7 @@ public final class DefaultRoleTemplates {
     public static final List<Template> ALL = List.of(
             template("SYSTEM_ADMIN", "System Administrator", "user:*", "role:*", "org:*", Permissions.AUDIT_READ),
             template("FACILITY_ADMIN", "Facility Administrator",
-                    "catalog:*", "ward:*", "bed:*", "practitioner:*", Permissions.REPORT_CLINICAL),
+                    "catalog:*", "ward:*", "bed:*", "practitioner:*", Permissions.AUDIT_READ, Permissions.REPORT_CLINICAL),
             template("DOCTOR", "Doctor", Permissions.PATIENT_READ,
                     "encounter:*", "prescription:*", "admission:*", "discharge:*"),
             template("NURSE", "Nurse", Permissions.PATIENT_READ, Permissions.OBSERVATION_WRITE,

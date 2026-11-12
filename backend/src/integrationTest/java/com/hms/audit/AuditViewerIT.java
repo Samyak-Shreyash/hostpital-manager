@@ -186,7 +186,7 @@ class AuditViewerIT extends PostgresIT {
     void invalidInputIs422WithoutAnAuditEvent() throws Exception {
         String[][] bad = {{"actorId", "not-a-uuid"}, {"entityId", "123"}, {"action", "lower_case"},
                 {"entityType", "X"}, {"from", "yesterday"}, {"to", "2026-01-01"}, {"page", "-1"}, {"size", "0"},
-                {"size", "101"}};
+                {"size", "101"}, {"page", "abc"}, {"size", "ten"}};
         for (String[] param : bad) {
             mockMvc.perform(admin.apply(get(URL).param(param[0], param[1])))
                     .andExpect(status().isUnprocessableContent())
@@ -196,5 +196,31 @@ class AuditViewerIT extends PostgresIT {
                 .andExpect(status().isUnprocessableContent())
                 .andExpect(jsonPath("$.code", is("VALIDATION_ERROR")));
         assertThat(viewedCount(org)).isZero();
+    }
+
+    @Test
+    void facilityAdministratorCanReadTheAuditLog() throws Exception {
+        AdminApiFixture.Session facility = fx.loggedIn(org, "facility", "FACILITY_ADMIN");
+        mockMvc.perform(facility.apply(get(URL))).andExpect(status().isOk());
+        assertThat(viewedCount(org)).isEqualTo(1);
+    }
+
+    /** V11 backfill: re-runs its statement against a role created before the template change (idempotent). */
+    @Test
+    void migrationBackfillsExistingFacilityAdministratorRoles() throws Exception {
+        UUID facilityRole = fx.roleId(org, "FACILITY_ADMIN");
+        fx.inOrg(org, () -> jdbc.sql("DELETE FROM hms.role_permission WHERE role_id = ? AND permission_code = 'audit:read'")
+                .param(facilityRole).update());
+        AdminApiFixture.Session facility = fx.loggedIn(org, "facility2", "FACILITY_ADMIN");
+        mockMvc.perform(facility.apply(get(URL))).andExpect(status().isForbidden());
+
+        String migration = new String(getClass().getResourceAsStream("/db/migration/V11__facility_admin_audit_read.sql")
+                .readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+        for (int run = 0; run < 2; run++) {
+            new org.springframework.transaction.support.TransactionTemplate(transactionManager)
+                    .executeWithoutResult(status -> jdbc.sql(migration).update());
+        }
+        AdminApiFixture.Session fresh = fx.login(facility.userId(), facility.email());
+        mockMvc.perform(fresh.apply(get(URL))).andExpect(status().isOk());
     }
 }

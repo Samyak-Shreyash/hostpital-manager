@@ -30,7 +30,7 @@ class AuditController {
             @RequestParam(required = false) String actorId, @RequestParam(required = false) String action,
             @RequestParam(required = false) String entityType, @RequestParam(required = false) String entityId,
             @RequestParam(required = false) String from, @RequestParam(required = false) String to,
-            @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "50") int size) {
+            @RequestParam(defaultValue = "0") String page, @RequestParam(defaultValue = "50") String size) {
         return viewer.list(actor, new Query(actorId, action, entityType, entityId, from, to), page, size);
     }
 }
