@@ -8,14 +8,14 @@
 | [0002](0002-data-access-spring-data-jpa-hibernate.md) | Data access — Spring Data JPA/Hibernate (vs jOOQ / JDBC) | Accepted (baseline) |
 | [0003](0003-postgresql-schema-strategy.md) | PostgreSQL schema strategy | Accepted |
 | [0004](0004-uuid-strategy.md) | UUID strategy | Accepted (UUIDv7; timestamp exposure accepted risk) |
-| [0005](0005-authentication-architecture.md) | Authentication architecture | Proposed |
-| [0006](0006-rbac-implementation.md) | RBAC implementation | Proposed |
-| [0007](0007-audit-architecture.md) | Audit architecture | Proposed |
-| [0008](0008-api-versioning-and-conventions.md) | API versioning and conventions | Proposed |
-| [0009](0009-encryption-and-secrets.md) | Encryption and secrets | Proposed |
-| [0010](0010-organization-ownership-and-tenant-isolation.md) | Organization ownership and tenant isolation | Proposed |
-| [0011](0011-transaction-boundaries.md) | Transaction boundaries | Proposed |
-| [0012](0012-financial-data-integrity.md) | Financial data integrity | Proposed |
+| [0005](0005-authentication-architecture.md) | Authentication architecture | Accepted (2026-11-12, owner) |
+| [0006](0006-rbac-implementation.md) | RBAC implementation | Accepted (2026-11-12, owner) |
+| [0007](0007-audit-architecture.md) | Audit architecture | Accepted (2026-11-12, owner) |
+| [0008](0008-api-versioning-and-conventions.md) | API versioning and conventions | Accepted (2026-11-12, owner) |
+| [0009](0009-encryption-and-secrets.md) | Encryption and secrets | Accepted (2026-11-12, owner) |
+| [0010](0010-organization-ownership-and-tenant-isolation.md) | Organization ownership and tenant isolation | Accepted (2026-11-12, owner) |
+| [0011](0011-transaction-boundaries.md) | Transaction boundaries | Accepted (2026-11-12, owner) |
+| [0012](0012-financial-data-integrity.md) | Financial data integrity | Accepted (2026-11-12, owner) |
 | [0013](0013-repository-and-build-layout.md) | Repository and build layout | Accepted |
 | [0014](0014-per-module-observability.md) | Per-module observability (logging, metrics, monitoring) | Accepted |
 | [0015](0015-database-roles-and-migration-privileges.md) | Database roles and migration privileges | Accepted |
