@@ -93,4 +93,13 @@ public class AppUserEntity {
         this.lockedUntil = lockedUntil;
         this.updatedAt = now;
     }
+
+    /** Sets a new password the user chose themselves: the first-login flag is cleared and the lockout reset. */
+    public void changePassword(String newPasswordHash, Instant now) {
+        this.passwordHash = newPasswordHash;
+        this.mustChangePassword = false;
+        this.failedLoginCount = 0;
+        this.lockedUntil = null;
+        this.updatedAt = now;
+    }
 }

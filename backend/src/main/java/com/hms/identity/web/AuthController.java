@@ -2,7 +2,9 @@ package com.hms.identity.web;
 
 import com.hms.identity.api.AuthenticatedPrincipal;
 import com.hms.identity.application.AuthenticationService;
+import com.hms.identity.application.ChangePasswordResult;
 import com.hms.identity.application.LoginResult;
+import com.hms.shared.domain.BusinessRuleException;
 import com.hms.shared.web.ProblemException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -70,7 +72,21 @@ class AuthController {
     @GetMapping("/me")
     @PreAuthorize("isAuthenticated()")
     LoginResponse me(@AuthenticationPrincipal AuthenticatedPrincipal principal) {
-        return LoginResponse.of(principal, false);
+        return LoginResponse.of(principal, authentication.isPasswordChangeRequired(principal.userId()));
+    }
+
+    @PostMapping("/change-password")
+    @PreAuthorize("isAuthenticated()")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    void changePassword(@AuthenticationPrincipal AuthenticatedPrincipal principal,
+            @Valid @RequestBody ChangePasswordRequest request) {
+        switch (authentication.changePassword(principal.userId(), request.currentPassword(), request.newPassword())) {
+            case ChangePasswordResult.Changed ignored -> { }
+            case ChangePasswordResult.WrongCurrentPassword ignored -> throw new BusinessRuleException(
+                    "INVALID_CURRENT_PASSWORD", "The current password is incorrect.");
+            case ChangePasswordResult.Locked ignored -> throw new ProblemException(
+                    HttpStatus.LOCKED, "ACCOUNT_LOCKED", "Too many failed attempts. Try again later.");
+        }
     }
 
     private void startSession(AuthenticatedPrincipal principal,

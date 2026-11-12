@@ -5,11 +5,14 @@ import com.hms.audit.api.AuditOutcome;
 import com.hms.audit.api.AuditRecorder;
 import com.hms.identity.api.AuthenticatedPrincipal;
 import com.hms.identity.domain.LoginLockout;
+import com.hms.identity.domain.PasswordPolicy;
+import com.hms.shared.domain.BusinessRuleException;
 import com.hms.identity.infrastructure.AppUserEntity;
 import com.hms.identity.infrastructure.AppUserRepository;
 import com.hms.identity.infrastructure.RbacRepository;
 import java.time.Clock;
 import java.time.Instant;
+import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
@@ -91,6 +94,43 @@ public class AuthenticationService {
     public void recordLogout(AuthenticatedPrincipal principal) {
         audit.record(AuditEntry.of(principal.organizationId(), principal.userId(), "LOGOUT", ENTITY,
                 principal.userId(), AuditOutcome.SUCCESS));
+    }
+
+    /** Read per request by the password-change gate, so a completed change takes effect immediately. */
+    @Transactional(readOnly = true)
+    public boolean isPasswordChangeRequired(UUID userId) {
+        return users.findById(userId).map(AppUserEntity::isMustChangePassword).orElse(false);
+    }
+
+    /**
+     * Own password change (IAM-4). The new password must satisfy {@link PasswordPolicy} and differ from the
+     * current one. A wrong current password counts towards the login lockout, so a hijacked session cannot
+     * be used to guess the password. Audit carries the field names only.
+     */
+    @Transactional
+    public ChangePasswordResult changePassword(UUID userId, String currentPassword, String newPassword) {
+        Instant now = clock.instant();
+        AppUserEntity user = users.findByIdForUpdate(userId).orElseThrow();
+        if (LoginLockout.isLocked(user.getLockedUntil(), now)) {
+            record(user, userId, "PASSWORD_CHANGE_FAILED", AuditOutcome.DENIED);
+            return new ChangePasswordResult.Locked();
+        }
+        if (!passwordEncoder.matches(currentPassword, user.getPasswordHash())) {
+            int failures = LoginLockout.failuresAfterFailedAttempt(
+                    user.getFailedLoginCount(), user.getLockedUntil(), now);
+            user.recordLoginOutcome(failures, LoginLockout.lockUntil(failures, now), now);
+            record(user, userId, "PASSWORD_CHANGE_FAILED", AuditOutcome.FAILURE);
+            return new ChangePasswordResult.WrongCurrentPassword();
+        }
+        PasswordPolicy.require(newPassword, user.getEmail()); // throws 422; nothing has changed yet
+        if (newPassword.equals(currentPassword)) {
+            throw new BusinessRuleException(PasswordPolicy.VIOLATION_CODE,
+                    "Password must be different from the current password.");
+        }
+        user.changePassword(passwordEncoder.encode(newPassword), now);
+        audit.record(new AuditEntry(user.getOrganizationId(), userId, "PASSWORD_CHANGED", ENTITY, userId,
+                AuditOutcome.SUCCESS, List.of("passwordHash", "mustChangePassword")));
+        return new ChangePasswordResult.Changed();
     }
 
     private void record(AppUserEntity user, UUID actorId, String action, AuditOutcome outcome) {
