@@ -147,7 +147,7 @@ REVOKE ALL ON FUNCTION hms.reject_modification() FROM PUBLIC;
 ## 8. Baseline migration (`V1__baseline.sql`) and order
 V1 contains, in order: extensions (section 5) → schema privileges and default privileges (section 3) → `hms.reject_modification()` (section 7) → `hms.document_sequence` (section 6). It creates no business tables.
 
-Applied: V2 `audit_event` + partitions `[E1-1]` (section 11). Planned next (each in its issue): `organization`, FK on `document_sequence` `[E1-6]` → identity (users, roles, permissions, sessions) `[E1-3]`/`[E1-5]` → RLS policies `[E1-6]` (if ADR-0010 accepted) → M2+ modules.
+Applied: V2 `audit_event` + partitions `[E1-1]` (section 11); V3 `app_user` + Spring Session tables `[E1-3]` (section 12). Planned next (each in its issue): `organization`, FKs on `document_sequence`/`app_user` `[E1-6]` → roles, permissions `[E1-5]` → RLS policies `[E1-6]` (if ADR-0010 accepted) → M2+ modules.
 
 ## 9. Tests required for `[E0-6]`
 Integration tests (Testcontainers `postgres:17-alpine` with the role init script from section 3):
@@ -190,3 +190,23 @@ ADR-0007, PRD AUD-1/2/4, invariant I8. Written only through `audit.api.AuditReco
 - **Partitions:** monthly `RANGE (occurred_at)` in UTC, named `audit_event_YYYY_MM`. `hms.ensure_audit_event_partitions(months_ahead 0..12)` creates the current month plus `months_ahead`; it is `SECURITY DEFINER` (owned by `hms_owner`, `search_path` pinned, argument bounded, advisory-locked) so `hms_app` can run it without DDL rights. V2 calls it with 3; `AuditPartitionMaintenance` calls it at startup and daily at 02:15 UTC (`hms.audit.partition-months-ahead`, `hms.audit.partition-cron`). **No default partition**: if maintenance stops, audit inserts fail once the horizon is reached — fail-closed by design.
 - **Retention / dropping old partitions:** not implemented; retention period needs legal review (PRD section 7) before any partition is detached.
 - Indexes: `(organization_id, occurred_at)`, `(organization_id, entity_type, entity_id, occurred_at)`, `(organization_id, actor_id, occurred_at)` for the viewer `[E1-9]`.
+
+## 12. Users and sessions (`V3__identity_authentication.sql`, `[E1-3]`)
+`hms.app_user` (table name avoids the reserved word `user`):
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | `uuid` | UUIDv7 |
+| `organization_id` | `uuid NOT NULL` | FK to `organization` added by `[E1-6]`; `UNIQUE (organization_id, id)` for same-org FKs (section 4) |
+| `email` | `text NOT NULL` | stored lower-case (`CHECK`); **unique across all orgs** (`uq_app_user_email`) because login is email-only |
+| `full_name` | `text NOT NULL` | 1–200 chars |
+| `password_hash` | `text NOT NULL` | BCrypt cost 12 (ADR-0005); never logged or audited |
+| `status` | `text` | `ACTIVE` / `INACTIVE` (no hard delete) |
+| `must_change_password` | `boolean` | default `true`; enforced by `[E1-4]` |
+| `failed_login_count`, `locked_until` | `integer`, `timestamptz` | lockout: 5 failures → locked 15 min |
+| `version`, `created_at`, `updated_at` | | optimistic locking, timestamps from the injected `Clock` |
+
+- Login reads the row `FOR UPDATE`, so concurrent failed attempts cannot lose an increment.
+- `audit_event.actor_id` now has an FK to `app_user (id)`.
+- Spring Session JDBC tables `hms.spring_session` and `hms.spring_session_attributes` follow Spring Session's PostgreSQL schema; `spring.session.jdbc.initialize-schema=never`. `hms_app` gets `DELETE` on both (sessions are transient technical rows, not business data). `principal_name` holds the user id, so all of a user's sessions can be revoked (`[E1-7]`).
+- Auth audit actions (entity `APP_USER`): `LOGIN_SUCCEEDED` (actor = user), `LOGIN_FAILED` (actor `NULL`; outcome `FAILURE`, or `DENIED` when locked/inactive), `ACCOUNT_LOCKED`, `LOGOUT`. A failed login for an unknown email is **not** audited: there is no organization to attribute it to.
