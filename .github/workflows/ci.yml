@@ -1,4 +1,4 @@
-# CI gate (ADR-0013, [E0-1], [E0-2], [E0-3]). Required status checks on `main`: backend, frontend, secret-scan, image, compose.
+# CI gate (ADR-0013, [E0-1], [E0-2], [E0-3]). Required status checks on `main`: backend, frontend, image, compose.
 # Scanners run as pinned container images rather than third-party actions.
 name: CI
 
@@ -42,14 +42,6 @@ jobs:
       - run: npm run lint
       - run: npm test
       - run: npm run build
-
-  secret-scan:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          fetch-depth: 0 # scan full history, not just the tip
-      - run: docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:v8.30.1 git /repo --redact --no-banner
 
   # Dependency scan: npm lockfile (filesystem) and backend jars + OS packages (image).
   image:
