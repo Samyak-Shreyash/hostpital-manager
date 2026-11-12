@@ -1,6 +1,6 @@
 # Reverse proxy image ([E0-3]): serves the built SPA and routes /api to the backend. Build context: repo root
 #   docker build -f infra/docker/proxy.Dockerfile -t hms-proxy:<git-sha> .
-# Dev only for now: plain HTTP, no TLS termination or rate limiting yet (hld.md container view).
+# Dev only for now: plain HTTP, no TLS termination yet (hld.md container view). Login is rate limited (nginx.conf).
 
 FROM node:22-alpine AS build
 WORKDIR /workspace
