@@ -76,7 +76,7 @@ cp .env.example .env                              # then fill in every value (co
 # DB roles (ADR-0015) are created on first start of an empty volume; a volume from before [E0-6] needs one `... down -v`.
 docker compose -f infra/compose/compose.yml --env-file .env up -d --build --wait
 # -> http://localhost:8080 (SPA; /api/* goes to the backend). Stop: ... down  (add -v to wipe the database)
-# Monitoring ([E0-7]): add `--profile monitoring` to up/down. Prometheus scrapes api:8080/actuator/prometheus
+# Monitoring ([E0-7]): add `--profile monitoring` to up/down. Prometheus scrapes the API service at /actuator/prometheus
 # inside the network (the proxy never routes /actuator); Grafana with the "HMS overview" dashboard on
 # http://localhost:${HMS_GRAFANA_PORT}.
 
