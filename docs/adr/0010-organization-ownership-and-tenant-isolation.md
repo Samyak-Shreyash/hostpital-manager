@@ -1,5 +1,5 @@
 # ADR-0010: Organization ownership and tenant isolation
-- **Status:** Proposed — **deviates from charter ("tenant_id")**: naming follows master prompt (`organization_id`)
+- **Status:** Accepted (2026-11-12, owner) — **deviates from charter ("tenant_id")**: naming follows master prompt (`organization_id`)
 - **Context:** Master prompt: all business rows reference an organization; "organization_id alone is not isolation."
 - **Decision:** (1) `organization_id NOT NULL` + FK on every business table; (2) composite same-org FKs for high-risk relations; (3) every repository query is org-scoped via a mandatory `OrganizationContext` (derived from the authenticated principal, never from request params); (4) PostgreSQL RLS with `FORCE ROW LEVEL SECURITY` and per-transaction `SET LOCAL app.organization_id`, app DB role without BYPASSRLS; (5) automated isolation test suite (two orgs, every endpoint returns 404 for cross-org ids). Facility-level (`facility_id`) is deferred.
 - **Consequences:** + defence in depth. − Slight complexity with pooling/`SET LOCAL`; RLS can mask bugs (queries return empty) so tests are explicit. **Even so, this is single-organization deployment in R1; do not market it as multi-tenant isolation until Stage 3 hardening and review.** If RLS proves disproportionate for the solo timeline, fall back to (1)–(3)+(5) and record the downgrade.
