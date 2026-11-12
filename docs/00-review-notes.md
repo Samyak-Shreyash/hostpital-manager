@@ -9,6 +9,7 @@
 | 2026-11-07 | Module boundary checks | ADR-0001: ArchUnit only, Spring Modulith deferred. Supersedes `[E0-4]`. |
 | 2026-11-07 | IDs | ADR-0004: UUIDv7, in-house generator; timestamp exposure accepted risk. |
 | 2026-11-12 | ADR approval (`[E0-9]`) | ADRs 0005–0012 accepted by owner; all of 0001–0015 now Accepted. Stale "Proposed" references in `database-design.md`, `hld.md`, ADR-0015 and CLAUDE.md updated. |
+| 2026-11-12 | RLS feasibility (`[E1-2]`, was Q3) | RLS kept; usage rules recorded in ADR-0010 spike outcome. |
 | 2026-11-12 | Charter deviations | Accepted deviations from the original charter: server-side sessions instead of JWT (ADR-0005), `organization_id` instead of `tenant_id` (ADR-0010), `NUMERIC(14,2)` instead of integer paise (ADR-0012). |
 
 ## 2. Open questions
@@ -17,7 +18,6 @@
 |---|---|---|---|---|
 | Q1 | Bed-day charging rule (midnight census, same-day admit/discharge) | PRD BR-B6 | `[E8-5]` | [A] charge per midnight occupied, admission day charged, discharge day not, minimum 1 day; configurable per org |
 | Q2 | GST treatment of services (most clinical services exempt) | PRD BIL-10 | `[E7-1]` | Capture line tax rate/amount; GST fields optional |
-| Q3 | Does RLS stay, or is ADR-0010 downgraded? | ADR-0010 | `[E1-6]` | Decided by `[E1-2]` spike |
 | Q4 | Hosting provider and backup tooling (managed PG vs pgBackRest) | `docs/adr/README.md` candidates, PRD A8 | `[E0-8]`, `[E10-2]` | Decided by `[E10-1]` |
 | Q5 | PDF generation library | ADR candidates | `[E6-5]`, `[E7-5]` | Decided by `[E6-4]` |
 | Q6 | Practitioners without a login | domain-model.md | — | [A] deferred; every practitioner has a user |

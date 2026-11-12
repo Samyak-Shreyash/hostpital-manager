@@ -13,7 +13,7 @@
 | `document_sequence` (section 6) | Table implemented; `DocumentNumberAllocator` comes with its first consumer | `[E0-6]` |
 | `hms.reject_modification()` (section 7) | Implemented; `HM001` → `409` mapping comes with its first consumer | `[E0-6]` |
 | Same-org composite FKs (section 4) | Planned | `[E1-6]` and each module |
-| RLS policies | Planned, ADR-0010 (Accepted); mechanism confirmed by `[E1-2]` spike | `[E1-2]`, `[E1-6]` |
+| RLS policies | Planned; mechanism confirmed by `[E1-2]` spike (ADR-0010) | `[E1-2]`, `[E1-6]` |
 
 ## 2. Conventions (apply to every migration from V1)
 - **Schema:** everything lives in `hms` (ADR-0003). Nothing is created in `public`. Objects are always schema-qualified in migrations.
@@ -77,7 +77,7 @@ Flyway runs in-process at startup with the migration credentials (Spring Boot `s
 Referenced by domain-model invariant I11. Detail is written by `[E1-6]`; the intent fixed now so V1 does not contradict it:
 - Every business table has `organization_id uuid NOT NULL`, FK to `hms.organization(id)` once that table exists.
 - High-risk parent tables expose `UNIQUE (organization_id, id)`; children reference them with composite FKs `(organization_id, <parent>_id) REFERENCES parent (organization_id, id)` so a row can never point at another org's row.
-- RLS (`FORCE ROW LEVEL SECURITY`, `SET LOCAL app.organization_id`) is **not** part of the baseline: it is introduced by `[E1-6]` per ADR-0010 (Accepted), after the `[E1-2]` feasibility spike (which may record a documented downgrade). V1 must only keep `hms_app` `NOBYPASSRLS` and non-owner so RLS *can* be enforced later.
+- RLS is **not** part of the baseline; `[E1-6]` introduces it. The `[E1-2]` spike confirmed it works through HikariCP and JPA (ADR-0010, spike outcome). Pattern per business table: `ENABLE` + `FORCE ROW LEVEL SECURITY`; one policy `USING`/`WITH CHECK (organization_id = NULLIF(current_setting('app.organization_id', true), '')::uuid)`; the app sets the value per transaction with `set_config(..., true)`, never session-level. V1 keeps `hms_app` `NOBYPASSRLS` and non-owner so this can be enforced.
 
 ## 5. Extensions
 | Extension | Why | Needed by |
