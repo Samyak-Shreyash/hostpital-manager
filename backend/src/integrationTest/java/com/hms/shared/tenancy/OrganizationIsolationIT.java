@@ -87,6 +87,7 @@ class OrganizationIsolationIT extends PostgresIT {
             "POST /api/v1/specialties",
             "GET /api/v1/services",
             "POST /api/v1/services",
+            "POST /api/v1/patients",
             "POST /api/v1/roles",
             "GET /api/v1/permissions",
             "GET /api/v1/organization", // the caller's own organization: no id in the path
@@ -135,6 +136,8 @@ class OrganizationIsolationIT extends PostgresIT {
                     new CrossOrgCase(org -> get("/api/v1/services/{id}", org.serviceId()))),
             Map.entry("PATCH /api/v1/services/{id}", new CrossOrgCase(org -> patch("/api/v1/services/{id}",
                     org.serviceId()).contentType(MediaType.APPLICATION_JSON).content(CATALOG_PATCH_BODY))),
+            Map.entry("GET /api/v1/patients/{id}",
+                    new CrossOrgCase(org -> get("/api/v1/patients/{id}", org.patientId()))),
             Map.entry("GET /api/v1/services/{id}/prices",
                     new CrossOrgCase(org -> get("/api/v1/services/{id}/prices", org.serviceId()))),
             Map.entry("POST /api/v1/services/{id}/prices", new CrossOrgCase(org -> post(
@@ -146,7 +149,7 @@ class OrganizationIsolationIT extends PostgresIT {
 
     /** One organization's ids that endpoints can be called with. Extend as modules add entities. */
     record OrgFixture(UUID organizationId, UUID roleId, UUID lifecycleUserId, UUID patchUserId, UUID departmentId,
-            UUID specialtyId, UUID serviceId) {
+            UUID specialtyId, UUID serviceId, UUID patientId) {
     }
 
     /**
@@ -325,7 +328,8 @@ class OrganizationIsolationIT extends PostgresIT {
         Set<String> expected = new TreeSet<>(orgOwned);
         expected.removeAll(RLS_EXCLUDED);
         assertThat(expected).contains("role", "role_permission", "user_role", "document_sequence", "department",
-                "specialty", "service_catalog_item", "service_price");
+                "specialty", "service_catalog_item", "service_price", "patient", "patient_address",
+                "patient_contact");
         assertThat(new TreeSet<>(rlsTables())).isEqualTo(expected);
     }
 
@@ -375,6 +379,7 @@ class OrganizationIsolationIT extends PostgresIT {
         UUID departmentId = UUID.randomUUID();
         UUID specialtyId = UUID.randomUUID();
         UUID serviceId = UUID.randomUUID();
+        UUID patientId = UUID.randomUUID();
         inOrg(organizationId, () -> {
             jdbc.sql("""
                     INSERT INTO hms.department (id, organization_id, code, name, created_at, updated_at)
@@ -384,12 +389,18 @@ class OrganizationIsolationIT extends PostgresIT {
                     INSERT INTO hms.specialty (id, organization_id, code, name, created_at, updated_at)
                     VALUES (?, ?, 'GENMED', 'General Medicine', now(), now())""")
                     .params(specialtyId, organizationId).update();
-            return jdbc.sql("""
+            jdbc.sql("""
                     INSERT INTO hms.service_catalog_item (id, organization_id, code, name, created_at, updated_at)
                     VALUES (?, ?, 'CONSULT', 'Consultation', now(), now())""")
                     .params(serviceId, organizationId).update();
+            return jdbc.sql("""
+                    INSERT INTO hms.patient (id, organization_id, uhid, full_name, sex, date_of_birth, phone,
+                        created_by, created_at, updated_at)
+                    VALUES (?, ?, 'HMS-000001', 'Test Patient Isolation', 'U', DATE '1990-01-01', '+910000000099',
+                        ?, now(), now())""")
+                    .params(patientId, organizationId, UUID.randomUUID()).update();
         });
-        return new OrgFixture(organizationId, roleId, lifecycleUserId, patchUserId, departmentId, specialtyId, serviceId);
+        return new OrgFixture(organizationId, roleId, lifecycleUserId, patchUserId, departmentId, specialtyId, serviceId, patientId);
     }
 
     private UUID insertUser(UUID organizationId) {

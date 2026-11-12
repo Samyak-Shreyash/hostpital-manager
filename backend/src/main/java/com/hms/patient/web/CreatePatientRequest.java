@@ -1,0 +1,52 @@
+package com.hms.patient.web;
+
+import com.hms.patient.application.RegisterPatientCommand;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
+import java.time.LocalDate;
+
+/** POST /patients body (api-design.md section 6). Duplicate confirmation arrives with [E3-3]. */
+record CreatePatientRequest(
+        @NotBlank @Size(min = 2, max = 120) String fullName,
+        @NotBlank @Pattern(regexp = "[MFOU]", message = "must be one of M, F, O, U") String sex,
+        LocalDate dateOfBirth,
+        Integer ageYears,
+        Boolean dobEstimated,
+        @NotBlank @Pattern(regexp = Phone.REGEX, message = Phone.MESSAGE) String phone,
+        @Valid AddressRequest address,
+        @Valid ContactRequest emergencyContact) {
+
+    /** E.164, or a bare 10-digit Indian number. */
+    static final class Phone {
+        static final String REGEX = "\\+[1-9][0-9]{7,14}|[0-9]{10}";
+        static final String MESSAGE = "must be E.164 (+<country><number>) or a 10-digit Indian number";
+
+        private Phone() {
+        }
+    }
+
+    record AddressRequest(
+            @NotBlank @Size(max = 150) String line1,
+            @Size(max = 150) String line2,
+            @NotBlank @Size(max = 80) String city,
+            @NotBlank @Size(max = 80) String state,
+            @NotBlank @Pattern(regexp = "[0-9]{6}", message = "must be 6 digits") String pincode) {
+    }
+
+    record ContactRequest(
+            @NotBlank @Size(min = 2, max = 120) String name,
+            @NotBlank @Size(max = 50) String relationship,
+            @NotBlank @Pattern(regexp = Phone.REGEX, message = Phone.MESSAGE) String phone) {
+    }
+
+    RegisterPatientCommand toCommand() {
+        return new RegisterPatientCommand(fullName, sex, dateOfBirth, ageYears, Boolean.TRUE.equals(dobEstimated),
+                phone,
+                address == null ? null : new RegisterPatientCommand.Address(address.line1(), address.line2(),
+                        address.city(), address.state(), address.pincode()),
+                emergencyContact == null ? null : new RegisterPatientCommand.EmergencyContact(
+                        emergencyContact.name(), emergencyContact.relationship(), emergencyContact.phone()));
+    }
+}
