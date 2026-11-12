@@ -62,7 +62,7 @@ POST /api/v1/auth/login
       "permissions": ["patient:read","patient:create","appointment:create"],
       "organization": { "id": "0192…", "name": "Demo Clinic", "timezone": "Asia/Kolkata" } }
 ```
-Validation: email format; password 1–128 chars (policy applies on set, not login). Failure always `401 INVALID_CREDENTIALS` (identical for unknown user / wrong password); lock after 5 failures for 15 min → `423`.
+Validation: email format; password 1–128 chars (policy applies on set, not login). Failure always `401 INVALID_CREDENTIALS` (identical body for unknown user / wrong password; unknown emails still run one BCrypt check so timing matches); lock after 5 failures for 15 min → `423 ACCOUNT_LOCKED`, also for the right password while locked; right password on an inactive account → `403 ACCOUNT_INACTIVE`. Login needs the CSRF header too: the SPA gets the `XSRF-TOKEN` cookie from any earlier response (e.g. `GET /auth/me`, even when it answers 401). The session id is rotated on every login. Until `[E1-5]`/`[E2-1]` land, `roles` and `permissions` are empty and `organization` carries only `id`.
 
 ## 3. Users & roles
 | Method & path | Purpose | Permission |
@@ -81,7 +81,7 @@ POST /users
 { "email": "dr.rao@demo-clinic.example", "fullName": "Dr. A. Rao", "roleCodes": ["DOCTOR"] }
 → 201 { "id": "…", "status": "ACTIVE", "mustChangePassword": true, "temporaryPassword": "shown-once", "version": 0 }
 ```
-Rules: email unique per org (`409 DUPLICATE_EMAIL`); cannot deactivate self; cannot remove last active system administrator. Temporary password is returned once and never logged/audited.
+Rules: email unique across **all** organizations, case-insensitive (`409 DUPLICATE_EMAIL`), because login is email-only (owner decision 2026-11-12; an org selector would be needed before relaxing this for multi-tenant SaaS); cannot deactivate self; cannot remove last active system administrator. Temporary password is returned once and never logged/audited.
 
 ## 4. Organization, departments, specialties
 | Method & path | Permission |
