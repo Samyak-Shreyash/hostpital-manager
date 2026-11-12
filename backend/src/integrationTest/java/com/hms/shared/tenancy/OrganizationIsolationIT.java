@@ -85,6 +85,8 @@ class OrganizationIsolationIT extends PostgresIT {
             "POST /api/v1/departments",
             "GET /api/v1/specialties",
             "POST /api/v1/specialties",
+            "GET /api/v1/services",
+            "POST /api/v1/services",
             "POST /api/v1/roles",
             "GET /api/v1/permissions",
             "GET /api/v1/organization", // the caller's own organization: no id in the path
@@ -109,30 +111,42 @@ class OrganizationIsolationIT extends PostgresIT {
 
     private static final String CATALOG_PATCH_BODY = "{\"version\":0,\"name\":\"Renamed Entry\"}";
 
-    private static final Map<String, CrossOrgCase> CROSS_ORG_CASES = Map.of(
-            "GET " + PROBE, new CrossOrgCase(org -> get(PROBE, org.roleId())),
-            "GET /api/v1/users/{id}", new CrossOrgCase(org -> get("/api/v1/users/{id}", org.lifecycleUserId())),
-            "PATCH /api/v1/users/{id}", new CrossOrgCase(org -> patch("/api/v1/users/{id}", org.patchUserId())
-                    .contentType(MediaType.APPLICATION_JSON).content(PATCH_BODY)),
-            "POST /api/v1/users/{id}/activate",
-            new CrossOrgCase(org -> post("/api/v1/users/{id}/activate", org.lifecycleUserId())),
-            "POST /api/v1/users/{id}/deactivate",
-            new CrossOrgCase(org -> post("/api/v1/users/{id}/deactivate", org.lifecycleUserId())),
-            "POST /api/v1/users/{id}/reset-password",
-            new CrossOrgCase(org -> post("/api/v1/users/{id}/reset-password", org.lifecycleUserId())),
-            "PATCH /api/v1/roles/{id}", new CrossOrgCase(org -> patch("/api/v1/roles/{id}", org.roleId())
-                    .contentType(MediaType.APPLICATION_JSON).content(ROLE_PATCH_BODY)),
-            "PATCH /api/v1/departments/{id}", new CrossOrgCase(org -> patch("/api/v1/departments/{id}",
-                    org.departmentId()).contentType(MediaType.APPLICATION_JSON).content(CATALOG_PATCH_BODY)),
-            "PATCH /api/v1/specialties/{id}", new CrossOrgCase(org -> patch("/api/v1/specialties/{id}",
-                    org.specialtyId()).contentType(MediaType.APPLICATION_JSON).content(CATALOG_PATCH_BODY)));
+    private static final String PRICE_BODY = "{\"amount\":\"500.00\"}";
+
+    private static final Map<String, CrossOrgCase> CROSS_ORG_CASES = Map.ofEntries(
+            Map.entry("GET " + PROBE, new CrossOrgCase(org -> get(PROBE, org.roleId()))),
+            Map.entry("GET /api/v1/users/{id}",
+                    new CrossOrgCase(org -> get("/api/v1/users/{id}", org.lifecycleUserId()))),
+            Map.entry("PATCH /api/v1/users/{id}", new CrossOrgCase(org -> patch("/api/v1/users/{id}",
+                    org.patchUserId()).contentType(MediaType.APPLICATION_JSON).content(PATCH_BODY))),
+            Map.entry("POST /api/v1/users/{id}/activate",
+                    new CrossOrgCase(org -> post("/api/v1/users/{id}/activate", org.lifecycleUserId()))),
+            Map.entry("POST /api/v1/users/{id}/deactivate",
+                    new CrossOrgCase(org -> post("/api/v1/users/{id}/deactivate", org.lifecycleUserId()))),
+            Map.entry("POST /api/v1/users/{id}/reset-password",
+                    new CrossOrgCase(org -> post("/api/v1/users/{id}/reset-password", org.lifecycleUserId()))),
+            Map.entry("PATCH /api/v1/roles/{id}", new CrossOrgCase(org -> patch("/api/v1/roles/{id}", org.roleId())
+                    .contentType(MediaType.APPLICATION_JSON).content(ROLE_PATCH_BODY))),
+            Map.entry("PATCH /api/v1/departments/{id}", new CrossOrgCase(org -> patch("/api/v1/departments/{id}",
+                    org.departmentId()).contentType(MediaType.APPLICATION_JSON).content(CATALOG_PATCH_BODY))),
+            Map.entry("PATCH /api/v1/specialties/{id}", new CrossOrgCase(org -> patch("/api/v1/specialties/{id}",
+                    org.specialtyId()).contentType(MediaType.APPLICATION_JSON).content(CATALOG_PATCH_BODY))),
+            Map.entry("GET /api/v1/services/{id}",
+                    new CrossOrgCase(org -> get("/api/v1/services/{id}", org.serviceId()))),
+            Map.entry("PATCH /api/v1/services/{id}", new CrossOrgCase(org -> patch("/api/v1/services/{id}",
+                    org.serviceId()).contentType(MediaType.APPLICATION_JSON).content(CATALOG_PATCH_BODY))),
+            Map.entry("GET /api/v1/services/{id}/prices",
+                    new CrossOrgCase(org -> get("/api/v1/services/{id}/prices", org.serviceId()))),
+            Map.entry("POST /api/v1/services/{id}/prices", new CrossOrgCase(org -> post(
+                    "/api/v1/services/{id}/prices", org.serviceId()).contentType(MediaType.APPLICATION_JSON)
+                    .content(PRICE_BODY))));
 
     record CrossOrgCase(Function<OrgFixture, MockHttpServletRequestBuilder> request) {
     }
 
     /** One organization's ids that endpoints can be called with. Extend as modules add entities. */
     record OrgFixture(UUID organizationId, UUID roleId, UUID lifecycleUserId, UUID patchUserId, UUID departmentId,
-            UUID specialtyId) {
+            UUID specialtyId, UUID serviceId) {
     }
 
     /**
@@ -311,7 +325,7 @@ class OrganizationIsolationIT extends PostgresIT {
         Set<String> expected = new TreeSet<>(orgOwned);
         expected.removeAll(RLS_EXCLUDED);
         assertThat(expected).contains("role", "role_permission", "user_role", "document_sequence", "department",
-                "specialty");
+                "specialty", "service_catalog_item", "service_price");
         assertThat(new TreeSet<>(rlsTables())).isEqualTo(expected);
     }
 
@@ -360,17 +374,22 @@ class OrganizationIsolationIT extends PostgresIT {
         UUID patchUserId = insertUser(organizationId);
         UUID departmentId = UUID.randomUUID();
         UUID specialtyId = UUID.randomUUID();
+        UUID serviceId = UUID.randomUUID();
         inOrg(organizationId, () -> {
             jdbc.sql("""
                     INSERT INTO hms.department (id, organization_id, code, name, created_at, updated_at)
                     VALUES (?, ?, 'GENMED', 'General Medicine', now(), now())""")
                     .params(departmentId, organizationId).update();
-            return jdbc.sql("""
+            jdbc.sql("""
                     INSERT INTO hms.specialty (id, organization_id, code, name, created_at, updated_at)
                     VALUES (?, ?, 'GENMED', 'General Medicine', now(), now())""")
                     .params(specialtyId, organizationId).update();
+            return jdbc.sql("""
+                    INSERT INTO hms.service_catalog_item (id, organization_id, code, name, created_at, updated_at)
+                    VALUES (?, ?, 'CONSULT', 'Consultation', now(), now())""")
+                    .params(serviceId, organizationId).update();
         });
-        return new OrgFixture(organizationId, roleId, lifecycleUserId, patchUserId, departmentId, specialtyId);
+        return new OrgFixture(organizationId, roleId, lifecycleUserId, patchUserId, departmentId, specialtyId, serviceId);
     }
 
     private UUID insertUser(UUID organizationId) {
