@@ -12,4 +12,4 @@
 | R6 | Regulatory misread | M | H | Counsel review before pilot with real data | `[E10-8]` | Open |
 | R7 | No design partner to validate workflows | M | H | Secure a pilot before M3 | `[E10-7]` | Open |
 | R8 | Backup never restore-tested | M | H | Restore drill is a go-live gate | `[E10-2]` | Open |
-| R9 | RLS with pooled connections proves too complex | M | M | `[E1-2]` spike; ADR-0010 allows a documented downgrade to app-level scoping + isolation tests | `[E1-2]`, `[E1-6]` | Open |
+| R9 | RLS with pooled connections proves too complex | M | M | `[E1-2]` spike; ADR-0010 allows a documented downgrade to app-level scoping + isolation tests | `[E1-2]`, `[E1-6]` | Mitigated: spike passed 2026-11-12; residual risk is background jobs and views, covered in `[E1-6]` |
