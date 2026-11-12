@@ -62,6 +62,11 @@ public class ProblemDetailsHandler extends ResponseEntityExceptionHandler {
         return problem(HttpStatus.UNPROCESSABLE_CONTENT, ex.code(), ex.getMessage());
     }
 
+    @ExceptionHandler(ProblemException.class)
+    ResponseEntity<ProblemDetail> documented(ProblemException ex) {
+        return problem(ex.status(), ex.code(), ex.getMessage());
+    }
+
     @ExceptionHandler(ObjectOptimisticLockingFailureException.class)
     ResponseEntity<ProblemDetail> concurrentModification(ObjectOptimisticLockingFailureException ex) {
         return problem(HttpStatus.CONFLICT, "CONCURRENT_MODIFICATION",
