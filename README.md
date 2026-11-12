@@ -52,7 +52,7 @@ Design documents are the source of truth and are kept in sync with the code.
 | Open questions and reconciliation notes | `docs/00-review-notes.md` |
 | Project structure | `docs/engineering/project-structure.md` |
 
-> If `docs/` is not present yet, the documents are being moved into this repository from the project workspace.
+> `docs/00-charter-and-architecture.md` (original charter) is not yet committed; see `docs/00-review-notes.md` section 4.
 
 ## Roadmap
 | Milestone | Goal |

@@ -2,7 +2,7 @@
 
 > **Status:** Approved baseline (owner, 2026-11-09). Covers only the **M0 baseline** delivered by `[E0-6]` (#17): conventions, database roles and grants, extensions, document numbering and the shared immutability function. Module tables are added to this document by the issues that create them (e.g. `audit_event` by `[E1-1]`, RLS by `[E1-2]`/`[E1-6]`). Sections marked **Planned** describe intent, not implemented schema.
 >
-> Upstream: `docs/architecture/domain-model.md` (invariants I1–I12), ADR-0003 (single schema `hms`), ADR-0004 (UUIDv7), ADR-0015 (database roles, Accepted). Proposed ADRs this document leans on are flagged inline.
+> Upstream: `docs/architecture/domain-model.md` (invariants I1–I12), ADR-0003 (single schema `hms`), ADR-0004 (UUIDv7), ADR-0015 (database roles). All ADRs 0001–0015 are Accepted (2026-11-12).
 
 ## 1. Scope and status
 | Item | Status | Delivered by |
@@ -13,7 +13,7 @@
 | `document_sequence` (section 6) | Table implemented; `DocumentNumberAllocator` comes with its first consumer | `[E0-6]` |
 | `hms.reject_modification()` (section 7) | Implemented; `HM001` → `409` mapping comes with its first consumer | `[E0-6]` |
 | Same-org composite FKs (section 4) | Planned | `[E1-6]` and each module |
-| RLS policies | Planned, depends on ADR-0010 (Proposed) | `[E1-2]`, `[E1-6]` |
+| RLS policies | Planned, ADR-0010 (Accepted); mechanism confirmed by `[E1-2]` spike | `[E1-2]`, `[E1-6]` |
 
 ## 2. Conventions (apply to every migration from V1)
 - **Schema:** everything lives in `hms` (ADR-0003). Nothing is created in `public`. Objects are always schema-qualified in migrations.
@@ -25,7 +25,7 @@
   | `organization_id` | `uuid NOT NULL` | FK to `organization` once it exists (section 4) |
   | `created_at`, `updated_at` | `timestamptz NOT NULL` | UTC; set by the app from the injected `Clock`, not `now()` defaults, so tests control time |
   | `version` | `bigint NOT NULL DEFAULT 0` | optimistic locking (`@Version`) on mutable aggregates only; immutable/append-only tables omit it |
-- **Types:** money `NUMERIC(14,2)` (ADR-0012, Proposed — the type itself is confirmed in CLAUDE.md section 5); instants `timestamptz`; dates `date`; enums as `text` + `CHECK (col IN (...))` (not PG enums — adding values to a PG enum cannot run inside a transaction and is awkward to reverse); free text `text` (no arbitrary `varchar(n)`; length limits live in Bean Validation, plus a `CHECK (char_length(...))` where a hard limit matters).
+- **Types:** money `NUMERIC(14,2)` (ADR-0012); instants `timestamptz`; dates `date`; enums as `text` + `CHECK (col IN (...))` (not PG enums — adding values to a PG enum cannot run inside a transaction and is awkward to reverse); free text `text` (no arbitrary `varchar(n)`; length limits live in Bean Validation, plus a `CHECK (char_length(...))` where a hard limit matters).
 - **No hard deletes** of clinical or financial data: lifecycle `status` columns instead (CLAUDE.md section 5).
 - **Flyway:** forward-only `V<n>__<description>.sql` in `backend/src/main/resources/db/migration` (ADR-0013). A merged migration is never edited; fixes are new migrations. No `undo` scripts. One migration = one logical change, runs in a single transaction (avoid `CREATE INDEX CONCURRENTLY` unless the migration is marked non-transactional and reviewed).
 
@@ -77,7 +77,7 @@ Flyway runs in-process at startup with the migration credentials (Spring Boot `s
 Referenced by domain-model invariant I11. Detail is written by `[E1-6]`; the intent fixed now so V1 does not contradict it:
 - Every business table has `organization_id uuid NOT NULL`, FK to `hms.organization(id)` once that table exists.
 - High-risk parent tables expose `UNIQUE (organization_id, id)`; children reference them with composite FKs `(organization_id, <parent>_id) REFERENCES parent (organization_id, id)` so a row can never point at another org's row.
-- RLS (`FORCE ROW LEVEL SECURITY`, `SET LOCAL app.organization_id`) is **not** part of the baseline: it depends on ADR-0010 (Proposed) and the `[E1-2]` spike. V1 must only keep `hms_app` `NOBYPASSRLS` and non-owner so RLS *can* be enforced later.
+- RLS (`FORCE ROW LEVEL SECURITY`, `SET LOCAL app.organization_id`) is **not** part of the baseline: it is introduced by `[E1-6]` per ADR-0010 (Accepted), after the `[E1-2]` feasibility spike (which may record a documented downgrade). V1 must only keep `hms_app` `NOBYPASSRLS` and non-owner so RLS *can* be enforced later.
 
 ## 5. Extensions
 | Extension | Why | Needed by |

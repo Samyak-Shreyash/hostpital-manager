@@ -11,7 +11,7 @@ Solo developer + AI assistance. **Operational simplicity is a first-class constr
 - Phase: **M0 Skeleton — cleared to start (2026-11-07).** Repo skeleton `[E0-1]` (#12) implemented: Spring Boot app starts, health only, all other paths denied. `[E0-3]`, `[E0-5]`, `[E0-6]` merged; `[E0-7]` observability baseline (Prometheus scrape + Grafana profile) on branch.
 - Accepted ADRs (binding): 0001 modular monolith (ArchUnit only), 0003 single schema `hms`, 0004 UUIDv7, 0013 repo/build layout (monorepo, single Gradle project, Groovy DSL + version catalog, Vitest + ESLint), 0014 per-module observability, 0015 database roles (`hms_owner` migrates, `hms_app` runtime DML only), 0002 (baseline), and 0005–0012 (accepted 2026-11-12 `[E0-9]`: server-side sessions, permission RBAC, audit, API conventions, encryption/secrets, org isolation incl. RLS with documented fallback, transaction boundaries, financial integrity).
 - M1 is unblocked by ADR acceptance; still follow milestone/dependency order. Any new ADR starts as Proposed and is not binding until accepted.
-- Docs present: `docs/adr/`, `docs/product/prd.md`, `docs/architecture/{domain-model,hld}.md`, `docs/architecture/database-design.md` (v0.1, M0 baseline approved), `docs/api/api-design.md`. Still missing (ask before inventing): `docs/00-review-notes.md`, `docs/engineering/project-structure.md`, `docs/project-management/`.
+- Docs present: `docs/adr/` (0001–0015 all Accepted), `docs/product/prd.md`, `docs/architecture/{domain-model,hld,database-design}.md`, `docs/api/api-design.md`, `docs/engineering/project-structure.md`, `docs/project-management/{roadmap,risk-register}.md`, `docs/00-review-notes.md`. Still missing (owner to commit, do not reconstruct): `docs/00-charter-and-architecture.md`; `issues.json`/`Create-Issues.ps1` are not in the tree.
 - Backlog: GitHub issues titled `[E<epic>-<n>] …` (86 issues, milestones M0–M6). 
 - Before any task: inspect the repo, read the relevant docs, check open/closed issues. **Never assume something exists — verify it.**
 
@@ -98,7 +98,7 @@ Source of truth for design — read before coding in that area, and keep in sync
 > These documents currently live in the Claude project “Hospital Management”; they should be committed under `docs/` in this repo. If `docs/` is missing, ask the owner before inventing content.
 
 ## 10. API conventions (summary — full detail in `docs/api/api-design.md`)
-`/api/v1` · JSON camelCase · UTC ISO-8601 instants · RFC 7807 errors with stable `code` · pagination `page/size` (max 100) · optimistic locking via `version` → `409 CONCURRENT_MODIFICATION` · `Idempotency-Key` on payments/refunds/invoice issue · cross-org ids → `404` · session-cookie auth with CSRF token (pending ADR-0005 approval).
+`/api/v1` · JSON camelCase · UTC ISO-8601 instants · RFC 7807 errors with stable `code` · pagination `page/size` (max 100) · optimistic locking via `version` → `409 CONCURRENT_MODIFICATION` · `Idempotency-Key` on payments/refunds/invoice issue · cross-org ids → `404` · session-cookie auth with CSRF token (ADR-0005).
 
 ## 11. Repo housekeeping
 - `Create-Issues.ps1` + `issues.json`: one-off backlog bootstrap (needs `gh auth login` and `gh auth refresh -s project`). Re-running is safe; do not edit titles' `[ID]` prefixes.
