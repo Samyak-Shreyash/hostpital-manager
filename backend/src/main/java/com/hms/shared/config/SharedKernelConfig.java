@@ -5,9 +5,11 @@ import com.hms.shared.web.MoneyJacksonModule;
 import java.time.Clock;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
 /** Shared-kernel beans. Code takes time from the injected {@link Clock}, never {@code now()} directly. */
 @Configuration(proxyBeanMethods = false)
+@EnableScheduling // housekeeping jobs, e.g. audit partition maintenance ([E1-1])
 public class SharedKernelConfig {
 
     @Bean
