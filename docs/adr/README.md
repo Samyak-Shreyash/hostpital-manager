@@ -1,6 +1,6 @@
 # Architecture Decision Records
 
-**Accepted (baseline)** = confirmed in the project brief. **Proposed** = needs owner approval before it is binding.
+**Accepted (baseline)** = confirmed in the project brief. **Accepted** = approved by the owner (all of 0001–0015 as of 2026-11-12). New ADRs start as **Proposed** and are not binding until approved.
 
 | ADR | Title | Status |
 |---|---|---|

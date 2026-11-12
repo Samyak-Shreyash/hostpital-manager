@@ -119,14 +119,14 @@ sequenceDiagram
   F->>F: authenticate -> principal(userId, orgId, permissions)
   F->>C: authorised by @PreAuthorize("hasAuthority('patient:create')")
   C->>S: command (validated via Bean Validation)
-  S->>D: BEGIN, SET LOCAL app.organization_id and app.user_id (only if RLS is adopted, ADR-0010 Proposed)
+  S->>D: BEGIN, SET LOCAL app.organization_id and app.user_id (ADR-0010; subject to `[E1-2]` spike outcome)
   S->>D: domain work + INSERT audit_event
   S->>D: COMMIT
   S-->>C: result
   C-->>B: 201 JSON (or application/problem+json)
 ```
 
-## 7. Authentication flow (proposed: server-side session)
+## 7. Authentication flow (server-side session, ADR-0005)
 ```mermaid
 sequenceDiagram
   participant B as Browser
