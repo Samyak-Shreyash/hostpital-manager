@@ -147,7 +147,7 @@ REVOKE ALL ON FUNCTION hms.reject_modification() FROM PUBLIC;
 ## 8. Baseline migration (`V1__baseline.sql`) and order
 V1 contains, in order: extensions (section 5) → schema privileges and default privileges (section 3) → `hms.reject_modification()` (section 7) → `hms.document_sequence` (section 6). It creates no business tables.
 
-Planned order after V1 (each in its issue): `audit_event` + partitions `[E1-1]` → `organization`, FK on `document_sequence` `[E1-6]` → identity (users, roles, permissions, sessions) `[E1-3]`/`[E1-5]` → RLS policies `[E1-6]` (if ADR-0010 accepted) → M2+ modules.
+Applied: V2 `audit_event` + partitions `[E1-1]` (section 11). Planned next (each in its issue): `organization`, FK on `document_sequence` `[E1-6]` → identity (users, roles, permissions, sessions) `[E1-3]`/`[E1-5]` → RLS policies `[E1-6]` (if ADR-0010 accepted) → M2+ modules.
 
 ## 9. Tests required for `[E0-6]`
 Integration tests (Testcontainers `postgres:17-alpine` with the role init script from section 3):
@@ -168,3 +168,25 @@ All test data synthetic (random UUIDs, no names).
 | D3 | The shared `document_sequence` table replaces billing's `InvoiceNumberSequence` entity (domain-model.md updated). |
 | D4 | The immutability trigger also binds `hms_owner`. An emergency correction is a reviewed migration that disables the trigger for one statement and records why. |
 | D5 | `btree_gist` and `pg_trgm` are installed in V1, before first use. |
+
+## 11. Audit events — `audit_event` (`V2__audit_event.sql`, `[E1-1]`)
+ADR-0007, PRD AUD-1/2/4, invariant I8. Written only through `audit.api.AuditRecorder`.
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | `uuid` | UUIDv7; PK is `(id, occurred_at)` because the table is partitioned by `occurred_at` |
+| `organization_id` | `uuid NOT NULL` | FK to `organization` added by `[E1-6]` |
+| `occurred_at` | `timestamptz NOT NULL` | from the injected `Clock` |
+| `actor_id` | `uuid` | `NULL` = system or unauthenticated caller; FK to `app_user` added by `[E1-3]` |
+| `action` / `entity_type` | `text` | `UPPER_SNAKE_CASE`, CHECKed |
+| `entity_id` | `uuid` | nullable (e.g. failed login) |
+| `outcome` | `text` | `SUCCESS` / `FAILURE` / `DENIED` |
+| `correlation_id` | `text` | MDC `correlationId`, same shape the filter accepts |
+| `changed_fields` | `text[]` | **field names only** (AUD-4); CHECK allows ≤ 50 camelCase/dotted names, so a phone number, e-mail or sentence is rejected |
+
+- **No free-form metadata column** (no `jsonb`): there is nowhere to put a value, password, token or clinical text. New metadata needs a migration and review.
+- **Append-only:** `REVOKE UPDATE` from `hms_app` (it never had `DELETE`/`TRUNCATE`), row trigger `BEFORE UPDATE OR DELETE` and statement trigger `BEFORE TRUNCATE` with `hms.reject_modification()` on the parent; each partition gets its own `TRUNCATE` trigger (not inherited). `hms_app` has no privileges on partitions directly — access only through the parent.
+- **Same transaction:** `AuditRecorder.record` is `@Transactional(propagation = MANDATORY)`: it joins the caller's transaction and throws outside one. A failing audit insert rolls back the business change. Read-audit in a separate short transaction (ADR-0007) arrives with `[E3-7]`.
+- **Partitions:** monthly `RANGE (occurred_at)` in UTC, named `audit_event_YYYY_MM`. `hms.ensure_audit_event_partitions(months_ahead 0..12)` creates the current month plus `months_ahead`; it is `SECURITY DEFINER` (owned by `hms_owner`, `search_path` pinned, argument bounded, advisory-locked) so `hms_app` can run it without DDL rights. V2 calls it with 3; `AuditPartitionMaintenance` calls it at startup and daily at 02:15 UTC (`hms.audit.partition-months-ahead`, `hms.audit.partition-cron`). **No default partition**: if maintenance stops, audit inserts fail once the horizon is reached — fail-closed by design.
+- **Retention / dropping old partitions:** not implemented; retention period needs legal review (PRD section 7) before any partition is detached.
+- Indexes: `(organization_id, occurred_at)`, `(organization_id, entity_type, entity_id, occurred_at)`, `(organization_id, actor_id, occurred_at)` for the viewer `[E1-9]`.
