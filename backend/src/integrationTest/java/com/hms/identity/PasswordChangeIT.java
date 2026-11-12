@@ -111,6 +111,27 @@ class PasswordChangeIT extends PostgresIT {
     }
 
     @Test
+    void overlongPasswordAtLoginIsAnOrdinaryWrongPassword() throws Exception {
+        login("x".repeat(100), status().isUnauthorized()).andExpect(jsonPath("$.code").value("INVALID_CREDENTIALS"));
+        assertThat(jdbc.sql("SELECT failed_login_count FROM hms.app_user WHERE id = ?").param(userId)
+                .query(Integer.class).single()).isEqualTo(1);
+        // Unknown email with an over-long password is also 401, not 500
+        Cookie csrf = csrf();
+        mockMvc.perform(post("/api/v1/auth/login").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"nobody-" + userId + "@demo-clinic.example\",\"password\":\""
+                                + "x".repeat(100) + "\"}")
+                        .cookie(csrf).header("X-XSRF-TOKEN", csrf.getValue()))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void overlongCurrentPasswordOnChangeIsAWrongPassword() throws Exception {
+        Cookie session = sessionOf(login(OLD));
+        change(session, "x".repeat(100), NEW).andExpect(status().isUnprocessableContent())
+                .andExpect(jsonPath("$.code").value("INVALID_CURRENT_PASSWORD"));
+    }
+
+    @Test
     void logoutIsAllowedWhileChangeIsRequired() throws Exception {
         Cookie session = sessionOf(login(OLD));
         Cookie csrf = csrf();
@@ -129,7 +150,13 @@ class PasswordChangeIT extends PostgresIT {
                 .andExpect(jsonPath("$.code").value("PASSWORD_POLICY_VIOLATION"));
         change(session, OLD, OLD).andExpect(status().isUnprocessableContent())
                 .andExpect(jsonPath("$.code").value("PASSWORD_POLICY_VIOLATION"));
-        change(session, OLD, "x".repeat(129)).andExpect(status().isUnprocessableContent());
+        change(session, OLD, "x".repeat(129)).andExpect(status().isUnprocessableContent())
+                .andExpect(jsonPath("$.code").value("PASSWORD_POLICY_VIOLATION"));
+        change(session, OLD, "x".repeat(73)).andExpect(status().isUnprocessableContent())
+                .andExpect(jsonPath("$.code").value("PASSWORD_POLICY_VIOLATION"));
+        // 37 two-byte characters = 74 bytes, 37 characters: the limit is in bytes
+        change(session, OLD, "\u00e9".repeat(37)).andExpect(status().isUnprocessableContent())
+                .andExpect(jsonPath("$.code").value("PASSWORD_POLICY_VIOLATION"));
 
         assertThat(storedHash()).isEqualTo(hashBefore);
         mockMvc.perform(get(PROBE).cookie(session)).andExpect(status().isForbidden());

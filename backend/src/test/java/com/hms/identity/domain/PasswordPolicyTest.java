@@ -15,7 +15,7 @@ class PasswordPolicyTest {
     @Test
     void acceptsLengthBoundaries() {
         assertThat(PasswordPolicy.check("a".repeat(12), EMAIL)).isEmpty();
-        assertThat(PasswordPolicy.check("a".repeat(128), EMAIL)).isEmpty();
+        assertThat(PasswordPolicy.check("a".repeat(72), EMAIL)).isEmpty();
     }
 
     @Test
@@ -25,7 +25,10 @@ class PasswordPolicyTest {
 
     @Test
     void rejectsTooLong() {
-        assertThat(PasswordPolicy.check("a".repeat(129), EMAIL)).containsExactly(Violation.TOO_LONG);
+        assertThat(PasswordPolicy.check("a".repeat(73), EMAIL)).containsExactly(Violation.TOO_LONG);
+        // 36 two-byte characters are exactly 72 bytes; 37 are 74
+        assertThat(PasswordPolicy.check("\u00e9".repeat(36), EMAIL)).isEmpty();
+        assertThat(PasswordPolicy.check("\u00e9".repeat(37), EMAIL)).containsExactly(Violation.TOO_LONG);
     }
 
     @Test

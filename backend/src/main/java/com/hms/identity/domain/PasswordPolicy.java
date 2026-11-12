@@ -7,7 +7,7 @@ import java.util.Locale;
 
 /**
  * Password policy applied whenever a password is set: own change ([E1-4]) and, later, admin-set temporary
- * passwords (user management). The PRD gives no numbers, so the defaults are: 12 to 128 characters, not blank,
+ * passwords (user management). The PRD gives no numbers, so the defaults are: 12 characters to 72 UTF-8 bytes (BCrypt ignores or rejects anything longer), not blank,
  * not equal to the account email, no composition rules and no history (a change must still differ from the
  * current password, checked by the caller that knows the current one). Login does not apply the policy.
  * Violations name the rule only, never the password.
@@ -15,12 +15,12 @@ import java.util.Locale;
 public final class PasswordPolicy {
 
     public static final int MIN_LENGTH = 12;
-    public static final int MAX_LENGTH = 128;
+    public static final int MAX_BYTES = 72;
     public static final String VIOLATION_CODE = "PASSWORD_POLICY_VIOLATION";
 
     public enum Violation {
         TOO_SHORT("must be at least " + MIN_LENGTH + " characters"),
-        TOO_LONG("must be at most " + MAX_LENGTH + " characters"),
+        TOO_LONG("must be at most " + MAX_BYTES + " bytes (UTF-8); multi-byte characters count for more than one"),
         BLANK("must not be blank"),
         SAME_AS_EMAIL("must not be the same as the email address");
 
@@ -38,6 +38,11 @@ public final class PasswordPolicy {
     private PasswordPolicy() {
     }
 
+    /** True when BCrypt cannot take the password: more than {@link #MAX_BYTES} UTF-8 bytes. */
+    public static boolean exceedsBcryptLimit(String password) {
+        return password.getBytes(java.nio.charset.StandardCharsets.UTF_8).length > MAX_BYTES;
+    }
+
     /** All rules the password breaks; empty when acceptable. */
     public static List<Violation> check(String password, String email) {
         List<Violation> violations = new ArrayList<>();
@@ -48,7 +53,7 @@ public final class PasswordPolicy {
         if (password.length() < MIN_LENGTH) {
             violations.add(Violation.TOO_SHORT);
         }
-        if (password.length() > MAX_LENGTH) {
+        if (exceedsBcryptLimit(password)) {
             violations.add(Violation.TOO_LONG);
         }
         if (email != null && password.trim().toLowerCase(Locale.ROOT).equals(email.trim().toLowerCase(Locale.ROOT))) {

@@ -54,7 +54,7 @@ public class AuthenticationService {
         Optional<AppUserEntity> found = users.findByEmailForUpdate(email.trim().toLowerCase(Locale.ROOT));
         if (found.isEmpty()) {
             // No organization to attribute an audit event to, and audit_event.organization_id is mandatory.
-            passwordEncoder.matches(password, timingEqualiserHash);
+            matches(password, timingEqualiserHash);
             return new LoginResult.InvalidCredentials();
         }
         AppUserEntity user = found.get();
@@ -63,7 +63,7 @@ public class AuthenticationService {
             record(user, null, "LOGIN_FAILED", AuditOutcome.DENIED);
             return new LoginResult.Locked();
         }
-        if (!passwordEncoder.matches(password, user.getPasswordHash())) {
+        if (!matches(password, user.getPasswordHash())) {
             int failures = LoginLockout.failuresAfterFailedAttempt(
                     user.getFailedLoginCount(), user.getLockedUntil(), now);
             Instant lockedUntil = LoginLockout.lockUntil(failures, now);
@@ -99,7 +99,8 @@ public class AuthenticationService {
     /** Read per request by the password-change gate, so a completed change takes effect immediately. */
     @Transactional(readOnly = true)
     public boolean isPasswordChangeRequired(UUID userId) {
-        return users.findById(userId).map(AppUserEntity::isMustChangePassword).orElse(false);
+        // Fails closed: a missing row (user gone while the session lives) is treated as change required.
+        return users.findById(userId).map(AppUserEntity::isMustChangePassword).orElse(true);
     }
 
     /**
@@ -115,7 +116,7 @@ public class AuthenticationService {
             record(user, userId, "PASSWORD_CHANGE_FAILED", AuditOutcome.DENIED);
             return new ChangePasswordResult.Locked();
         }
-        if (!passwordEncoder.matches(currentPassword, user.getPasswordHash())) {
+        if (!matches(currentPassword, user.getPasswordHash())) {
             int failures = LoginLockout.failuresAfterFailedAttempt(
                     user.getFailedLoginCount(), user.getLockedUntil(), now);
             user.recordLoginOutcome(failures, LoginLockout.lockUntil(failures, now), now);
@@ -131,6 +132,18 @@ public class AuthenticationService {
         audit.record(new AuditEntry(user.getOrganizationId(), userId, "PASSWORD_CHANGED", ENTITY, userId,
                 AuditOutcome.SUCCESS, List.of("passwordHash", "mustChangePassword")));
         return new ChangePasswordResult.Changed();
+    }
+
+    /**
+     * BCrypt rejects passwords over 72 bytes with an exception. Such a password can never be correct (the policy
+     * forbids setting one), so it is a plain mismatch, still costing one BCrypt check so timing does not differ.
+     */
+    private boolean matches(String raw, String hash) {
+        if (PasswordPolicy.exceedsBcryptLimit(raw)) {
+            passwordEncoder.matches("x", hash);
+            return false;
+        }
+        return passwordEncoder.matches(raw, hash);
     }
 
     private void record(AppUserEntity user, UUID actorId, String action, AuditOutcome outcome) {
