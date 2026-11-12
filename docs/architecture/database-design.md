@@ -12,7 +12,7 @@
 | Extensions (section 5) | Implemented | `[E0-6]` |
 | `document_sequence` (section 6) | Table implemented; `DocumentNumberAllocator` comes with its first consumer | `[E0-6]` |
 | `hms.reject_modification()` (section 7) | Implemented; `HM001` → `409` mapping comes with its first consumer | `[E0-6]` |
-| Same-org composite FKs (section 4) | Planned | `[E1-6]` and each module |
+| Same-org composite FKs (section 4) | Planned (first used by V4 RBAC tables, section 13) | `[E1-6]` and each module |
 | RLS policies | Planned; mechanism confirmed by `[E1-2]` spike (ADR-0010) | `[E1-2]`, `[E1-6]` |
 
 ## 2. Conventions (apply to every migration from V1)
@@ -147,7 +147,7 @@ REVOKE ALL ON FUNCTION hms.reject_modification() FROM PUBLIC;
 ## 8. Baseline migration (`V1__baseline.sql`) and order
 V1 contains, in order: extensions (section 5) → schema privileges and default privileges (section 3) → `hms.reject_modification()` (section 7) → `hms.document_sequence` (section 6). It creates no business tables.
 
-Applied: V2 `audit_event` + partitions `[E1-1]` (section 11); V3 `app_user` + Spring Session tables `[E1-3]` (section 12). Planned next (each in its issue): `organization`, FKs on `document_sequence`/`app_user` `[E1-6]` → roles, permissions `[E1-5]` → RLS policies `[E1-6]` (if ADR-0010 accepted) → M2+ modules.
+Applied: V2 `audit_event` + partitions `[E1-1]` (section 11); V3 `app_user` + Spring Session tables `[E1-3]` (section 12); V4 RBAC tables `[E1-5]` (section 13). Planned next (each in its issue): `organization`, FKs on `document_sequence`/`app_user` `[E1-6]` → roles, permissions `[E1-5]` → RLS policies `[E1-6]` (if ADR-0010 accepted) → M2+ modules.
 
 ## 9. Tests required for `[E0-6]`
 Integration tests (Testcontainers `postgres:17-alpine` with the role init script from section 3):
@@ -210,3 +210,15 @@ ADR-0007, PRD AUD-1/2/4, invariant I8. Written only through `audit.api.AuditReco
 - `audit_event.actor_id` now has an FK to `app_user (id)`.
 - Spring Session JDBC tables `hms.spring_session` and `hms.spring_session_attributes` follow Spring Session's PostgreSQL schema; `spring.session.jdbc.initialize-schema=never`. `hms_app` gets `DELETE` on both (sessions are transient technical rows, not business data). `principal_name` holds the user id, so all of a user's sessions can be revoked (`[E1-7]`).
 - Auth audit actions (entity `APP_USER`): `LOGIN_SUCCEEDED` (actor = user), `LOGIN_FAILED` (actor `NULL`; outcome `FAILURE`, or `DENIED` when locked/inactive), `ACCOUNT_LOCKED`, `LOGOUT`. A failed login for an unknown email is **not** audited: there is no organization to attribute it to.
+
+## 13. Roles and permissions (`V4__identity_rbac.sql`, `[E1-5]`, ADR-0006)
+| Table | Columns | Notes |
+|---|---|---|
+| `permission` | `code text` PK | Global catalogue, **not** org-owned; mirrors `com.hms.identity.api.Permissions` (an integration test compares both). `hms_app` has `SELECT` only: codes change by migration. |
+| `role` | `id`, `organization_id`, `code`, `name`, `version`, `created_at`, `updated_at` | Org-owned data. `UNIQUE (organization_id, code)`; `UNIQUE (organization_id, id)` as target for same-org FKs; `code` upper snake case. |
+| `role_permission` | `organization_id`, `role_id`, `permission_code` | PK `(role_id, permission_code)`; composite FK `(organization_id, role_id) → role`; FK to `permission`. |
+| `user_role` | `organization_id`, `user_id`, `role_id` | PK `(user_id, role_id)`; composite FKs to `app_user (organization_id, id)` and `role (organization_id, id)`, so a user can only hold roles of their own organization. |
+
+- Login loads the user's role codes and the union of their permissions into the session principal; the permissions become the Spring authorities. A change to a role takes effect on the user's next login (sessions are revoked on role change by role/user management).
+- Default roles (PRD section 3 personas: `SYSTEM_ADMIN`, `FACILITY_ADMIN`, `DOCTOR`, `NURSE`, `RECEPTIONIST`, `ACCOUNTANT`) are code templates (`DefaultRoleTemplates`) copied into an organization by `RoleProvisioning.provisionDefaultRoles`, not seeded by the migration (no organization exists at migration time). The PRD's `report:read` maps to `report:clinical`.
+- `DELETE` on `role_permission` / `user_role` is not granted yet; it comes with role/user management. FK to `organization` and RLS policies come with `[E1-6]`.

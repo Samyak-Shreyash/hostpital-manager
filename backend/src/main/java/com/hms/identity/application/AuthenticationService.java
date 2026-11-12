@@ -7,6 +7,7 @@ import com.hms.identity.api.AuthenticatedPrincipal;
 import com.hms.identity.domain.LoginLockout;
 import com.hms.identity.infrastructure.AppUserEntity;
 import com.hms.identity.infrastructure.AppUserRepository;
+import com.hms.identity.infrastructure.RbacRepository;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.Locale;
@@ -28,15 +29,18 @@ public class AuthenticationService {
     private final AppUserRepository users;
     private final PasswordEncoder passwordEncoder;
     private final AuditRecorder audit;
+    private final RbacRepository rbac;
     private final Clock clock;
     /** Compared against when the email is unknown, so both failure paths cost one BCrypt check. */
     private final String timingEqualiserHash;
 
     public AuthenticationService(
-            AppUserRepository users, PasswordEncoder passwordEncoder, AuditRecorder audit, Clock clock) {
+            AppUserRepository users, PasswordEncoder passwordEncoder, AuditRecorder audit, RbacRepository rbac,
+            Clock clock) {
         this.users = users;
         this.passwordEncoder = passwordEncoder;
         this.audit = audit;
+        this.rbac = rbac;
         this.clock = clock;
         this.timingEqualiserHash = passwordEncoder.encode("timing-equaliser-not-a-password");
     }
@@ -75,8 +79,11 @@ public class AuthenticationService {
 
         user.recordLoginOutcome(0, null, now);
         record(user, user.getId(), "LOGIN_SUCCEEDED", AuditOutcome.SUCCESS);
+        // Effective permissions are loaded once per login (ADR-0006): role changes apply from the next login.
         return new LoginResult.Succeeded(
-                new AuthenticatedPrincipal(user.getId(), user.getOrganizationId(), user.getEmail(), user.getFullName()),
+                new AuthenticatedPrincipal(user.getId(), user.getOrganizationId(), user.getEmail(), user.getFullName(),
+                        rbac.findRoleCodes(user.getOrganizationId(), user.getId()),
+                        rbac.findPermissionCodes(user.getOrganizationId(), user.getId())),
                 user.isMustChangePassword());
     }
 

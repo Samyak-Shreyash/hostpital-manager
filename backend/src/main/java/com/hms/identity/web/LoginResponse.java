@@ -5,8 +5,8 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * api-design.md section 2 login response. Roles and permissions are empty until RBAC ([E1-5]); the
- * organization carries only its id until organization settings exist ([E2-1]).
+ * api-design.md section 2 login response. Roles and permissions are those loaded into the session at login
+ * (ADR-0006); the organization carries only its id until organization settings exist ([E2-1]).
  */
 record LoginResponse(User user, List<String> permissions, Organization organization) {
 
@@ -18,8 +18,8 @@ record LoginResponse(User user, List<String> permissions, Organization organizat
 
     static LoginResponse of(AuthenticatedPrincipal principal, boolean mustChangePassword) {
         return new LoginResponse(
-                new User(principal.userId(), principal.fullName(), List.of(), mustChangePassword),
-                List.of(),
+                new User(principal.userId(), principal.fullName(), principal.roles(), mustChangePassword),
+                principal.permissions(),
                 new Organization(principal.organizationId()));
     }
 }

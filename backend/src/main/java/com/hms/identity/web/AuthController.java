@@ -13,6 +13,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.context.SecurityContextRepository;
@@ -79,8 +80,11 @@ class AuthController {
             request.changeSessionId();
         }
         SecurityContext context = SecurityContextHolder.createEmptyContext();
-        // Authorities come with RBAC ([E1-5]).
-        context.setAuthentication(UsernamePasswordAuthenticationToken.authenticated(principal, null, List.of()));
+        // Authorities are the permission codes loaded at login (ADR-0006); a role change applies on next login.
+        List<SimpleGrantedAuthority> authorities = principal.permissions().stream()
+                .map(SimpleGrantedAuthority::new)
+                .toList();
+        context.setAuthentication(UsernamePasswordAuthenticationToken.authenticated(principal, null, authorities));
         SecurityContextHolder.setContext(context);
         securityContextRepository.saveContext(context, request, response);
     }
