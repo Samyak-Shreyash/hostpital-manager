@@ -76,7 +76,7 @@ public class AuthenticationService {
             int failures = LoginLockout.failuresAfterFailedAttempt(
                     user.getFailedLoginCount(), user.getLockedUntil(), now);
             Instant lockedUntil = LoginLockout.lockUntil(failures, now);
-            user.recordLoginOutcome(failures, lockedUntil, now);
+            users.recordLoginOutcome(user.getId(), failures, lockedUntil);
             record(user, null, "LOGIN_FAILED", AuditOutcome.FAILURE);
             if (lockedUntil != null) {
                 record(user, null, "ACCOUNT_LOCKED", AuditOutcome.SUCCESS);
@@ -89,7 +89,7 @@ public class AuthenticationService {
             return new LoginResult.Inactive();
         }
 
-        user.recordLoginOutcome(0, null, now);
+        users.recordLoginOutcome(user.getId(), 0, null);
         record(user, user.getId(), "LOGIN_SUCCEEDED", AuditOutcome.SUCCESS);
         // Effective permissions are loaded once per login (ADR-0006): role changes apply from the next login.
         return new LoginResult.Succeeded(
@@ -130,7 +130,7 @@ public class AuthenticationService {
         if (!matches(currentPassword, user.getPasswordHash())) {
             int failures = LoginLockout.failuresAfterFailedAttempt(
                     user.getFailedLoginCount(), user.getLockedUntil(), now);
-            user.recordLoginOutcome(failures, LoginLockout.lockUntil(failures, now), now);
+            users.recordLoginOutcome(user.getId(), failures, LoginLockout.lockUntil(failures, now));
             record(user, userId, "PASSWORD_CHANGE_FAILED", AuditOutcome.FAILURE);
             return new ChangePasswordResult.WrongCurrentPassword();
         }

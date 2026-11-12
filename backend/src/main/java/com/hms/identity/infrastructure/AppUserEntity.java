@@ -141,12 +141,6 @@ public class AppUserEntity implements Persistable<UUID> {
         return lockedUntil;
     }
 
-    public void recordLoginOutcome(int failedLoginCount, Instant lockedUntil, Instant now) {
-        this.failedLoginCount = failedLoginCount;
-        this.lockedUntil = lockedUntil;
-        this.updatedAt = now;
-    }
-
     /** Sets a new password the user chose themselves: the first-login flag is cleared and the lockout reset. */
     public void changePassword(String newPasswordHash, Instant now) {
         this.passwordHash = newPasswordHash;
