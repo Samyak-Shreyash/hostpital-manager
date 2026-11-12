@@ -16,3 +16,5 @@ frontend/dist/
 .idea/
 *.iml
 .vscode/
+
+graphify-out/*
