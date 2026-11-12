@@ -1,5 +1,3 @@
 # gitleaks false positives (one fingerprint per line: <commit>:<file>:<rule>:<line>). Justify each.
 # README monitoring note "Prometheus scrapes api:8080/actuator/..." is a host:port, not a key ([E0-7]); reworded later. Fingerprint is the commit on main (rebased from 362110d).
 a3ed4ddc4d5d8b7097324d60e6dbf68f26e6ac3c:README.md:generic-api-key:79
-# AuthenticationIT synthetic test password literal ([E1-3]); replaced by a generated value in the next commit.
-567d431b65ec4789d820c24554472c1a03361b57:backend/src/integrationTest/java/com/hms/identity/AuthenticationIT.java:generic-api-key:35
