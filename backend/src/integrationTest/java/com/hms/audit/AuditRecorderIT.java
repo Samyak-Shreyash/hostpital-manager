@@ -21,6 +21,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.slf4j.MDC;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -52,6 +53,19 @@ class AuditRecorderIT extends PostgresIT {
 
     @Autowired
     PlatformTransactionManager transactionManager;
+
+    /** actor_id references app_user ([E1-3]), so audited actions need a real (synthetic) user. */
+    private static final UUID ACTOR = UUID.fromString("0190d000-0000-7000-8000-00000000000d");
+
+    @BeforeEach
+    void ensureActorExists() {
+        jdbc.sql("""
+                INSERT INTO hms.app_user (id, organization_id, email, full_name, password_hash, created_at, updated_at)
+                VALUES (?, ?, 'audit-actor@demo-clinic.example', 'Audit Actor', 'not-a-hash', now(), now())
+                ON CONFLICT (id) DO NOTHING""")
+                .params(ACTOR, UUID.randomUUID())
+                .update();
+    }
 
     @AfterEach
     void clearMdc() {
@@ -149,7 +163,7 @@ class AuditRecorderIT extends PostgresIT {
     @Test
     void storesActorEntityOutcomeAndCorrelationId() {
         UUID org = UUID.randomUUID();
-        UUID actor = UUID.randomUUID();
+        UUID actor = ACTOR;
         UUID patient = UUID.randomUUID();
         MDC.put(CorrelationIdFilter.MDC_KEY, "it-audit-1");
         inTransaction(() -> recorder.record(
@@ -170,7 +184,7 @@ class AuditRecorderIT extends PostgresIT {
     @Test
     void metadataHoldsFieldNamesOnly() throws SQLException {
         UUID org = UUID.randomUUID();
-        inTransaction(() -> recorder.record(new AuditEntry(org, UUID.randomUUID(), "PATIENT_UPDATED", "PATIENT",
+        inTransaction(() -> recorder.record(new AuditEntry(org, ACTOR, "PATIENT_UPDATED", "PATIENT",
                 UUID.randomUUID(), AuditOutcome.SUCCESS, List.of("phone", "address.city"))));
 
         try (Connection owner = connect(OWNER, OWNER_PASSWORD);
@@ -256,7 +270,7 @@ class AuditRecorderIT extends PostgresIT {
     // --- helpers ------------------------------------------------------------------------------------------------
 
     private static AuditEntry viewed(UUID org) {
-        return AuditEntry.of(org, UUID.randomUUID(), "PATIENT_VIEWED", "PATIENT", UUID.randomUUID(),
+        return AuditEntry.of(org, ACTOR, "PATIENT_VIEWED", "PATIENT", UUID.randomUUID(),
                 AuditOutcome.SUCCESS);
     }
 
