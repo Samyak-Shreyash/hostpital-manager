@@ -55,6 +55,11 @@ class BootstrapRunner implements ApplicationRunner {
         if (orgName.isEmpty() && adminEmail.isEmpty() && timezone.isEmpty() && passwordFile.isEmpty()) {
             return; // not configured
         }
+        // Checked first, so a restart with the variables left set but the password file removed still starts.
+        if (bootstrap.organizationExists()) {
+            log.info("Bootstrap skipped: an organization already exists.");
+            return;
+        }
         if (orgName.isEmpty() || adminEmail.isEmpty()) {
             throw new IllegalStateException(
                     "Bootstrap needs both HMS_BOOTSTRAP_ORG_NAME and HMS_BOOTSTRAP_ADMIN_EMAIL.");
@@ -66,10 +71,6 @@ class BootstrapRunner implements ApplicationRunner {
         String zone = timezone.isEmpty() ? OrganizationRules.DEFAULT_TIMEZONE : timezone;
         if (!OrganizationRules.isIanaTimezone(zone)) {
             throw new IllegalStateException("HMS_BOOTSTRAP_ORG_TIMEZONE is not a valid IANA time zone id.");
-        }
-        if (bootstrap.organizationExists()) {
-            log.info("Bootstrap skipped: an organization already exists.");
-            return;
         }
         Path file = Path.of(passwordFile);
         String password = TemporaryPassword.generate();

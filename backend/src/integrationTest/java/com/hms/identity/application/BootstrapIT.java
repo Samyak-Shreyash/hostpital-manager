@@ -164,7 +164,17 @@ class BootstrapIT {
     }
 
     @Test
+    void restartWithTheVariablesButWithoutThePasswordFileStartsNormally() {
+        // An organization exists: the variables are left set, the password file was deleted after first login.
+        new BootstrapRunner(bootstrap, "Demo Bootstrap Clinic", ADMIN_EMAIL, "", "").run(null);
+        new BootstrapRunner(bootstrap, "", ADMIN_EMAIL, "", "").run(null);
+        assertThat(jdbc.sql("SELECT count(*) FROM hms.app_user").query(Integer.class).single()).isEqualTo(1);
+    }
+
+    @Test
     void variablesWithoutAPasswordFileFailWithAClearMessage() {
+        // Validation only matters on a fresh installation, so this runs against one with no organization.
+        FirstOrganizationBootstrap bootstrap = org.mockito.Mockito.mock(FirstOrganizationBootstrap.class);
         BootstrapRunner runner = new BootstrapRunner(bootstrap, "Demo Bootstrap Clinic", ADMIN_EMAIL, "", "");
         assertThatThrownBy(() -> runner.run(null))
                 .isInstanceOf(IllegalStateException.class)
