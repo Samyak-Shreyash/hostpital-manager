@@ -12,6 +12,8 @@ import com.hms.shared.domain.BusinessRuleException;
 import com.hms.shared.domain.ConflictException;
 import com.hms.shared.domain.NotFoundException;
 import com.hms.shared.id.UuidV7Generator;
+import com.hms.shared.web.ProblemException;
+import org.springframework.http.HttpStatus;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -67,6 +69,7 @@ public class RoleManagementService {
     public RoleView create(AuthenticatedPrincipal actor, String code, String name, List<String> permissionCodes) {
         UUID org = actor.organizationId();
         Set<String> permissions = requireKnownPermissions(permissionCodes);
+        requireCallerHolds(actor, permissions);
         UUID id = ids.next();
         Instant now = clock.instant();
         if (!rbac.insertRoleIfAbsent(id, org, code, name.trim(), now)) {
@@ -100,7 +103,11 @@ public class RoleManagementService {
         boolean permissionsChanged = false;
         if (permissionCodes != null) {
             int adminsBefore = rbac.countActiveAdministrators(org);
-            permissionsChanged = replacePermissions(org, roleId, requireKnownPermissions(permissionCodes));
+            Set<String> wanted = requireKnownPermissions(permissionCodes);
+            Set<String> added = new TreeSet<>(wanted);
+            added.removeAll(rbac.findPermissionCodesByRoles(org, List.of(roleId)).getOrDefault(roleId, List.of()));
+            requireCallerHolds(actor, added);
+            permissionsChanged = replacePermissions(org, roleId, wanted);
             if (permissionsChanged) {
                 changed.add("permissions");
                 if (adminsBefore > 0 && rbac.countActiveAdministrators(org) == 0) {
@@ -140,6 +147,25 @@ public class RoleManagementService {
             }
         }
         return changed;
+    }
+
+    /**
+     * Anti-escalation rule (api-design.md section 3): a caller may only grant permissions they hold themselves.
+     * Permissions the role already has and the caller lacks may stay (or be removed); they cannot be added.
+     * A system administrator (holds both {@code user:update} and {@code role:manage}, the same definition as the
+     * last-administrator rule) is exempt: the default SYSTEM_ADMIN role deliberately lacks clinical and financial
+     * permissions but must still be able to set up staff roles, and already sits at the top of the hierarchy.
+     */
+    static void requireCallerHolds(AuthenticatedPrincipal actor, java.util.Collection<String> permissions) {
+        if (actor.permissions().contains(Permissions.USER_UPDATE)
+                && actor.permissions().contains(Permissions.ROLE_MANAGE)) {
+            return;
+        }
+        List<String> missing = permissions.stream().filter(p -> !actor.permissions().contains(p)).sorted().toList();
+        if (!missing.isEmpty()) {
+            throw new ProblemException(HttpStatus.FORBIDDEN, "PRIVILEGE_ESCALATION",
+                    "You cannot grant permissions you do not hold yourself.");
+        }
     }
 
     private static Set<String> requireKnownPermissions(List<String> codes) {

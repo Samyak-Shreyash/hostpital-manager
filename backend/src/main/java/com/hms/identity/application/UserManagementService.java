@@ -102,6 +102,7 @@ public class UserManagementService {
     @Transactional
     public UserWithTemporaryPassword create(AuthenticatedPrincipal actor, String email, String fullName,
             List<String> roleCodes) {
+        requireAssignable(actor, actor.organizationId(), roleCodes == null ? List.of() : roleCodes);
         String temporaryPassword = TemporaryPassword.generate();
         UserView view = insertUser(actor.organizationId(), actor.userId(), email, fullName, roleCodes,
                 temporaryPassword);
@@ -165,6 +166,9 @@ public class UserManagementService {
         }
         boolean rolesChanged = false;
         if (roleCodes != null) {
+            Set<String> added = new LinkedHashSet<>(roleCodes);
+            added.removeAll(rbac.findRoleCodes(org, user.getId()));
+            requireAssignable(actor, org, List.copyOf(added));
             int adminsBefore = rbac.countActiveAdministrators(org);
             rolesChanged = replaceRoles(org, user.getId(), roleCodes);
             if (rolesChanged) {
@@ -243,6 +247,20 @@ public class UserManagementService {
     private static UserView view(AppUserEntity user, List<String> roleCodes) {
         return new UserView(user.getId(), user.getEmail(), user.getFullName(), user.getStatus(),
                 user.isMustChangePassword(), roleCodes, user.getVersion(), user.getCreatedAt(), user.getUpdatedAt());
+    }
+
+    /**
+     * Anti-escalation rule (api-design.md section 3): a caller may assign only roles whose every permission they
+     * hold themselves. Unknown codes are reported as UNKNOWN_ROLE first. Bootstrap does not pass through here.
+     */
+    private void requireAssignable(AuthenticatedPrincipal actor, UUID org, List<String> roleCodes) {
+        if (roleCodes.isEmpty()) {
+            return;
+        }
+        Map<String, UUID> roles = resolveRoles(org, roleCodes);
+        Set<String> granted = new TreeSet<>();
+        rbac.findPermissionCodesByRoles(org, List.copyOf(roles.values())).values().forEach(granted::addAll);
+        RoleManagementService.requireCallerHolds(actor, granted);
     }
 
     /** Codes must all exist in the caller's organization; another organization's role is simply unknown. */

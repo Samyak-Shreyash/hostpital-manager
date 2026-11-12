@@ -379,7 +379,9 @@ class UserManagementIT extends PostgresIT {
     @Test
     void theLastActiveAdministratorCannotBeDeactivatedDemotedOrStrippedOfPermissions() throws Exception {
         // Can manage users but not roles, so it is not itself an administrator and can act on the real one.
-        fx.role(org, "PLAIN_USER_MANAGER", "user:update", "user:read");
+        // It also holds the NURSE permissions, so assigning NURSE is not an escalation (api-design.md section 3).
+        fx.role(org, "PLAIN_USER_MANAGER", "user:update", "user:read", "patient:read", "observation:write",
+                "bed:assign", "admission:read");
         AdminApiFixture.Session manager = fx.loggedIn(org, "manager", "PLAIN_USER_MANAGER");
 
         mockMvc.perform(manager.apply(post(USERS + "/" + admin.userId() + "/deactivate")))

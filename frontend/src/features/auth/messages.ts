@@ -11,6 +11,7 @@ const MESSAGES: Record<string, string> = {
   CONCURRENT_MODIFICATION: 'Someone else changed this record. Reload and try again.',
   CANNOT_DEACTIVATE_SELF: 'You cannot deactivate your own account.',
   LAST_ADMINISTRATOR: 'This would remove the last system administrator.',
+  PRIVILEGE_ESCALATION: 'You cannot grant permissions or assign roles beyond your own access.',
   UNKNOWN_ROLE: 'One of the selected roles does not exist.',
   DUPLICATE_ROLE_CODE: 'A role with this code already exists.',
   UNKNOWN_PERMISSION: 'One of the selected permissions does not exist.',
