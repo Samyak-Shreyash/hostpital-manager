@@ -124,8 +124,8 @@ public final class AdminApiFixture {
 
     /** Creates a user with the given roles and logs them in. */
     /**
-     * A caller holding every catalogue permission, for tests that must assign clinical roles: even a system
-     * administrator may only grant what it holds (api-design.md section 3), and SYSTEM_ADMIN lacks clinical ones.
+     * A caller holding every catalogue permission, for tests that must grant clinical permissions to roles: even a system
+     * administrator may only grant what it holds (api-design.md section 3); assigning built-in roles needs only a real SYSTEM_ADMIN (role:assign).
      */
     public Session withAllPermissions(UUID org) throws Exception {
         String code = "ALL_PERMISSIONS";

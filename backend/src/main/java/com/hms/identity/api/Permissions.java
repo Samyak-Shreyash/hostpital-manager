@@ -66,6 +66,7 @@ public final class Permissions {
     public static final String REPORT_FINANCE = "report:finance";
     public static final String ROLE_READ = "role:read";
     public static final String ROLE_MANAGE = "role:manage";
+    public static final String ROLE_ASSIGN = "role:assign";
     public static final String USER_CREATE = "user:create";
     public static final String USER_READ = "user:read";
     public static final String USER_UPDATE = "user:update";
@@ -86,7 +87,7 @@ public final class Permissions {
             PATIENT_UPDATE, PATIENT_UPDATE_CLINICAL, PAYMENT_CREATE, PAYMENT_READ,
             PRACTITIONER_CREATE, PRACTITIONER_READ, PRACTITIONER_UPDATE, PRACTITIONER_SCHEDULE,
             PRESCRIPTION_CREATE, PRESCRIPTION_READ, PRESCRIPTION_ISSUE, REFUND_CREATE, REFUND_READ,
-            REFUND_APPROVE, REPORT_CLINICAL, REPORT_FINANCE, ROLE_READ, ROLE_MANAGE, USER_CREATE,
+            REFUND_APPROVE, REPORT_CLINICAL, REPORT_FINANCE, ROLE_READ, ROLE_MANAGE, ROLE_ASSIGN, USER_CREATE,
             USER_READ, USER_UPDATE, USER_RESET_PASSWORD, WARD_READ, WARD_MANAGE);
 
     private Permissions() {

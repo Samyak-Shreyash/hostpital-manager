@@ -149,7 +149,7 @@ class UserManagementIT extends PostgresIT {
 
     @Test
     void createReturnsATemporaryPasswordOnceAndTheUserMustChangeIt(CapturedOutput output) throws Exception {
-        AdminApiFixture.Session everything = fx.withAllPermissions(org);
+        AdminApiFixture.Session everything = fx.loggedIn(org, "admin", "SYSTEM_ADMIN");
         String email = "Dr.Rao-" + UUID.randomUUID() + "@Demo-Clinic.Example";
         ResultActions created = mockMvc.perform(everything.apply(post(USERS).contentType(MediaType.APPLICATION_JSON)
                         .content(createBody(email, "Dr. A. Rao", "DOCTOR"))))
@@ -190,7 +190,7 @@ class UserManagementIT extends PostgresIT {
 
     @Test
     void duplicateEmailIsRejectedAcrossOrganizationsAndIgnoringCase() throws Exception {
-        AdminApiFixture.Session everything = fx.withAllPermissions(org);
+        AdminApiFixture.Session everything = fx.loggedIn(org, "admin", "SYSTEM_ADMIN");
         String email = fx.uniqueEmail("dup");
         mockMvc.perform(everything.apply(post(USERS).contentType(MediaType.APPLICATION_JSON)
                         .content(createBody(email, "First", "NURSE"))))
@@ -200,7 +200,7 @@ class UserManagementIT extends PostgresIT {
                 .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("DUPLICATE_EMAIL"));
 
         UUID otherOrg = fx.organization();
-        AdminApiFixture.Session otherEverything = fx.withAllPermissions(otherOrg);
+        AdminApiFixture.Session otherEverything = fx.loggedIn(otherOrg, "admin", "SYSTEM_ADMIN");
         mockMvc.perform(otherEverything.apply(post(USERS).contentType(MediaType.APPLICATION_JSON)
                         .content(createBody(email, "Third", "NURSE"))))
                 .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("DUPLICATE_EMAIL"));
@@ -287,7 +287,7 @@ class UserManagementIT extends PostgresIT {
 
     @Test
     void updateRenamesReplacesRolesEndsTheUsersSessionsAndIsAudited() throws Exception {
-        AdminApiFixture.Session everything = fx.withAllPermissions(org);
+        AdminApiFixture.Session everything = fx.loggedIn(org, "admin", "SYSTEM_ADMIN");
         String email = fx.uniqueEmail("doc");
         UUID doctor = fx.user(org, email, "DOCTOR");
         AdminApiFixture.Session doctorSession = fx.login(doctor, email);

@@ -4,6 +4,8 @@ import com.hms.audit.api.AuditEntry;
 import com.hms.audit.api.AuditOutcome;
 import com.hms.audit.api.AuditRecorder;
 import com.hms.identity.api.AuthenticatedPrincipal;
+import com.hms.identity.api.Permissions;
+import com.hms.identity.domain.DefaultRoleTemplates;
 import com.hms.identity.domain.PasswordPolicy;
 import com.hms.identity.domain.TemporaryPassword;
 import com.hms.identity.infrastructure.AppUserEntity;
@@ -251,16 +253,32 @@ public class UserManagementService {
 
     /**
      * Anti-escalation rule (api-design.md section 3): a caller may assign only roles whose every permission they
-     * hold themselves. Unknown codes are reported as UNKNOWN_ROLE first. Bootstrap does not pass through here.
+     * hold themselves, with one exception: a caller holding {@code role:assign} may assign a built-in default role
+     * (code of a {@link DefaultRoleTemplates} template) while that role's current permissions are still within its
+     * template. A built-in role an administrator has edited beyond its template falls back to the strict rule, so
+     * editing a role never turns it into a back door. Unknown codes are reported as UNKNOWN_ROLE first. Bootstrap
+     * does not pass through here.
      */
     private void requireAssignable(AuthenticatedPrincipal actor, UUID org, List<String> roleCodes) {
         if (roleCodes.isEmpty()) {
             return;
         }
         Map<String, UUID> roles = resolveRoles(org, roleCodes);
+        Map<UUID, List<String>> byRole = rbac.findPermissionCodesByRoles(org, List.copyOf(roles.values()));
+        boolean mayAssignBuiltIn = actor.permissions().contains(Permissions.ROLE_ASSIGN);
         Set<String> granted = new TreeSet<>();
-        rbac.findPermissionCodesByRoles(org, List.copyOf(roles.values())).values().forEach(granted::addAll);
+        roles.forEach((code, id) -> {
+            List<String> permissions = byRole.getOrDefault(id, List.of());
+            if (!(mayAssignBuiltIn && withinTemplate(code, permissions))) {
+                granted.addAll(permissions);
+            }
+        });
         RoleManagementService.requireCallerHolds(actor, granted);
+    }
+
+    private static boolean withinTemplate(String roleCode, List<String> permissions) {
+        return DefaultRoleTemplates.ALL.stream().anyMatch(
+                template -> template.code().equals(roleCode) && template.permissions().containsAll(permissions));
     }
 
     /** Codes must all exist in the caller's organization; another organization's role is simply unknown. */
