@@ -50,3 +50,7 @@ Owner-approved design (2026-11-13), binding:
 - Option A: optional `abhaNumber` on patient registration (and on update once [E3-5] exists). New migration adds to `hms.patient`: `abha_encrypted`, `abha_key_id`, `abha_hash` (indexed, unique per org among non-null), `abha_last4`. Validation: exactly 14 digits (format only, no checksum/ABDM verification). API returns only last 4 digits (masked). Search: exact ABHA match via hash, joining the Task 1 search endpoint.
 - Never log/audit ABHA values; audit field name `abhaNumber` only.
 - Tests: round-trip encrypt/decrypt, key rotation (old key id still decrypts), tamper detection, startup failure without keys outside dev/test, masked API output, exact ABHA search, cross-org isolation.
+
+### Task 13: Mask phone in patient search results + legal-review note (owner decision 2026-11-13) — run right after Task 3
+- `GET /api/v1/patients` and `POST /api/v1/patients/search-by-abha` result items return `phoneMasked` (same masking format as the duplicate-candidate payload, e.g. `+91******0001`) instead of the full `phone`. Full phone remains available only on the patient detail endpoint. Update tests and docs/api/api-design.md.
+- Add to the [E10-8] legal-review items in docs/00-review-notes.md: "Duplicate-candidate payload shows full name and DOB (phone masked) to users with patient:create — confirm acceptable under DPDP minimisation."
