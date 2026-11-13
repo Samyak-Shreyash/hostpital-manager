@@ -39,6 +39,7 @@ class SeedGuardTest {
     @Test
     void refusesWhenNeitherDevNorStagingIsActive() {
         assertThatThrownBy(() -> SeedGuard.check(List.of(), null)).isInstanceOf(SeedRefusedException.class);
+        assertThatThrownBy(() -> SeedGuard.check(List.of(), "  ")).isInstanceOf(SeedRefusedException.class);
         assertThatThrownBy(() -> SeedGuard.check(List.of("test"), null)).isInstanceOf(SeedRefusedException.class);
         assertThatThrownBy(() -> SeedGuard.check(List.of("qa"), "")).isInstanceOf(SeedRefusedException.class);
     }
