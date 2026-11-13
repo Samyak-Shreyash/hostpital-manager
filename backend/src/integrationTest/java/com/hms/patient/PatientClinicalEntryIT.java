@@ -76,6 +76,19 @@ class PatientClinicalEntryIT extends PostgresIT {
         patient = register(reception);
     }
 
+    @Test
+    void builtInDoctorsAndNursesWriteClinicalEntriesButReceptionistsDoNot() throws Exception {
+        AdminApiFixture.Session frontDesk = fx.loggedIn(org, "frontdesk", "RECEPTIONIST");
+        addAllergy(frontDesk, patient, "{\"substance\":\"Penicillin\",\"severity\":\"SEVERE\"}")
+                .andExpect(status().isForbidden());
+        mockMvc.perform(frontDesk.apply(post(URL + "/{id}/medical-history", patient)).contentType(JSON)
+                .content("{\"condition\":\"Asthma\"}")).andExpect(status().isForbidden());
+        addAllergy(fx.loggedIn(org, "nurse", "NURSE"), patient,
+                "{\"substance\":\"Penicillin\",\"severity\":\"SEVERE\"}").andExpect(status().isCreated());
+        addAllergy(fx.loggedIn(org, "doctor", "DOCTOR"), patient,
+                "{\"substance\":\"Latex\",\"severity\":\"MILD\"}").andExpect(status().isCreated());
+    }
+
     private UUID register(AdminApiFixture.Session s) throws Exception {
         String response = mockMvc.perform(s.apply(post(URL)).contentType(JSON).content(
                 "{\"fullName\":\"Meera Iyer\",\"sex\":\"F\",\"dateOfBirth\":\"1985-03-02\",\"phone\":"
@@ -185,7 +198,8 @@ class PatientClinicalEntryIT extends PostgresIT {
                 .andExpect(status().isForbidden());
 
         UUID other = fx.organization();
-        AdminApiFixture.Session otherClinician = fx.loggedIn(other, "other", "RECEPTIONIST");
+        fx.role(other, "CLINICAL_DESK", "patient:read", "patient:create", "patient:update-clinical");
+        AdminApiFixture.Session otherClinician = fx.loggedIn(other, "other", "CLINICAL_DESK");
         // Another organization's patient id and entry id are 404, for read, add and mark.
         mockMvc.perform(otherClinician.apply(get(URL + "/{id}/allergies", patient))).andExpect(status().isNotFound());
         addAllergy(otherClinician, patient, "{\"substance\":\"X\",\"severity\":\"MILD\"}")

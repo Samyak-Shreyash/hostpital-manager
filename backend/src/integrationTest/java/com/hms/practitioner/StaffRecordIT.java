@@ -143,8 +143,8 @@ class StaffRecordIT extends PostgresIT {
     @Test
     void eachEndpointNeedsItsPermission() throws Exception {
         UUID staff = register(body(nurseUser(org), "NURSE", opd));
-        fx.role(org, "PRC_READ", "practitioner:read");
-        AdminApiFixture.Session reader = fx.loggedIn(org, "reader", "PRC_READ");
+        fx.role(org, "STF_READ", "staff:read");
+        AdminApiFixture.Session reader = fx.loggedIn(org, "reader", "STF_READ");
         AdminApiFixture.Session reception = fx.loggedIn(org, "reception", "RECEPTIONIST");
 
         mockMvc.perform(reader.apply(get(URL + "/" + staff))).andExpect(status().isOk());
@@ -155,6 +155,29 @@ class StaffRecordIT extends PostgresIT {
                 .content("{\"version\":0,\"status\":\"INACTIVE\"}")).andExpect(status().isForbidden());
         mockMvc.perform(reception.apply(get(URL + "/" + staff))).andExpect(status().isForbidden());
         assertThat(staffRows(org)).isEqualTo(1);
+    }
+
+    @Test
+    void practitionerPermissionsDoNotGrantStaffAccess() throws Exception {
+        UUID staff = register(body(nurseUser(org), "NURSE", opd));
+        fx.role(org, "PRC_ALL", "practitioner:read", "practitioner:create", "practitioner:update",
+                "practitioner:schedule");
+        AdminApiFixture.Session practitionerAdmin = fx.loggedIn(org, "prcadmin", "PRC_ALL");
+        mockMvc.perform(practitionerAdmin.apply(get(URL + "/" + staff))).andExpect(status().isForbidden());
+        mockMvc.perform(practitionerAdmin.apply(get(URL))).andExpect(status().isForbidden());
+        mockMvc.perform(practitionerAdmin.apply(post(URL)).contentType(JSON)
+                .content(body(nurseUser(org), "NURSE", null))).andExpect(status().isForbidden());
+        mockMvc.perform(practitionerAdmin.apply(patch(URL + "/" + staff)).contentType(JSON)
+                .content("{\"version\":0,\"status\":\"INACTIVE\"}")).andExpect(status().isForbidden());
+
+        fx.role(org, "STF_ALL", "staff:read", "staff:create", "staff:update");
+        AdminApiFixture.Session staffAdmin = fx.loggedIn(org, "stfadmin", "STF_ALL");
+        mockMvc.perform(staffAdmin.apply(get(URL + "/" + staff))).andExpect(status().isOk());
+        mockMvc.perform(staffAdmin.apply(get(URL))).andExpect(status().isOk());
+        mockMvc.perform(staffAdmin.apply(post(URL)).contentType(JSON)
+                .content(body(nurseUser(org), "NURSE", null))).andExpect(status().isCreated());
+        mockMvc.perform(staffAdmin.apply(patch(URL + "/" + staff)).contentType(JSON)
+                .content("{\"version\":0,\"designation\":\"Ward Nurse\"}")).andExpect(status().isOk());
     }
 
     // --- registration -----------------------------------------------------------------------------------------

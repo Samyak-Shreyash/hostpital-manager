@@ -70,9 +70,22 @@ class PatientUpdateIT extends PostgresIT {
         fx = new AdminApiFixture(mockMvc, jdbc, passwordEncoder, roleProvisioning, organizationContext,
                 transactionManager);
         org = fx.organization();
-        reception = fx.loggedIn(org, "reception", "RECEPTIONIST");
+        // Front desk plus identity edits: the built-in RECEPTIONIST no longer holds patient:update-identity
+        // (owner decision 2026-11-14), so the identity tests use a custom role that does.
+        fx.role(org, "RECORDS_OFFICER", "patient:read", "patient:search", "patient:create", "patient:update",
+                "patient:update-identity", "patient:override-duplicate");
+        reception = fx.loggedIn(org, "reception", "RECORDS_OFFICER");
         fx.role(org, "CONTACT_EDITOR", "patient:read", "patient:update");
         contactOnly = fx.loggedIn(org, "contacts", "CONTACT_EDITOR");
+    }
+
+    @Test
+    void theBuiltInReceptionistCannotEditIdentityFields() throws Exception {
+        UUID id = registered("Meera Iyer", "1990-01-01", "+910300000090");
+        AdminApiFixture.Session frontDesk = fx.loggedIn(org, "frontdesk", "RECEPTIONIST");
+        update(frontDesk, id, "{\"version\":0,\"fullName\":\"Meera Iyengar\",\"identityChangeReason\":\""
+                + REASON + "\"}").andExpect(status().isForbidden());
+        update(frontDesk, id, "{\"version\":0,\"phone\":\"+910300000091\"}").andExpect(status().isOk());
     }
 
     private UUID registered(String name, String dob, String phone) throws Exception {
