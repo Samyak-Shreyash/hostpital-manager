@@ -2,6 +2,7 @@ package com.hms.patient.infrastructure;
 
 import com.hms.patient.application.PatientView.AddressView;
 import com.hms.patient.application.PatientView.ContactView;
+import java.math.BigDecimal;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
@@ -123,6 +124,49 @@ public class PatientRepository {
             spec = spec.param(e.getKey(), e.getValue());
         }
         return spec.query(Long.class).single();
+    }
+
+    /** A row matching the duplicate rule, with its name similarity. */
+    public record CandidateRow(UUID id, String uhid, String fullName, LocalDate dateOfBirth, String phone,
+            double score) {
+    }
+
+    /**
+     * Duplicate candidates (BR-P3): same date of birth and similarity &gt;= {@code dobThreshold}, or same phone and
+     * similarity &gt;= {@code phoneThreshold}. Merged records are skipped (they point at a surviving patient). Uses
+     * ix_patient_org_dob and ix_patient_org_phone; similarity is computed only on those few rows.
+     */
+    public List<CandidateRow> findDuplicateCandidates(UUID org, String fullName, LocalDate dateOfBirth, String phone,
+            BigDecimal dobThreshold, BigDecimal phoneThreshold, int limit) {
+        return jdbc.sql("""
+                SELECT id, uhid, full_name, date_of_birth, phone, score FROM (
+                    SELECT id, uhid, full_name, date_of_birth, phone,
+                        hms.similarity(full_name, :name) AS score
+                    FROM hms.patient
+                    WHERE organization_id = :org AND status <> 'MERGED'
+                      AND (date_of_birth = :dob OR phone = :phone)
+                ) c
+                WHERE (date_of_birth = :dob AND score >= :dobThreshold)
+                   OR (phone = :phone AND score >= :phoneThreshold)
+                ORDER BY score DESC, uhid
+                LIMIT :limit
+                """).param("org", org).param("name", fullName).param("dob", dateOfBirth).param("phone", phone)
+                .param("dobThreshold", dobThreshold).param("phoneThreshold", phoneThreshold).param("limit", limit)
+                .query((rs, n) -> new CandidateRow(rs.getObject("id", UUID.class), rs.getString("uhid"),
+                        rs.getString("full_name"), rs.getObject("date_of_birth", LocalDate.class),
+                        rs.getString("phone"), rs.getDouble("score")))
+                .list();
+    }
+
+    /** Append-only record of a confirmed "not a duplicate" override (V15). The reason stays here, not in audit. */
+    public void insertDuplicateOverride(UUID id, UUID org, UUID patientId, List<UUID> candidateIds, String reason,
+            UUID overriddenBy, Instant now) {
+        jdbc.sql("""
+                INSERT INTO hms.patient_duplicate_override (id, organization_id, patient_id, candidate_ids, reason,
+                    overridden_by, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """).params(id, org, patientId, candidateIds.toArray(UUID[]::new), reason, overriddenBy,
+                Timestamp.from(now)).update();
     }
 
     private static String escapeLike(String s) {

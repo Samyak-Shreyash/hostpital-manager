@@ -7,4 +7,7 @@ import java.util.UUID;
 public interface OrganizationDirectory {
 
     Optional<OrganizationSummary> find(UUID organizationId);
+
+    /** The organization's patient duplicate thresholds; the defaults when the organization is unknown. */
+    DuplicateThresholds duplicateThresholds(UUID organizationId);
 }

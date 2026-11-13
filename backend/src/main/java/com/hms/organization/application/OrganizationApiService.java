@@ -3,6 +3,7 @@ package com.hms.organization.application;
 import com.hms.audit.api.AuditEntry;
 import com.hms.audit.api.AuditOutcome;
 import com.hms.audit.api.AuditRecorder;
+import com.hms.organization.api.DuplicateThresholds;
 import com.hms.organization.api.OrganizationDirectory;
 import com.hms.organization.api.OrganizationProvisioning;
 import com.hms.organization.api.OrganizationSummary;
@@ -39,6 +40,14 @@ class OrganizationApiService implements OrganizationDirectory, OrganizationProvi
     public Optional<OrganizationSummary> find(UUID organizationId) {
         return organizations.find(organizationId)
                 .map(r -> new OrganizationSummary(r.id(), r.name(), r.timezone()));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public DuplicateThresholds duplicateThresholds(UUID organizationId) {
+        return organizations.find(organizationId)
+                .map(r -> new DuplicateThresholds(r.duplicateDobThreshold(), r.duplicatePhoneThreshold()))
+                .orElse(new DuplicateThresholds(DuplicateThresholds.DEFAULT_DOB, DuplicateThresholds.DEFAULT_PHONE));
     }
 
     @Override

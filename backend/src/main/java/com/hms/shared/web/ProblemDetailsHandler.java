@@ -54,7 +54,9 @@ public class ProblemDetailsHandler extends ResponseEntityExceptionHandler {
 
     @ExceptionHandler(ConflictException.class)
     ResponseEntity<ProblemDetail> conflict(ConflictException ex) {
-        return problem(HttpStatus.CONFLICT, ex.code(), ex.getMessage());
+        ResponseEntity<ProblemDetail> response = problem(HttpStatus.CONFLICT, ex.code(), ex.getMessage());
+        ex.properties().forEach(response.getBody()::setProperty);
+        return response;
     }
 
     @ExceptionHandler(BusinessRuleException.class)

@@ -7,7 +7,7 @@ import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import java.time.LocalDate;
 
-/** POST /patients body (api-design.md section 6). Duplicate confirmation arrives with [E3-3]. */
+/** POST /patients body (api-design.md section 6). {@code confirmNotDuplicate} + {@code overrideReason}: [E3-3]. */
 record CreatePatientRequest(
         @NotBlank @Size(min = 2, max = 120) String fullName,
         @NotBlank @Pattern(regexp = "[MFOU]", message = "must be one of M, F, O, U") String sex,
@@ -17,7 +17,9 @@ record CreatePatientRequest(
         @NotBlank @Pattern(regexp = Phone.REGEX, message = Phone.MESSAGE) String phone,
         @Valid AddressRequest address,
         @Valid ContactRequest emergencyContact,
-        @Pattern(regexp = Abha.REGEX, message = Abha.MESSAGE) String abhaNumber) {
+        @Pattern(regexp = Abha.REGEX, message = Abha.MESSAGE) String abhaNumber,
+        Boolean confirmNotDuplicate,
+        @Size(max = 500) String overrideReason) {
 
     /** ABHA number: 14 digits, optionally grouped 2-4-4-4 with hyphens. Format only, no checksum/ABDM check. */
     static final class Abha {
@@ -51,10 +53,11 @@ record CreatePatientRequest(
             @NotBlank @Pattern(regexp = Phone.REGEX, message = Phone.MESSAGE) String phone) {
     }
 
-    /** Never prints the ABHA number (it would otherwise reach logs through the record's generated toString). */
+    /** Never prints the ABHA number or the override reason (they would otherwise reach logs via toString). */
     @Override
     public String toString() {
-        return "CreatePatientRequest[abhaNumber=" + (abhaNumber == null ? "null" : "<redacted>") + ", ...]";
+        return "CreatePatientRequest[abhaNumber=" + (abhaNumber == null ? "null" : "<redacted>")
+                + ", overrideReason=" + (overrideReason == null ? "null" : "<redacted>") + ", ...]";
     }
 
     RegisterPatientCommand toCommand() {
@@ -64,6 +67,6 @@ record CreatePatientRequest(
                         address.city(), address.state(), address.pincode()),
                 emergencyContact == null ? null : new RegisterPatientCommand.EmergencyContact(
                         emergencyContact.name(), emergencyContact.relationship(), emergencyContact.phone()),
-                abhaNumber);
+                abhaNumber, Boolean.TRUE.equals(confirmNotDuplicate), overrideReason);
     }
 }
