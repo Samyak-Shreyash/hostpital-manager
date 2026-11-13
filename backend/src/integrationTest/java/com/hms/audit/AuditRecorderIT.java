@@ -208,7 +208,7 @@ class AuditRecorderIT extends PostgresIT {
                         WHERE table_schema = 'hms' AND table_name = 'audit_event' ORDER BY ordinal_position""")
                 .query(String.class).list())
                 .containsExactly("id", "organization_id", "occurred_at", "actor_id", "action", "entity_type",
-                        "entity_id", "outcome", "correlation_id", "changed_fields");
+                        "entity_id", "outcome", "correlation_id", "changed_fields", "result_count");
     }
 
     @Test
