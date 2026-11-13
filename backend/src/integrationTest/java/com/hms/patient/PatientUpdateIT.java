@@ -195,6 +195,16 @@ class PatientUpdateIT extends PostgresIT {
     }
 
     @Test
+    void nameMinimumAppliesAfterTrimming() throws Exception {
+        UUID id = registered();
+        update(reception, id, "{\"version\":0,\"fullName\":\" a \",\"identityChangeReason\":\"typo fix\"}")
+                .andExpect(status().isUnprocessableContent()).andExpect(jsonPath("$.code", is("VALIDATION_ERROR")));
+        mockMvc.perform(reception.apply(post(URL)).contentType(JSON).content(
+                "{\"fullName\":\" a \",\"sex\":\"F\",\"dateOfBirth\":\"1985-03-02\",\"phone\":\"+910300000071\"}"))
+                .andExpect(status().isUnprocessableContent()).andExpect(jsonPath("$.code", is("VALIDATION_ERROR")));
+    }
+
+    @Test
     void concurrentUpdatesWithTheSameVersionGiveOneConflict() throws Exception {
         UUID id = registered();
         CyclicBarrier barrier = new CyclicBarrier(2);
