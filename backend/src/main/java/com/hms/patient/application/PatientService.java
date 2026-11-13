@@ -290,7 +290,11 @@ public class PatientService {
         }
 
         if (fields.isEmpty()) {
-            return load(org, id); // nothing changed: no write, no audit, same version
+            // Nothing changed: no write and same version, but the response still carries the record, so the
+            // read is audited exactly like GET /patients/{id} (fail-closed, [E3-7]).
+            PatientView unchanged = load(org, id);
+            audit.record(AuditEntry.of(org, actor.userId(), "PATIENT_VIEWED", "PATIENT", id, AuditOutcome.SUCCESS));
+            return unchanged;
         }
 
         List<DuplicateCandidate> candidates = List.of();
