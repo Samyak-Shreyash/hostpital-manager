@@ -78,6 +78,7 @@ class OrganizationIsolationIT extends PostgresIT {
             "POST /api/v1/auth/logout",
             "GET /api/v1/auth/me",
             "GET /api/v1/patients",
+            "POST /api/v1/patients/search-by-abha", // org-scoped search, covered by PatientAbhaIT
             "POST /api/v1/auth/change-password",
             "GET /api/v1/users",
             "GET /api/v1/audit-events", // scoped by the principal; audit_event is outside RLS (explicit predicate)
