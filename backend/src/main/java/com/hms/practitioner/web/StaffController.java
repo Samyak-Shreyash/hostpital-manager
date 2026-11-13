@@ -20,8 +20,8 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Staff records ([E4-2], api-design.md section 5). Reuses the practitioner:* permissions. There is no delete
- * (deactivate with {@code status: INACTIVE}) and no role endpoint: roles are assigned on the linked user via
+ * Staff records ([E4-2], api-design.md section 5). Uses the staff:* permissions (owner decision 2026-11-14),
+ * independent of practitioner:*. There is no delete (deactivate with {@code status: INACTIVE}) and no role endpoint: roles are assigned on the linked user via
  * {@code PATCH /api/v1/users/{userId}} ([E1-7]).
  */
 @RestController
@@ -35,7 +35,7 @@ class StaffController {
     }
 
     @PostMapping
-    @PreAuthorize("hasAuthority('practitioner:create')")
+    @PreAuthorize("hasAuthority('staff:create')")
     @ResponseStatus(HttpStatus.CREATED)
     StaffView register(@AuthenticationPrincipal OrganizationPrincipal actor,
             @Valid @RequestBody StaffRequests.Create request) {
@@ -43,7 +43,7 @@ class StaffController {
     }
 
     @GetMapping
-    @PreAuthorize("hasAuthority('practitioner:read')")
+    @PreAuthorize("hasAuthority('staff:read')")
     PageResult<StaffView> list(@AuthenticationPrincipal OrganizationPrincipal actor,
             @RequestParam(required = false) String staffType, @RequestParam(required = false) UUID departmentId,
             @RequestParam(required = false) String q, @RequestParam(required = false) String status,
@@ -52,13 +52,13 @@ class StaffController {
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize("hasAuthority('practitioner:read')")
+    @PreAuthorize("hasAuthority('staff:read')")
     StaffView get(@AuthenticationPrincipal OrganizationPrincipal actor, @PathVariable UUID id) {
         return staff.get(actor, id);
     }
 
     @PatchMapping("/{id}")
-    @PreAuthorize("hasAuthority('practitioner:update')")
+    @PreAuthorize("hasAuthority('staff:update')")
     StaffView update(@AuthenticationPrincipal OrganizationPrincipal actor, @PathVariable UUID id,
             @Valid @RequestBody StaffRequests.Update request) {
         return staff.update(actor, id, request.toCommand());
