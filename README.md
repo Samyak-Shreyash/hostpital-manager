@@ -93,6 +93,17 @@ cd backend
 SPRING_PROFILES_ACTIVE=dev HMS_DB_PASSWORD=<from .env> HMS_DB_MIGRATION_PASSWORD=<from .env> ./gradlew bootRun
 # -> http://localhost:8080/actuator/health returns {"status":"UP"}
 
+# Synthetic seed data ([E2-4]), dev/staging only. Idempotent: a rerun creates nothing that exists.
+# Seeds one organization (via the first-run bootstrap if none exists; its temporary admin password goes to
+# build/seed-admin-password.txt), departments, specialties, 12 priced services, 5 doctors with availability and leave,
+# 5 staff, and 2,000 patients (some with allergies/history). Names are "Test <NATO word> <placeholder>", phones are
+# +91 0000 xxxxxx, so nothing can be a real identifier. Seeded users have unknown passwords (reset them as admin).
+SPRING_PROFILES_ACTIVE=dev HMS_DB_PASSWORD=<from .env> HMS_DB_MIGRATION_PASSWORD=<from .env> ./gradlew seedData
+./gradlew seedData --args="--large"               # tops up to 100,000 patients (for the [E3-2] search p95 check)
+# Refused (before the database is touched) unless the profile is dev or staging, or HMS_ENV=dev|staging (there is no
+# staging profile: a staging host sets HMS_ENV=staging); any prod/production marker always refuses. Staging needs
+# real HMS_FIELD_ENCRYPTION_KEYS / HMS_ABHA_HMAC_KEY. The code lives in backend/src/seed, outside the application jar.
+
 # 3. Frontend (separate terminal)
 cd frontend
 npm ci
