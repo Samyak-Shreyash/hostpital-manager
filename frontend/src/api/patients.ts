@@ -78,6 +78,8 @@ export interface UpdatePatientBody {
   address?: Address
   abhaNumber?: string
   identityChangeReason?: string
+  confirmNotDuplicate?: boolean
+  overrideReason?: string
 }
 
 export type Severity = 'MILD' | 'MODERATE' | 'SEVERE'
