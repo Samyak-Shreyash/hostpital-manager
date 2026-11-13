@@ -73,15 +73,6 @@ public class PractitionerRepository {
                 Timestamp.from(now)).update() == 1;
     }
 
-    /**
-     * Whether a practitioner is linked to this user. Under RLS only the caller's organization is visible, which is
-     * enough: the user was already verified to belong to the caller's organization.
-     */
-    public boolean userLinked(UUID org, UUID userId) {
-        return jdbc.sql("SELECT EXISTS (SELECT 1 FROM hms.practitioner WHERE organization_id = ? AND user_id = ?)")
-                .params(org, userId).query(Boolean.class).single();
-    }
-
     public boolean registrationTaken(UUID org, String registrationNo, UUID excludeId) {
         return jdbc.sql("""
                 SELECT EXISTS (SELECT 1 FROM hms.practitioner

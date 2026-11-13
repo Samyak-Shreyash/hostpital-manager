@@ -247,7 +247,7 @@ class PractitionerRegistrationIT extends PostgresIT {
         UUID user = doctorUser(org);
         register(body(user, "TEST-1001", List.of(cardiology), cardiology, List.of()));
         mockMvc.perform(json(post(URL), body(user, "TEST-1002", List.of(cardiology), cardiology, List.of())))
-                .andExpect(status().isConflict()).andExpect(jsonPath("$.code", is("PRACTITIONER_USER_TAKEN")));
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.code", is("USER_ALREADY_LINKED")));
         assertThat(practitionerRows(org)).isEqualTo(1);
     }
 

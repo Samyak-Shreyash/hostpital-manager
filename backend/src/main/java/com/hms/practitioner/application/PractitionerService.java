@@ -9,6 +9,7 @@ import com.hms.practitioner.application.PractitionerCommands.Register;
 import com.hms.practitioner.application.PractitionerCommands.ReplaceDepartments;
 import com.hms.practitioner.application.PractitionerCommands.ReplaceSpecialties;
 import com.hms.practitioner.application.PractitionerCommands.Update;
+import com.hms.practitioner.infrastructure.PersonLinkRepository;
 import com.hms.practitioner.infrastructure.PractitionerRepository;
 import com.hms.practitioner.infrastructure.PractitionerRepository.ListFilter;
 import com.hms.practitioner.infrastructure.PractitionerRepository.PractitionerRow;
@@ -58,15 +59,17 @@ public class PractitionerService {
     private static final Set<String> STATUSES = Set.of("ACTIVE", "INACTIVE");
 
     private final PractitionerRepository repository;
+    private final PersonLinkRepository links;
     private final UserDirectory users;
     private final OrganizationDirectory organizations;
     private final AuditRecorder audit;
     private final UuidV7Generator ids;
     private final Clock clock;
 
-    public PractitionerService(PractitionerRepository repository, UserDirectory users,
+    public PractitionerService(PractitionerRepository repository, PersonLinkRepository links, UserDirectory users,
             OrganizationDirectory organizations, AuditRecorder audit, UuidV7Generator ids, Clock clock) {
         this.repository = repository;
+        this.links = links;
         this.users = users;
         this.organizations = organizations;
         this.audit = audit;
@@ -93,8 +96,10 @@ public class PractitionerService {
                 .filter(UserDirectory.UserSummary::active)
                 .orElseThrow(() -> new BusinessRuleException("USER_NOT_AVAILABLE",
                         "userId must be an active user of this organization."));
-        if (repository.userLinked(org, user.id())) {
-            throw new ConflictException("PRACTITIONER_USER_TAKEN", "This user is already linked to a doctor.");
+        // A user is at most one doctor or one staff record ([E4-2], V19); the lock serializes links of this user.
+        links.lock(user.id());
+        if (links.linkOf(org, user.id()).isPresent()) {
+            throw StaffService.userTaken();
         }
         checkCatalog(org, specialties.stream().map(SpecialtyLink::specialtyId).toList(), Set.of(),
                 organizations::specialtyActiveFlags, "SPECIALTY_NOT_AVAILABLE", "specialtyIds");
@@ -106,9 +111,6 @@ public class PractitionerService {
         if (!repository.insertIfAbsent(id, org, user.id(), fullName, registrationNo, council, qualifications, slot,
                 actor.userId(), now)) {
             // A unique index refused the row (possibly a concurrent registration that has now committed).
-            if (repository.userLinked(org, user.id())) {
-                throw new ConflictException("PRACTITIONER_USER_TAKEN", "This user is already linked to a doctor.");
-            }
             throw duplicateRegistration();
         }
         repository.replaceSpecialties(org, id, specialties, now);
