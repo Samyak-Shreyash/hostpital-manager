@@ -9,6 +9,9 @@ import { LoginPage } from '../features/auth/LoginPage'
 import { SESSION_KEY } from '../features/auth/useSession'
 import { HomePage } from '../features/HomePage'
 import { AuditPage } from '../features/audit/AuditPage'
+import { PatientDetailPage } from '../features/patients/PatientDetailPage'
+import { PatientRegisterPage } from '../features/patients/PatientRegisterPage'
+import { PatientSearchPage } from '../features/patients/PatientSearchPage'
 import { RolesPage } from '../features/roles/RolesPage'
 import { UserCreatePage } from '../features/users/UserCreatePage'
 import { UserEditPage } from '../features/users/UserEditPage'
@@ -51,6 +54,15 @@ export function AppRoutes() {
           </Route>
           <Route element={<RequirePermission permission="role:read" />}>
             <Route path="roles" element={<RolesPage />} />
+          </Route>
+          <Route element={<RequirePermission permission="patient:search" />}>
+            <Route path="patients" element={<PatientSearchPage />} />
+          </Route>
+          <Route element={<RequirePermission permission="patient:create" />}>
+            <Route path="patients/new" element={<PatientRegisterPage />} />
+          </Route>
+          <Route element={<RequirePermission permission="patient:read" />}>
+            <Route path="patients/:id" element={<PatientDetailPage />} />
           </Route>
           <Route element={<RequirePermission permission="audit:read" />}>
             <Route path="audit" element={<AuditPage />} />
