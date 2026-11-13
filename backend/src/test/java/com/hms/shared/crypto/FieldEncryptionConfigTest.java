@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 
 /** [E3-2] Fail-fast key configuration (ADR-0009): built-in keys only under the dev/test profiles. */
+@org.junit.jupiter.api.extension.ExtendWith(org.springframework.boot.test.system.OutputCaptureExtension.class)
 class FieldEncryptionConfigTest {
 
     private static final String KEY = Base64.getEncoder().encodeToString(new byte[32]);
@@ -26,6 +27,14 @@ class FieldEncryptionConfigTest {
         runner.withPropertyValues("hms.field-encryption.keys=k1:" + KEY, "spring.profiles.active=prod")
                 .run(ctx -> assertThat(ctx).hasFailed().getFailure().hasStackTraceContaining(
                         "HMS_ABHA_HMAC_KEY is required"));
+    }
+
+    @Test
+    void warnsWhenBuiltInKeysAreUsed(org.springframework.boot.test.system.CapturedOutput output) {
+        runner.withPropertyValues(DEV_DEFAULTS_KEYS, DEV_DEFAULTS_HMAC, "spring.profiles.active=dev")
+                .run(ctx -> assertThat(ctx).hasNotFailed());
+        assertThat(output.getAll()).contains("HMS_FIELD_ENCRYPTION_KEYS is not set").contains(
+                "HMS_ABHA_HMAC_KEY is not set").doesNotContain(KEY);
     }
 
     @Test

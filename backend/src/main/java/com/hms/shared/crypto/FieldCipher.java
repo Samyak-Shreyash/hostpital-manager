@@ -14,8 +14,9 @@ import javax.crypto.spec.SecretKeySpec;
 
 /**
  * Application-level field encryption (ADR-0009): AES-256-GCM, a random 96-bit nonce per value, 128-bit tag. The key
- * id is stored with each row so keys can rotate: the first key encrypts, every configured key decrypts. The key id is
- * bound as associated data, so a ciphertext relabelled with another key id fails authentication.
+ * id is stored with each row so keys can rotate: the first key encrypts, every configured key decrypts. The key id and
+ * a caller-supplied context (e.g. field name, organization id, row id) are bound as associated data, length-prefixed,
+ * so a ciphertext relabelled with another key id or copied to another row or organization fails authentication.
  * Stored form: {@code nonce (12 bytes) || ciphertext+tag}. Never log plaintexts or keys.
  */
 public final class FieldCipher {
@@ -53,13 +54,14 @@ public final class FieldCipher {
         return activeKeyId;
     }
 
-    public Encrypted encrypt(String plaintext) {
+    /** @param context parts identifying where the value lives; the same parts are required to decrypt */
+    public Encrypted encrypt(String plaintext, String... context) {
         byte[] nonce = new byte[NONCE_BYTES];
         random.nextBytes(nonce);
         try {
             Cipher cipher = Cipher.getInstance(TRANSFORMATION);
             cipher.init(Cipher.ENCRYPT_MODE, keys.get(activeKeyId), new GCMParameterSpec(TAG_BITS, nonce));
-            cipher.updateAAD(activeKeyId.getBytes(StandardCharsets.UTF_8));
+            cipher.updateAAD(aad(activeKeyId, context));
             byte[] ct = cipher.doFinal(plaintext.getBytes(StandardCharsets.UTF_8));
             byte[] out = Arrays.copyOf(nonce, NONCE_BYTES + ct.length);
             System.arraycopy(ct, 0, out, NONCE_BYTES, ct.length);
@@ -70,7 +72,7 @@ public final class FieldCipher {
     }
 
     /** @throws FieldDecryptionException for an unknown key id or a value that fails authentication (tampered) */
-    public String decrypt(String keyId, byte[] value) {
+    public String decrypt(String keyId, byte[] value, String... context) {
         SecretKey key = keyId == null ? null : keys.get(keyId);
         if (key == null) {
             throw new FieldDecryptionException("Unknown field-encryption key id.");
@@ -81,7 +83,7 @@ public final class FieldCipher {
         try {
             Cipher cipher = Cipher.getInstance(TRANSFORMATION);
             cipher.init(Cipher.DECRYPT_MODE, key, new GCMParameterSpec(TAG_BITS, value, 0, NONCE_BYTES));
-            cipher.updateAAD(keyId.getBytes(StandardCharsets.UTF_8));
+            cipher.updateAAD(aad(keyId, context));
             byte[] plain = cipher.doFinal(value, NONCE_BYTES, value.length - NONCE_BYTES);
             return new String(plain, StandardCharsets.UTF_8);
         } catch (AEADBadTagException e) {
@@ -89,6 +91,20 @@ public final class FieldCipher {
         } catch (GeneralSecurityException e) {
             throw new IllegalStateException("Field decryption failed.", e);
         }
+    }
+
+    /** Unambiguous associated data: each part as a 4-byte big-endian length followed by its UTF-8 bytes. */
+    static byte[] aad(String keyId, String... context) {
+        java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+        java.util.List<String> parts = new java.util.ArrayList<>();
+        parts.add(keyId);
+        parts.addAll(java.util.List.of(context));
+        for (String part : parts) {
+            byte[] b = part.getBytes(StandardCharsets.UTF_8);
+            out.writeBytes(java.nio.ByteBuffer.allocate(4).putInt(b.length).array());
+            out.writeBytes(b);
+        }
+        return out.toByteArray();
     }
 
     /** Decryption refused; the message never contains the value. */
