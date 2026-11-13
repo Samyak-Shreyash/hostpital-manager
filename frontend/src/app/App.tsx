@@ -12,6 +12,11 @@ import { AuditPage } from '../features/audit/AuditPage'
 import { PatientDetailPage } from '../features/patients/PatientDetailPage'
 import { PatientRegisterPage } from '../features/patients/PatientRegisterPage'
 import { PatientSearchPage } from '../features/patients/PatientSearchPage'
+import { DoctorDetailPage } from '../features/practitioners/DoctorDetailPage'
+import { DoctorListPage } from '../features/practitioners/DoctorListPage'
+import { DoctorRegisterPage } from '../features/practitioners/DoctorRegisterPage'
+import { StaffDetailPage, StaffRegisterPage } from '../features/practitioners/StaffFormPage'
+import { StaffListPage } from '../features/practitioners/StaffListPage'
 import { RolesPage } from '../features/roles/RolesPage'
 import { UserCreatePage } from '../features/users/UserCreatePage'
 import { UserEditPage } from '../features/users/UserEditPage'
@@ -63,6 +68,20 @@ export function AppRoutes() {
           </Route>
           <Route element={<RequirePermission permission="patient:read" />}>
             <Route path="patients/:id" element={<PatientDetailPage />} />
+          </Route>
+          <Route element={<RequirePermission permission="practitioner:read" />}>
+            <Route path="doctors" element={<DoctorListPage />} />
+            <Route path="doctors/:id" element={<DoctorDetailPage />} />
+          </Route>
+          <Route element={<RequirePermission permission="practitioner:create" />}>
+            <Route path="doctors/new" element={<DoctorRegisterPage />} />
+          </Route>
+          <Route element={<RequirePermission permission="staff:read" />}>
+            <Route path="staff" element={<StaffListPage />} />
+            <Route path="staff/:id" element={<StaffDetailPage />} />
+          </Route>
+          <Route element={<RequirePermission permission="staff:create" />}>
+            <Route path="staff/new" element={<StaffRegisterPage />} />
           </Route>
           <Route element={<RequirePermission permission="audit:read" />}>
             <Route path="audit" element={<AuditPage />} />
