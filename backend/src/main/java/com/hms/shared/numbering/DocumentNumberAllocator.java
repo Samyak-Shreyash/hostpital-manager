@@ -44,6 +44,29 @@ public class DocumentNumberAllocator {
     }
 
     /**
+     * Allocates {@code count} consecutive numbers in one statement and returns the first (bulk loads such as the
+     * dev/staging seed, [E2-4]). Same locking and gapless guarantees as {@link #next}.
+     */
+    public long nextBlock(UUID organizationId, String documentType, String periodKey, int count) {
+        if (count < 1) {
+            throw new IllegalArgumentException("count must be at least 1");
+        }
+        if (!TransactionSynchronizationManager.isActualTransactionActive()) {
+            throw new IllegalStateException("a document number must be allocated inside the business transaction");
+        }
+        Timestamp now = Timestamp.from(clock.instant());
+        return jdbc.sql("""
+                INSERT INTO hms.document_sequence
+                    (organization_id, document_type, period_key, next_value, created_at, updated_at)
+                VALUES (?, ?, ?, ? + 1, ?, ?)
+                ON CONFLICT (organization_id, document_type, period_key)
+                DO UPDATE SET next_value = hms.document_sequence.next_value + ?, updated_at = EXCLUDED.updated_at
+                RETURNING next_value - ?
+                """).params(organizationId, documentType, periodKey, (long) count, now, now, (long) count,
+                (long) count).query(Long.class).single();
+    }
+
+    /**
      * Locks the counter row of {@code documentType}/{@code periodKey} until the caller's transaction ends, without
      * allocating a number, so a check can run serialized with the issuers of that counter (no row: no lock needed,
      * nothing has been issued yet).
