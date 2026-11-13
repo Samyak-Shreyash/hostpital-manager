@@ -118,6 +118,9 @@ class PatientSearchIT extends PostgresIT {
                 .andExpect(status().isOk()).andExpect(jsonPath("$.items", hasSize(2)));
         mockMvc.perform(reception.apply(get(URL))).andExpect(status().isUnprocessableEntity());
         mockMvc.perform(reception.apply(get(URL + "?q=a"))).andExpect(status().isUnprocessableEntity());
+        mockMvc.perform(reception.apply(get(URL + "?q=ab"))).andExpect(status().isUnprocessableEntity());
+        mockMvc.perform(reception.apply(get(URL + "?q={q}", " ab "))).andExpect(status().isUnprocessableEntity());
+        assertThat(uhids("?q=Ver")).containsExactly("HMS-000004");
         mockMvc.perform(reception.apply(get(URL + "?phone=12"))).andExpect(status().isUnprocessableEntity());
         mockMvc.perform(reception.apply(get(URL + "?q=Test&size=101"))).andExpect(status().isUnprocessableEntity());
     }
