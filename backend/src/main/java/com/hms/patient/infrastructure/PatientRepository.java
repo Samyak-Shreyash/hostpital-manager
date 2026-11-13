@@ -19,11 +19,16 @@ import org.springframework.stereotype.Repository;
 public class PatientRepository {
 
     public record PatientRow(UUID id, String uhid, String fullName, String sex, LocalDate dateOfBirth,
-            boolean dobEstimated, String phone, String status, long version, Instant createdAt, Instant updatedAt) {
+            boolean dobEstimated, String phone, String abhaLast4, String status, long version, Instant createdAt,
+            Instant updatedAt) {
+    }
+
+    /** ABHA columns (V14): AES-GCM value + key id, HMAC lookup hash, last 4 digits. */
+    public record AbhaColumns(byte[] encrypted, String keyId, byte[] hash, String last4) {
     }
 
     /** Search filters; null = not given. {@code name} is a trigram query, the rest are exact. */
-    public record SearchFilter(String name, String uhid, String phone, LocalDate dateOfBirth) {
+    public record SearchFilter(String name, String uhid, String phone, byte[] abhaHash, LocalDate dateOfBirth) {
     }
 
     private final JdbcClient jdbc;
@@ -32,14 +37,18 @@ public class PatientRepository {
         this.jdbc = jdbc;
     }
 
-    public void insertPatient(UUID id, UUID org, String uhid, String fullName, String sex, LocalDate dateOfBirth,
-            boolean dobEstimated, String phone, UUID createdBy, Instant now) {
-        jdbc.sql("""
+    /** @return false when another patient of the organization already has this ABHA number (nothing inserted) */
+    public boolean insertPatient(UUID id, UUID org, String uhid, String fullName, String sex, LocalDate dateOfBirth,
+            boolean dobEstimated, String phone, AbhaColumns abha, UUID createdBy, Instant now) {
+        AbhaColumns a = abha == null ? new AbhaColumns(null, null, null, null) : abha;
+        return jdbc.sql("""
                 INSERT INTO hms.patient (id, organization_id, uhid, full_name, sex, date_of_birth, dob_estimated,
-                    phone, status, created_by, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE', ?, ?, ?)
-                """).params(id, org, uhid, fullName, sex, dateOfBirth, dobEstimated, phone, createdBy,
-                Timestamp.from(now), Timestamp.from(now)).update();
+                    phone, abha_encrypted, abha_key_id, abha_hash, abha_last4, status, created_by, created_at,
+                    updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE', ?, ?, ?)
+                ON CONFLICT (organization_id, abha_hash) WHERE abha_hash IS NOT NULL DO NOTHING
+                """).params(id, org, uhid, fullName, sex, dateOfBirth, dobEstimated, phone, a.encrypted(), a.keyId(),
+                a.hash(), a.last4(), createdBy, Timestamp.from(now), Timestamp.from(now)).update() == 1;
     }
 
     public void insertAddress(UUID id, UUID org, UUID patientId, AddressView a, Instant now) {
@@ -62,7 +71,8 @@ public class PatientRepository {
 
     public Optional<PatientRow> findPatient(UUID org, UUID id) {
         return jdbc.sql("""
-                SELECT id, uhid, full_name, sex, date_of_birth, dob_estimated, phone, status, version, created_at,
+                SELECT id, uhid, full_name, sex, date_of_birth, dob_estimated, phone, abha_last4, status, version,
+                    created_at,
                     updated_at
                 FROM hms.patient WHERE organization_id = ? AND id = ?
                 """).params(org, id).query(PatientRepository::mapPatient).optional();
@@ -95,7 +105,8 @@ public class PatientRepository {
         String order = f.name() == null ? "full_name, id"
                 : "hms.similarity(full_name, :name) DESC, full_name, id";
         var spec = jdbc.sql("""
-                SELECT id, uhid, full_name, sex, date_of_birth, dob_estimated, phone, status, version, created_at,
+                SELECT id, uhid, full_name, sex, date_of_birth, dob_estimated, phone, abha_last4, status, version,
+                    created_at,
                     updated_at
                 FROM hms.patient WHERE %s ORDER BY %s LIMIT :limit OFFSET :offset
                 """.formatted(w.sql(), order)).param("limit", limit).param("offset", offset);
@@ -138,6 +149,10 @@ public class PatientRepository {
             clauses.add("phone = :phone");
             params.put("phone", f.phone());
         }
+        if (f.abhaHash() != null) {
+            clauses.add("abha_hash = :abhaHash");
+            params.put("abhaHash", f.abhaHash());
+        }
         if (f.dateOfBirth() != null) {
             clauses.add("date_of_birth = :dob");
             params.put("dob", f.dateOfBirth());
@@ -148,7 +163,7 @@ public class PatientRepository {
     private static PatientRow mapPatient(ResultSet rs, int n) throws SQLException {
         return new PatientRow(rs.getObject("id", UUID.class), rs.getString("uhid"), rs.getString("full_name"),
                 rs.getString("sex"), rs.getObject("date_of_birth", LocalDate.class), rs.getBoolean("dob_estimated"),
-                rs.getString("phone"), rs.getString("status"), rs.getLong("version"),
+                rs.getString("phone"), rs.getString("abha_last4"), rs.getString("status"), rs.getLong("version"),
                 rs.getTimestamp("created_at").toInstant(), rs.getTimestamp("updated_at").toInstant());
     }
 }

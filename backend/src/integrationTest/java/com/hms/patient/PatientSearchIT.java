@@ -28,7 +28,7 @@ import org.springframework.transaction.PlatformTransactionManager;
 
 /**
  * [E3-2] Patient search. Synthetic data only: "Test ..." names, phones +91 followed by a number starting with 0.
- * ABHA search is deferred (no ABHA storage exists yet).
+ * ABHA search is covered by PatientAbhaIT.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
