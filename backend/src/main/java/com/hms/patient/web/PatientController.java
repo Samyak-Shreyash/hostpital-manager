@@ -43,11 +43,20 @@ class PatientController {
     @PreAuthorize("hasAuthority('patient:search')")
     PageResult<PatientSummary> search(@AuthenticationPrincipal OrganizationPrincipal actor,
             @RequestParam(required = false) String q, @RequestParam(required = false) String uhid,
-            @RequestParam(required = false) String phone, @RequestParam(required = false) String abha,
+            @RequestParam(required = false) String phone,
             @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(
                     iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) LocalDate dob,
             @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
-        return patients.search(actor, q, uhid, phone, abha, dob, page, size);
+        return patients.search(actor, q, uhid, phone, dob, page, size);
+    }
+
+    /** ABHA lookup is a POST so the number stays out of URLs, proxy and access logs. */
+    @PostMapping("/search-by-abha")
+    @PreAuthorize("hasAuthority('patient:search')")
+    PageResult<PatientSummary> searchByAbha(@AuthenticationPrincipal OrganizationPrincipal actor,
+            @Valid @RequestBody SearchByAbhaRequest request, @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return patients.searchByAbha(actor, request.abhaNumber(), page, size);
     }
 
     @GetMapping("/{id}")

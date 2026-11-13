@@ -9,6 +9,12 @@ import java.time.LocalDate;
 public record RegisterPatientCommand(String fullName, String sex, LocalDate dateOfBirth, Integer ageYears,
         boolean dobEstimated, String phone, Address address, EmergencyContact emergencyContact, String abhaNumber) {
 
+    /** Never prints PHI, in particular the ABHA number. */
+    @Override
+    public String toString() {
+        return "RegisterPatientCommand[abhaNumber=" + (abhaNumber == null ? "null" : "<redacted>") + ", ...]";
+    }
+
     public record Address(String line1, String line2, String city, String state, String pincode) {
     }
 

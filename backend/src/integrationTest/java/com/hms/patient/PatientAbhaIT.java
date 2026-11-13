@@ -1,6 +1,7 @@
 package com.hms.patient;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -88,8 +89,16 @@ class PatientAbhaIT extends PostgresIT {
                 .getContentAsString();
     }
 
-    private List<String> uhids(AdminApiFixture.Session s, String query) throws Exception {
-        String json = mockMvc.perform(s.apply(get(URL + query))).andExpect(status().isOk()).andReturn().getResponse()
+    private static final String ABHA_SEARCH = URL + "/search-by-abha";
+
+    private org.springframework.test.web.servlet.ResultActions searchAbha(AdminApiFixture.Session s, String abha)
+            throws Exception {
+        return mockMvc.perform(s.apply(post(ABHA_SEARCH)).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"abhaNumber\":\"" + abha + "\"}"));
+    }
+
+    private List<String> uhids(AdminApiFixture.Session s, String abha) throws Exception {
+        String json = searchAbha(s, abha).andExpect(status().isOk()).andReturn().getResponse()
                 .getContentAsString();
         return new ArrayList<>(JsonPath.<List<String>>read(json, "$.items[*].uhid"));
     }
@@ -112,7 +121,8 @@ class PatientAbhaIT extends PostgresIT {
         assertThat(row.get("abha_key_id")).isEqualTo(cipher.activeKeyId());
         assertThat(row.get("abha_last4")).isEqualTo("9012");
         assertThat(new String(encrypted, StandardCharsets.ISO_8859_1)).doesNotContain(ABHA);
-        assertThat(cipher.decrypt((String) row.get("abha_key_id"), encrypted)).isEqualTo(ABHA);
+        assertThat(cipher.decrypt((String) row.get("abha_key_id"), encrypted, "patient.abha", org.toString(),
+                id.toString())).isEqualTo(ABHA);
         assertThat((byte[]) row.get("abha_hash")).hasSize(32);
 
         String rowText = fx.inOrg(org, () -> jdbc.sql("SELECT row_to_json(p)::text FROM hms.patient p WHERE id = ?")
@@ -123,6 +133,33 @@ class PatientAbhaIT extends PostgresIT {
         assertThat(audit).isNotEmpty().noneMatch(a -> a.contains(ABHA));
         assertThat(audit).anyMatch(a -> a.contains("\"abhaNumber\""));
         assertThat(output.getAll()).doesNotContain(ABHA).doesNotContain(ABHA_HYPHENATED);
+    }
+
+    @Test
+    void abhaIsNotAcceptedInTheGetQueryStringAndSearchNeedsPermissionAndCsrf() throws Exception {
+        registered(reception, "Test Abha Holder", ABHA);
+        // `abha` is not a GET filter: on its own the request has no filter at all
+        mockMvc.perform(reception.apply(get(URL + "?abha=" + ABHA))).andExpect(status().isUnprocessableEntity());
+        mockMvc.perform(post(ABHA_SEARCH).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"abhaNumber\":\"" + ABHA + "\"}")).andExpect(status().isForbidden());
+        fx.role(org, "READ_ONLY", "patient:read");
+        searchAbha(fx.loggedIn(org, "reader", "READ_ONLY"), ABHA).andExpect(status().isForbidden());
+    }
+
+    @Test
+    void ciphertextCopiedToAnotherPatientOrOrganizationDoesNotDecrypt() throws Exception {
+        UUID a = UUID.fromString(JsonPath.read(registered(reception, "Test Holder A", ABHA), "$.id"));
+        UUID b = UUID.fromString(JsonPath.read(registered(reception, "Test Holder B", null), "$.id"));
+        Map<String, Object> row = fx.inOrg(org, () -> jdbc.sql(
+                "SELECT abha_encrypted, abha_key_id FROM hms.patient WHERE id = ?").param(a).query().singleRow());
+        byte[] value = (byte[]) row.get("abha_encrypted");
+        String keyId = (String) row.get("abha_key_id");
+        assertThat(cipher.decrypt(keyId, value, "patient.abha", org.toString(), a.toString())).isEqualTo(ABHA);
+        assertThatThrownBy(() -> cipher.decrypt(keyId, value, "patient.abha", org.toString(), b.toString()))
+                .isInstanceOf(FieldCipher.FieldDecryptionException.class);
+        UUID other = fx.organization();
+        assertThatThrownBy(() -> cipher.decrypt(keyId, value, "patient.abha", other.toString(), a.toString()))
+                .isInstanceOf(FieldCipher.FieldDecryptionException.class);
     }
 
     @Test
@@ -137,7 +174,8 @@ class PatientAbhaIT extends PostgresIT {
                 "001-234-5678-9012")) {
             register(reception, body("Test Bad Abha", bad)).andExpect(status().isUnprocessableEntity());
         }
-        mockMvc.perform(reception.apply(get(URL + "?abha=123"))).andExpect(status().isUnprocessableEntity());
+        searchAbha(reception, "123").andExpect(status().isUnprocessableEntity());
+        searchAbha(reception, "").andExpect(status().isUnprocessableEntity());
     }
 
     @Test
@@ -156,22 +194,23 @@ class PatientAbhaIT extends PostgresIT {
         registered(reception, "Test Other Abha", "00999999999901");
         registered(reception, "Test Without Abha", null);
 
-        assertThat(uhids(reception, "?abha=" + ABHA)).containsExactly(mine);
-        assertThat(uhids(reception, "?abha=" + ABHA_HYPHENATED)).containsExactly(mine);
-        assertThat(uhids(reception, "?abha=" + ABHA + "&q=Searched")).containsExactly(mine);
-        assertThat(uhids(reception, "?abha=" + ABHA + "&q=Without")).isEmpty();
-        assertThat(uhids(reception, "?abha=00123456789013")).isEmpty();
-        mockMvc.perform(reception.apply(get(URL + "?abha=" + ABHA))).andExpect(status().isOk())
+        assertThat(uhids(reception, ABHA)).containsExactly(mine);
+        assertThat(uhids(reception, ABHA_HYPHENATED)).containsExactly(mine);
+        assertThat(uhids(reception, "00123456789013")).isEmpty();
+        searchAbha(reception, ABHA).andExpect(status().isOk()).andExpect(jsonPath("$.totalItems", is(1)))
                 .andExpect(jsonPath("$.items[0].abhaLast4", is("9012")))
                 .andExpect(jsonPath("$.items[0].abhaNumber").doesNotExist());
 
         UUID other = fx.organization();
         AdminApiFixture.Session otherReception = fx.loggedIn(other, "reception2", "RECEPTIONIST");
-        assertThat(uhids(otherReception, "?abha=" + ABHA)).isEmpty();
+        assertThat(uhids(otherReception, ABHA)).isEmpty();
         String theirs = JsonPath.read(registered(otherReception, "Test Their Holder", ABHA), "$.uhid");
-        assertThat(uhids(otherReception, "?abha=" + ABHA)).containsExactly(theirs);
-        assertThat(uhids(reception, "?abha=" + ABHA)).containsExactly(mine);
+        assertThat(uhids(otherReception, ABHA)).containsExactly(theirs);
+        assertThat(uhids(reception, ABHA)).containsExactly(mine);
 
+        List<Integer> counts = jdbc.sql("SELECT result_count FROM hms.audit_event WHERE action = 'PATIENT_SEARCH' "
+                + "AND actor_id = ? ORDER BY occurred_at, id").param(reception.userId()).query(Integer.class).list();
+        assertThat(counts).containsExactly(1, 1, 0, 1, 1);
         List<String> audit = jdbc.sql("SELECT row_to_json(a)::text FROM hms.audit_event a "
                 + "WHERE action = 'PATIENT_SEARCH' AND actor_id = ?").param(reception.userId())
                 .query(String.class).list();

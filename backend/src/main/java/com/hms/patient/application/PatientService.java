@@ -74,7 +74,7 @@ public class PatientService {
         AbhaColumns abha = null;
         if (blankToNull(command.abhaNumber()) != null) {
             String digits = normalizeAbha(command.abhaNumber());
-            FieldCipher.Encrypted encrypted = cipher.encrypt(digits);
+            FieldCipher.Encrypted encrypted = cipher.encrypt(digits, abhaContext(org, id));
             abha = new AbhaColumns(encrypted.value(), encrypted.keyId(), abhaHasher.hash(digits),
                     digits.substring(digits.length() - 4));
         }
@@ -124,15 +124,12 @@ public class PatientService {
     /**
      * Search (PAT-4). Filters combine with AND; at least one is required. One {@code PATIENT_SEARCH} audit event
      * records the result count only (owner decision 2026-11-13): query terms are PHI and are never audited.
-     * ABHA is an exact match on its keyed hash (ADR-0009); the number itself is never stored in clear or audited.
+     * ABHA has its own POST endpoint ({@link #searchByAbha}) so the number never appears in a URL or access log.
      */
     @Transactional
     public PageResult<PatientSummary> search(OrganizationPrincipal actor, String q, String uhid, String phone,
-            String abha, LocalDate dob, int page, int size) {
-        if (page < 0 || size < 1 || size > MAX_PAGE_SIZE) {
-            throw new BusinessRuleException("VALIDATION_ERROR",
-                    "page must be 0 or more and size 1 to " + MAX_PAGE_SIZE + ".");
-        }
+            LocalDate dob, int page, int size) {
+        checkPage(page, size);
         String name = blankToNull(q);
         if (name != null && name.length() < 3) {
             throw new BusinessRuleException("VALIDATION_ERROR", "q must be at least 3 characters.");
@@ -145,18 +142,37 @@ public class PatientService {
                 throw new BusinessRuleException("VALIDATION_ERROR", "phone is not a valid number.");
             }
         }
-        byte[] abhaHash = null;
-        if (blankToNull(abha) != null) {
-            if (!abha.trim().matches(ABHA_FORMAT)) {
-                throw new BusinessRuleException("VALIDATION_ERROR", "abha must be 14 digits.");
-            }
-            abhaHash = abhaHasher.hash(normalizeAbha(abha));
+        if (name == null && uhidTerm == null && phoneTerm == null && dob == null) {
+            throw new BusinessRuleException("VALIDATION_ERROR", "Give at least one of q, uhid, phone or dob.");
         }
-        if (name == null && uhidTerm == null && phoneTerm == null && abhaHash == null && dob == null) {
-            throw new BusinessRuleException("VALIDATION_ERROR", "Give at least one of q, uhid, phone, abha or dob.");
+        return runSearch(actor, new SearchFilter(name, uhidTerm, phoneTerm, null, dob), page, size);
+    }
+
+    /**
+     * Exact ABHA search (ADR-0009): matched on the keyed hash, organization-scoped, same response and the same single
+     * {@code PATIENT_SEARCH} audit event (result count only) as {@link #search}. The number is never logged.
+     */
+    @Transactional
+    public PageResult<PatientSummary> searchByAbha(OrganizationPrincipal actor, String abhaNumber, int page,
+            int size) {
+        checkPage(page, size);
+        if (blankToNull(abhaNumber) == null) {
+            throw new BusinessRuleException("VALIDATION_ERROR", "abhaNumber is required.");
         }
+        byte[] hash = abhaHasher.hash(normalizeAbha(abhaNumber));
+        return runSearch(actor, new SearchFilter(null, null, null, hash, null), page, size);
+    }
+
+    private static void checkPage(int page, int size) {
+        if (page < 0 || size < 1 || size > MAX_PAGE_SIZE) {
+            throw new BusinessRuleException("VALIDATION_ERROR",
+                    "page must be 0 or more and size 1 to " + MAX_PAGE_SIZE + ".");
+        }
+    }
+
+    private PageResult<PatientSummary> runSearch(OrganizationPrincipal actor, SearchFilter filter, int page,
+            int size) {
         UUID org = actor.organizationId();
-        SearchFilter filter = new SearchFilter(name, uhidTerm, phoneTerm, abhaHash, dob);
         List<PatientSummary> items = repository.search(org, filter, size, (long) page * size).stream()
                 .map(p -> new PatientSummary(p.id(), p.uhid(), p.fullName(), p.sex(), p.dateOfBirth(), p.phone(),
                         p.abhaLast4(), p.status()))
@@ -169,6 +185,11 @@ public class PatientService {
 
     /** 14 digits, optionally grouped 2-4-4-4 with hyphens (format only; no checksum or ABDM verification). */
     static final String ABHA_FORMAT = "[0-9]{14}|[0-9]{2}-[0-9]{4}-[0-9]{4}-[0-9]{4}";
+
+    /** Associated data binding an ABHA ciphertext to its field, organization and patient row. */
+    static String[] abhaContext(UUID org, UUID patientId) {
+        return new String[] {"patient.abha", org.toString(), patientId.toString()};
+    }
 
     static String normalizeAbha(String abha) {
         String trimmed = abha.trim();

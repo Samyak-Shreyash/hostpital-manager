@@ -51,6 +51,12 @@ record CreatePatientRequest(
             @NotBlank @Pattern(regexp = Phone.REGEX, message = Phone.MESSAGE) String phone) {
     }
 
+    /** Never prints the ABHA number (it would otherwise reach logs through the record's generated toString). */
+    @Override
+    public String toString() {
+        return "CreatePatientRequest[abhaNumber=" + (abhaNumber == null ? "null" : "<redacted>") + ", ...]";
+    }
+
     RegisterPatientCommand toCommand() {
         return new RegisterPatientCommand(fullName, sex, dateOfBirth, ageYears, Boolean.TRUE.equals(dobEstimated),
                 phone,
