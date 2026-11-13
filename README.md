@@ -105,7 +105,7 @@ npm run dev                                       # -> http://localhost:5173
 | Proxy + SPA Docker image (repo root) | `docker build -f infra/docker/proxy.Dockerfile -t hms-proxy:$(git rev-parse HEAD) .` |
 | Backend Docker image (repo root) | `docker build -f infra/docker/backend.Dockerfile -t hms-backend:$(git rev-parse HEAD) backend` |
 
-CI (`.github/workflows/ci.yml`) runs on every PR and push to `main`: `backend` (Gradle build incl. integration and architecture tests), `frontend` (lint, test, build), `secret-scan` (gitleaks over full history) `image` (Trivy dependency scan, backend image tagged with the commit SHA, Trivy image scan) and `compose` (dev stack incl. monitoring profile comes up healthy, Prometheus scrapes the API). Scans fail on fixable HIGH/CRITICAL findings. All five are required status checks on `main` (admins included), so a red PR cannot merge.
+CI (`.github/workflows/ci.yml`) runs on every PR and push to `main`: `backend` (Gradle build incl. integration and architecture tests), `frontend` (lint, test, build), `image` (Trivy dependency scan, backend image tagged with the commit SHA, Trivy image scan) and `compose` (dev stack incl. monitoring profile comes up healthy, Prometheus scrapes the API). Scans fail on fixable HIGH/CRITICAL findings. All four are required status checks on `main` (admins included), so a red PR cannot merge.
 
 Configuration is read from environment variables; all variables are documented in `.env.example`. Copy it to `.env` for local use (git-ignored). Repository layout and build decisions: ADR-0013.
 
