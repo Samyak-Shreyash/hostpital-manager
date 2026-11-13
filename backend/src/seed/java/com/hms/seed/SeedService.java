@@ -29,12 +29,8 @@ import com.hms.shared.id.UuidV7Generator;
 import com.hms.shared.numbering.DocumentNumberAllocator;
 import com.hms.shared.tenancy.OrganizationContext;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
-import java.nio.file.attribute.PosixFilePermissions;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.sql.Timestamp;
@@ -199,7 +195,7 @@ public class SeedService {
         }
         Path file = options.adminPasswordFile();
         String password = TemporaryPassword.generate();
-        writeOwnerOnly(file, password);
+        boolean fileWritten = PasswordFile.write(file, password);
         Optional<UUID> created = Optional.empty();
         try {
             created = bootstrap.bootstrap(SeedData.SEED_ORG_NAME, "Asia/Kolkata",
@@ -209,11 +205,16 @@ public class SeedService {
                 deleteQuietly(file);
             }
         }
+        if (!fileWritten && created.isPresent()) {
+            // No owner-only file was possible: show the password once, never log it.
+            System.out.println("WARNING: could not protect a password file; the temporary administrator password "
+                    + "(change it at first login) is: " + password);
+        }
         if (created.isEmpty()) {
             throw new IllegalStateException("An organization appeared while seeding; run the seed again.");
         }
         log.info("Seed created the organization and its administrator; the temporary administrator password was "
-                + "written to the password file and must be changed at first login.");
+                + "written to the password file (or shown once on stdout) and must be changed at first login.");
         return new OrgResolution(created.get(), true);
     }
 
@@ -363,8 +364,8 @@ public class SeedService {
 
     private PatientResult seedPatients(UUID org, AuthenticatedPrincipal admin, int target,
             int servicePatients) {
-        int existing = inOrg(org, () -> jdbc.sql("SELECT count(*) FROM hms.patient WHERE phone LIKE ? AND full_name LIKE ?")
-                .params(SeedData.PHONE_PREFIX + "%", SeedData.NAME_PREFIX + "%").query(Long.class).single()).intValue();
+        int existing = inOrg(org, () -> jdbc.sql("SELECT count(*) FROM hms.patient WHERE phone ~ ? AND full_name ~ ?")
+                .params(SeedData.PHONE_PATTERN, SeedData.NAME_PATTERN).query(Long.class).single()).intValue();
         int viaService = 0;
         int allergies = 0;
         int histories = 0;
@@ -494,26 +495,6 @@ public class SeedService {
     private <T> T inOrg(UUID org, Supplier<T> work) {
         Supplier<T> transactional = () -> tx.execute(status -> work.get());
         return context.runAs(org, transactional);
-    }
-
-    private static void writeOwnerOnly(Path file, String password) {
-        try {
-            Path parent = file.toAbsolutePath().getParent();
-            if (parent != null) {
-                Files.createDirectories(parent);
-            }
-            Files.deleteIfExists(file);
-            if (FileSystems.getDefault().supportedFileAttributeViews().contains("posix")) {
-                Files.createFile(file,
-                        java.nio.file.attribute.PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rw-------")));
-            } else {
-                Files.createFile(file);
-            }
-            Files.writeString(file, password + "\n", StandardCharsets.UTF_8, StandardOpenOption.TRUNCATE_EXISTING);
-        } catch (IOException e) {
-            // Only the exception type is reported: the password must not leak through a message.
-            throw new IllegalStateException("Cannot write the admin password file (" + e.getClass().getSimpleName() + ").");
-        }
     }
 
     private static void deleteQuietly(Path file) {

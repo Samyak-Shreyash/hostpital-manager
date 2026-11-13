@@ -2,9 +2,13 @@ package com.hms.seed;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.hms.identity.api.AuthenticatedPrincipal;
+import com.hms.identity.api.Permissions;
 import com.hms.identity.api.RoleProvisioning;
 import com.hms.identity.application.UserManagementService;
 import com.hms.organization.api.OrganizationProvisioning;
+import com.hms.patient.application.PatientService;
+import com.hms.patient.application.PatientSummary;
 import com.hms.shared.tenancy.OrganizationContext;
 import com.hms.support.PostgresIT;
 import java.nio.file.Path;
@@ -40,6 +44,9 @@ class SeedServiceIT extends PostgresIT {
 
     @Autowired
     OrganizationContext context;
+
+    @Autowired
+    PatientService patients;
 
     @Autowired
     OrganizationProvisioning organizations;
@@ -137,6 +144,24 @@ class SeedServiceIT extends PostgresIT {
         assertThat(count("SELECT count(*) FROM hms.patient WHERE full_name NOT LIKE 'Test %'")).isZero();
         assertThat(count("SELECT count(*) FROM hms.patient WHERE phone !~ '^\\+910000[0-9]{6}$'")).isZero();
         assertThat(count("SELECT count(*) FROM hms.patient WHERE abha_hash IS NOT NULL")).isZero();
+
+        // The [E3-2] search finds bulk-path patients (index 20 is one) by name, phone and UHID.
+        String bulkName = SeedData.patientName(20);
+        UUID adminId = inOrg(() -> jdbc.sql("SELECT id FROM hms.app_user WHERE email = 'seed.admin@seed.example'")
+                .query(UUID.class).single());
+        AuthenticatedPrincipal admin = new AuthenticatedPrincipal(adminId, org, "seed.admin@seed.example", "Admin",
+                List.of("SYSTEM_ADMIN"), List.copyOf(Permissions.ALL));
+        String bulkUhid = inOrg(() -> jdbc.sql("SELECT uhid FROM hms.patient WHERE phone = ?")
+                .param(SeedData.phone(20)).query(String.class).single());
+        Supplier<List<String>> byName = () -> patients.search(admin, bulkName, null, null, null, 0, 50).items()
+                .stream().map(PatientSummary::uhid).toList();
+        Supplier<List<String>> byPhone = () -> patients.search(admin, null, null, SeedData.phone(20), null, 0, 50)
+                .items().stream().map(PatientSummary::uhid).toList();
+        Supplier<List<String>> byUhid = () -> patients.search(admin, null, bulkUhid, null, null, 0, 50).items()
+                .stream().map(PatientSummary::uhid).toList();
+        assertThat(context.runAs(org, byName)).contains(bulkUhid);
+        assertThat(context.runAs(org, byPhone)).containsExactly(bulkUhid);
+        assertThat(context.runAs(org, byUhid)).containsExactly(bulkUhid);
 
         // Rerun: nothing is created, nothing changes.
         SeedSummary second = seed.run(options(30, 10));

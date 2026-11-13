@@ -15,6 +15,8 @@ final class SeedData {
     static final String SEED_EMAIL_DOMAIN = "seed.example"; // .example is reserved (RFC 2606), never deliverable
     static final String PHONE_PREFIX = "+910000";
     static final String CONTACT_PHONE_PREFIX = "+910001";
+    static final String PHONE_PATTERN = "^\\+910000[0-9]{6}$";
+    static final String NAME_PATTERN = "^Test [A-Za-z]+ [A-Za-z]+$";
     static final String NAME_PREFIX = "Test ";
 
     static final List<String> NATO = List.of("Alpha", "Bravo", "Charlie", "Delta", "Echo", "Foxtrot", "Golf", "Hotel",

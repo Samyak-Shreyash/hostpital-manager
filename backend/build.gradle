@@ -55,13 +55,8 @@ tasks.register('seedData', JavaExec) {
             'Use --args="--large" for 100k patients, --args="--patients=N" for a custom count.'
     classpath = sourceSets.seed.runtimeClasspath
     mainClass = 'com.hms.seed.SeedApplication'
-    // Profile comes from the environment; default dev only when neither SPRING_PROFILES_ACTIVE nor HMS_ENV is set.
-    def profiles = System.getenv('SPRING_PROFILES_ACTIVE')
-    if (profiles) {
-        systemProperty 'spring.profiles.active', profiles
-    } else if (!System.getenv('HMS_ENV')) {
-        systemProperty 'spring.profiles.active', 'dev'
-    }
+    // No default profile is injected: the environment must say dev (SPRING_PROFILES_ACTIVE=dev) or
+    // HMS_ENV=dev|staging explicitly, otherwise the guard refuses.
 }
 
 // Test suites per ADR-0013: `test` (unit, no Docker), `integrationTest` (Testcontainers), `architectureTest` (ArchUnit).
