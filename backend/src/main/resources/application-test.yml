@@ -1,0 +1,6 @@
+# Profile 'test' (integration tests). The built-in field-encryption keys (ADR-0009) are public, so data encrypted
+# with them is NOT protected; they apply only when HMS_FIELD_ENCRYPTION_KEYS / HMS_ABHA_HMAC_KEY are unset.
+hms:
+  field-encryption:
+    dev-default-keys: test-1:4Sp4oty3C4Mz/nci/K8UH5gewj5MmkiMCD5+yPeVLUQ=
+    dev-default-abha-hmac-key: nj2jm+IPrrh3q3aMgaEh3hJ0KX0eblMZXjAl1A0lo3Y=

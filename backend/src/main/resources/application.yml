@@ -33,6 +33,11 @@ server:
 hms:
   session:
     cookie-secure: ${HMS_SESSION_COOKIE_SECURE:true} # cookie name/flags: SessionCookieConfig
+  # Application-level field encryption (ADR-0009, [E3-2]): required, startup fails without them, except under the
+  # dev/test profiles (built-in keys in application-dev.yml / application-test.yml). See .env.example.
+  field-encryption:
+    keys: ${HMS_FIELD_ENCRYPTION_KEYS:}
+    abha-hmac-key: ${HMS_ABHA_HMAC_KEY:}
 
 management:
   endpoints:

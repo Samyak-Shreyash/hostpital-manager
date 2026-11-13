@@ -87,7 +87,9 @@ docker compose -f infra/compose/compose.yml --env-file .env up -d db
 # 2. Backend: full build (unit + integration + architecture tests), then run
 cd backend
 ./gradlew build                                   # Windows: gradlew.bat build
-HMS_DB_PASSWORD=<from .env> HMS_DB_MIGRATION_PASSWORD=<from .env> ./gradlew bootRun
+# SPRING_PROFILES_ACTIVE=dev supplies public built-in field-encryption keys (ADR-0009); any other profile
+# needs HMS_FIELD_ENCRYPTION_KEYS and HMS_ABHA_HMAC_KEY (see .env.example) or startup fails.
+SPRING_PROFILES_ACTIVE=dev HMS_DB_PASSWORD=<from .env> HMS_DB_MIGRATION_PASSWORD=<from .env> ./gradlew bootRun
 # -> http://localhost:8080/actuator/health returns {"status":"UP"}
 
 # 3. Frontend (separate terminal)
