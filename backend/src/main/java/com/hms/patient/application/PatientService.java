@@ -113,8 +113,8 @@ public class PatientService {
                     "page must be 0 or more and size 1 to " + MAX_PAGE_SIZE + ".");
         }
         String name = blankToNull(q);
-        if (name != null && name.length() < 2) {
-            throw new BusinessRuleException("VALIDATION_ERROR", "q must be at least 2 characters.");
+        if (name != null && name.length() < 3) {
+            throw new BusinessRuleException("VALIDATION_ERROR", "q must be at least 3 characters.");
         }
         String uhidTerm = blankToNull(uhid) == null ? null : uhid.trim().toUpperCase(java.util.Locale.ROOT);
         String phoneTerm = null;
