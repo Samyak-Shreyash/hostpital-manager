@@ -180,6 +180,22 @@ class OrganizationIsolationIT extends PostgresIT {
             Map.entry("PUT /api/v1/doctors/{id}/departments", new CrossOrgCase(org -> put(
                     "/api/v1/doctors/{id}/departments", org.practitionerId()).contentType(MediaType.APPLICATION_JSON)
                     .content("{\"version\":0,\"departmentIds\":[\"" + org.departmentId() + "\"]}"))),
+            Map.entry("GET /api/v1/doctors/{id}/availability",
+                    new CrossOrgCase(org -> get("/api/v1/doctors/{id}/availability", org.practitionerId()))),
+            Map.entry("PUT /api/v1/doctors/{id}/availability", new CrossOrgCase(org -> put(
+                    "/api/v1/doctors/{id}/availability", org.practitionerId()).contentType(MediaType.APPLICATION_JSON)
+                    .content("{\"version\":0,\"windows\":[]}"))),
+            Map.entry("GET /api/v1/doctors/{id}/availability-exceptions", new CrossOrgCase(org -> get(
+                    "/api/v1/doctors/{id}/availability-exceptions", org.practitionerId()))),
+            Map.entry("POST /api/v1/doctors/{id}/availability-exceptions", new CrossOrgCase(org -> post(
+                    "/api/v1/doctors/{id}/availability-exceptions", org.practitionerId())
+                    .contentType(MediaType.APPLICATION_JSON).content("{\"date\":\"2026-11-16\"}"))),
+            Map.entry("POST /api/v1/doctors/{id}/availability-exceptions/{exceptionId}/cancel",
+                    new CrossOrgCase(org -> post("/api/v1/doctors/{id}/availability-exceptions/{e}/cancel",
+                            org.practitionerId(), org.exceptionId()).contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"version\":0}"))),
+            Map.entry("GET /api/v1/doctors/{id}/slots", new CrossOrgCase(org -> get(
+                    "/api/v1/doctors/{id}/slots", org.practitionerId()).param("date", "2026-11-16"))),
             Map.entry("GET /api/v1/staff/{id}", new CrossOrgCase(org -> get("/api/v1/staff/{id}", org.staffId()))),
             Map.entry("PATCH /api/v1/staff/{id}", new CrossOrgCase(org -> patch("/api/v1/staff/{id}",
                     org.staffId()).contentType(MediaType.APPLICATION_JSON).content("{\"version\":0}"))),
@@ -195,7 +211,7 @@ class OrganizationIsolationIT extends PostgresIT {
     /** One organization's ids that endpoints can be called with. Extend as modules add entities. */
     record OrgFixture(UUID organizationId, UUID roleId, UUID lifecycleUserId, UUID patchUserId, UUID departmentId,
             UUID specialtyId, UUID serviceId, UUID patientId, UUID allergyId, UUID historyId, UUID practitionerId,
-            UUID staffId) {
+            UUID staffId, UUID exceptionId) {
     }
 
     /**
@@ -375,7 +391,8 @@ class OrganizationIsolationIT extends PostgresIT {
         expected.removeAll(RLS_EXCLUDED);
         assertThat(expected).contains("role", "role_permission", "user_role", "document_sequence", "department",
                 "specialty", "service_catalog_item", "service_price", "patient", "patient_address",
-                "patient_contact", "practitioner", "practitioner_specialty", "practitioner_department", "staff");
+                "patient_contact", "practitioner", "practitioner_specialty", "practitioner_department", "staff",
+                "practitioner_availability", "availability_exception");
         assertThat(new TreeSet<>(rlsTables())).isEqualTo(expected);
     }
 
@@ -432,6 +449,7 @@ class OrganizationIsolationIT extends PostgresIT {
         UUID practitionerUserId = insertUser(organizationId);
         UUID staffId = UUID.randomUUID();
         UUID staffUserId = insertUser(organizationId);
+        UUID exceptionId = UUID.randomUUID();
         inOrg(organizationId, () -> {
             jdbc.sql("""
                     INSERT INTO hms.department (id, organization_id, code, name, created_at, updated_at)
@@ -474,13 +492,17 @@ class OrganizationIsolationIT extends PostgresIT {
                     INSERT INTO hms.staff (id, organization_id, user_id, full_name, staff_type, created_by,
                         created_at, updated_at) VALUES (?, ?, ?, 'Test Staff Isolation', 'NURSE', ?, now(), now())""")
                     .params(staffId, organizationId, staffUserId, staffUserId).update();
+            jdbc.sql("""
+                    INSERT INTO hms.availability_exception (id, organization_id, practitioner_id, leave_date,
+                        created_by, created_at, updated_at) VALUES (?, ?, ?, DATE '2026-11-16', ?, now(), now())""")
+                    .params(exceptionId, organizationId, practitionerId, practitionerUserId).update();
             return jdbc.sql("""
                     INSERT INTO hms.practitioner_department (organization_id, practitioner_id, department_id,
                         created_at) VALUES (?, ?, ?, now())""")
                     .params(organizationId, practitionerId, departmentId).update();
         });
         return new OrgFixture(organizationId, roleId, lifecycleUserId, patchUserId, departmentId, specialtyId, serviceId, patientId,
-                allergyId, historyId, practitionerId, staffId);
+                allergyId, historyId, practitionerId, staffId, exceptionId);
     }
 
     private UUID insertUser(UUID organizationId) {
