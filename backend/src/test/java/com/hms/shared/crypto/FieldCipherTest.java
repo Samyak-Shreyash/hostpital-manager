@@ -70,6 +70,19 @@ class FieldCipherTest {
     }
 
     @Test
+    void contextIsBoundSoACiphertextCopiedToAnotherRowOrOrganizationFails() {
+        FieldCipher cipher = new FieldCipher(keys("k1", key()));
+        Encrypted e = cipher.encrypt(VALUE, "patient.abha", "org-a", "patient-1");
+        assertThat(cipher.decrypt("k1", e.value(), "patient.abha", "org-a", "patient-1")).isEqualTo(VALUE);
+        for (String[] other : new String[][] {{"patient.abha", "org-a", "patient-2"}, {"patient.abha", "org-b",
+                "patient-1"}, {"patient.other", "org-a", "patient-1"}, {"patient.abha", "org-a"}, {},
+                {"patient.abha", "org-apatient-1", ""}}) {
+            assertThatThrownBy(() -> cipher.decrypt("k1", e.value(), other))
+                    .isInstanceOf(FieldDecryptionException.class);
+        }
+    }
+
+    @Test
     void rejectsKeysThatAreNotAes256() {
         assertThatThrownBy(() -> new FieldCipher(keys("k1", new byte[16])))
                 .isInstanceOf(IllegalArgumentException.class);

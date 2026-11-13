@@ -3,6 +3,8 @@ package com.hms.shared.crypto;
 import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -17,6 +19,8 @@ import org.springframework.core.env.Profiles;
 @Configuration(proxyBeanMethods = false)
 @EnableConfigurationProperties(FieldEncryptionProperties.class)
 public class FieldEncryptionConfig {
+
+    private static final Logger log = LoggerFactory.getLogger(FieldEncryptionConfig.class);
 
     static final Profiles DEFAULT_KEY_PROFILES = Profiles.of("dev", "test");
 
@@ -46,6 +50,8 @@ public class FieldEncryptionConfig {
             return configured;
         }
         if (env.acceptsProfiles(DEFAULT_KEY_PROFILES) && devDefault != null && !devDefault.isBlank()) {
+            log.warn("{} is not set: using the PUBLIC built-in {} key of the dev/test profile. Data encrypted with it is "
+                    + "not protected; never use this outside local development.", variable, variable);
             return devDefault;
         }
         throw new IllegalStateException(variable + " is required (ADR-0009); built-in keys exist only for the dev "
