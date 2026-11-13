@@ -54,3 +54,9 @@ Owner-approved design (2026-11-13), binding:
 ### Task 13: Mask phone in patient search results + legal-review note (owner decision 2026-11-13) — run right after Task 3
 - `GET /api/v1/patients` and `POST /api/v1/patients/search-by-abha` result items return `phoneMasked` (same masking format as the duplicate-candidate payload, e.g. `+91******0001`) instead of the full `phone`. Full phone remains available only on the patient detail endpoint. Update tests and docs/api/api-design.md.
 - Add to the [E10-8] legal-review items in docs/00-review-notes.md: "Duplicate-candidate payload shows full name and DOB (phone masked) to users with patient:create — confirm acceptable under DPDP minimisation."
+
+### Task 14: Role templates + staff permissions + staff-roles doc note (owner decisions 2026-11-14) — run right after Task 8
+- Default role templates: DOCTOR and NURSE get `patient:update-clinical`. RECEPTIONIST must no longer receive `patient:update-clinical` or `patient:update-identity` (replace its `patient:*` wildcard with an explicit list of the other patient permissions it needs). Forward migration applies the same changes to existing organizations' built-in roles; update DefaultRoleTemplatesTest and api-design.md (fix the "doctor/nurse" text to match).
+- New permissions `staff:read`, `staff:create`, `staff:update` in the permission catalogue; staff endpoints use them instead of `practitioner:*`. Grant them to Facility Administrator (template + backfill existing orgs). They are independent of `practitioner:*`; a role may hold both ("joint" where needed).
+- docs: record in docs/00-review-notes.md (open questions) that the staff screen does not show or assign roles — roles are managed via `PATCH /users/{id}` only; revisit when building the staff UI (E4-4).
+- Staff types list and single optional department are confirmed by the owner (no change).
