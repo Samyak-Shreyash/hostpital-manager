@@ -41,6 +41,10 @@ services:
       HMS_DB_MIGRATION_USERNAME: ${HMS_DB_MIGRATION_USERNAME}
       HMS_DB_MIGRATION_PASSWORD: ${HMS_DB_MIGRATION_PASSWORD}
       HMS_SERVER_PORT: "8080"
+      # Dev stack: the 'dev' profile supplies public built-in field-encryption keys when these are empty (ADR-0009).
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-dev}
+      HMS_FIELD_ENCRYPTION_KEYS: ${HMS_FIELD_ENCRYPTION_KEYS:-}
+      HMS_ABHA_HMAC_KEY: ${HMS_ABHA_HMAC_KEY:-}
       # Optional first-run bootstrap ([E2-1]); empty = off. See .env.example and README "First organization".
       HMS_BOOTSTRAP_ORG_NAME: ${HMS_BOOTSTRAP_ORG_NAME:-}
       HMS_BOOTSTRAP_ADMIN_EMAIL: ${HMS_BOOTSTRAP_ADMIN_EMAIL:-}

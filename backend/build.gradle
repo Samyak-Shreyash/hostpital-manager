@@ -51,7 +51,11 @@ testing {
                 implementation libs.testcontainers.junit
             }
             targets.all {
-                testTask.configure { shouldRunAfter(test) }
+                testTask.configure {
+                    shouldRunAfter(test)
+                    // Built-in field-encryption keys (ADR-0009) exist only for the dev/test profiles.
+                    systemProperty 'spring.profiles.active', 'test'
+                }
             }
         }
 
