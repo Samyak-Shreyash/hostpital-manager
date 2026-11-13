@@ -8,11 +8,14 @@ import com.hms.organization.api.OrganizationDirectory;
 import com.hms.organization.api.OrganizationProvisioning;
 import com.hms.organization.api.OrganizationSummary;
 import com.hms.organization.api.OrganizationRules;
+import com.hms.organization.infrastructure.CatalogRepository;
 import com.hms.organization.infrastructure.OrganizationRepository;
 import com.hms.shared.domain.BusinessRuleException;
 import com.hms.shared.id.UuidV7Generator;
 import java.time.Clock;
+import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
@@ -23,13 +26,15 @@ import org.springframework.transaction.annotation.Transactional;
 class OrganizationApiService implements OrganizationDirectory, OrganizationProvisioning {
 
     private final OrganizationRepository organizations;
+    private final CatalogRepository catalog;
     private final AuditRecorder audit;
     private final UuidV7Generator ids;
     private final Clock clock;
 
-    OrganizationApiService(OrganizationRepository organizations, AuditRecorder audit, UuidV7Generator ids,
-            Clock clock) {
+    OrganizationApiService(OrganizationRepository organizations, CatalogRepository catalog, AuditRecorder audit,
+            UuidV7Generator ids, Clock clock) {
         this.organizations = organizations;
+        this.catalog = catalog;
         this.audit = audit;
         this.ids = ids;
         this.clock = clock;
@@ -48,6 +53,18 @@ class OrganizationApiService implements OrganizationDirectory, OrganizationProvi
         return organizations.find(organizationId)
                 .map(r -> new DuplicateThresholds(r.duplicateDobThreshold(), r.duplicatePhoneThreshold()))
                 .orElse(new DuplicateThresholds(DuplicateThresholds.DEFAULT_DOB, DuplicateThresholds.DEFAULT_PHONE));
+    }
+
+    @Override
+    @Transactional
+    public Map<UUID, Boolean> departmentActiveFlags(UUID organizationId, Collection<UUID> ids) {
+        return catalog.activeFlags(CatalogKind.DEPARTMENT, organizationId, ids);
+    }
+
+    @Override
+    @Transactional
+    public Map<UUID, Boolean> specialtyActiveFlags(UUID organizationId, Collection<UUID> ids) {
+        return catalog.activeFlags(CatalogKind.SPECIALTY, organizationId, ids);
     }
 
     @Override
