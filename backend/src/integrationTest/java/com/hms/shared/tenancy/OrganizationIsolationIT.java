@@ -95,6 +95,8 @@ class OrganizationIsolationIT extends PostgresIT {
             "POST /api/v1/patients",
             "GET /api/v1/doctors", // list scoped by the principal
             "POST /api/v1/doctors", // referenced ids in the body: cross-org ones answer 422, PractitionerRegistrationIT
+            "GET /api/v1/staff", // list scoped by the principal
+            "POST /api/v1/staff", // referenced ids in the body: cross-org ones answer 422, StaffRecordIT
             "POST /api/v1/roles",
             "GET /api/v1/permissions",
             "GET /api/v1/organization", // the caller's own organization: no id in the path
@@ -178,6 +180,9 @@ class OrganizationIsolationIT extends PostgresIT {
             Map.entry("PUT /api/v1/doctors/{id}/departments", new CrossOrgCase(org -> put(
                     "/api/v1/doctors/{id}/departments", org.practitionerId()).contentType(MediaType.APPLICATION_JSON)
                     .content("{\"version\":0,\"departmentIds\":[\"" + org.departmentId() + "\"]}"))),
+            Map.entry("GET /api/v1/staff/{id}", new CrossOrgCase(org -> get("/api/v1/staff/{id}", org.staffId()))),
+            Map.entry("PATCH /api/v1/staff/{id}", new CrossOrgCase(org -> patch("/api/v1/staff/{id}",
+                    org.staffId()).contentType(MediaType.APPLICATION_JSON).content("{\"version\":0}"))),
             Map.entry("GET /api/v1/services/{id}/prices",
                     new CrossOrgCase(org -> get("/api/v1/services/{id}/prices", org.serviceId()))),
             Map.entry("POST /api/v1/services/{id}/prices", new CrossOrgCase(org -> post(
@@ -189,7 +194,8 @@ class OrganizationIsolationIT extends PostgresIT {
 
     /** One organization's ids that endpoints can be called with. Extend as modules add entities. */
     record OrgFixture(UUID organizationId, UUID roleId, UUID lifecycleUserId, UUID patchUserId, UUID departmentId,
-            UUID specialtyId, UUID serviceId, UUID patientId, UUID allergyId, UUID historyId, UUID practitionerId) {
+            UUID specialtyId, UUID serviceId, UUID patientId, UUID allergyId, UUID historyId, UUID practitionerId,
+            UUID staffId) {
     }
 
     /**
@@ -369,7 +375,7 @@ class OrganizationIsolationIT extends PostgresIT {
         expected.removeAll(RLS_EXCLUDED);
         assertThat(expected).contains("role", "role_permission", "user_role", "document_sequence", "department",
                 "specialty", "service_catalog_item", "service_price", "patient", "patient_address",
-                "patient_contact", "practitioner", "practitioner_specialty", "practitioner_department");
+                "patient_contact", "practitioner", "practitioner_specialty", "practitioner_department", "staff");
         assertThat(new TreeSet<>(rlsTables())).isEqualTo(expected);
     }
 
@@ -424,6 +430,8 @@ class OrganizationIsolationIT extends PostgresIT {
         UUID historyId = UUID.randomUUID();
         UUID practitionerId = UUID.randomUUID();
         UUID practitionerUserId = insertUser(organizationId);
+        UUID staffId = UUID.randomUUID();
+        UUID staffUserId = insertUser(organizationId);
         inOrg(organizationId, () -> {
             jdbc.sql("""
                     INSERT INTO hms.department (id, organization_id, code, name, created_at, updated_at)
@@ -462,13 +470,17 @@ class OrganizationIsolationIT extends PostgresIT {
                     INSERT INTO hms.practitioner_specialty (organization_id, practitioner_id, specialty_id,
                         is_primary, created_at) VALUES (?, ?, ?, true, now())""")
                     .params(organizationId, practitionerId, specialtyId).update();
+            jdbc.sql("""
+                    INSERT INTO hms.staff (id, organization_id, user_id, full_name, staff_type, created_by,
+                        created_at, updated_at) VALUES (?, ?, ?, 'Test Staff Isolation', 'NURSE', ?, now(), now())""")
+                    .params(staffId, organizationId, staffUserId, staffUserId).update();
             return jdbc.sql("""
                     INSERT INTO hms.practitioner_department (organization_id, practitioner_id, department_id,
                         created_at) VALUES (?, ?, ?, now())""")
                     .params(organizationId, practitionerId, departmentId).update();
         });
         return new OrgFixture(organizationId, roleId, lifecycleUserId, patchUserId, departmentId, specialtyId, serviceId, patientId,
-                allergyId, historyId, practitionerId);
+                allergyId, historyId, practitionerId, staffId);
     }
 
     private UUID insertUser(UUID organizationId) {
