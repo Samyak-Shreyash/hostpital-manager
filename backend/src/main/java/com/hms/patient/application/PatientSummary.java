@@ -5,5 +5,5 @@ import java.util.UUID;
 
 /** One row of a patient search result (api-design.md section 6). */
 public record PatientSummary(UUID id, String uhid, String fullName, String sex, LocalDate dateOfBirth, String phone,
-        String status) {
+        String abhaLast4, String status) {
 }

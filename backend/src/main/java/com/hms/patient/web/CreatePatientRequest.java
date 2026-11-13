@@ -16,7 +16,17 @@ record CreatePatientRequest(
         Boolean dobEstimated,
         @NotBlank @Pattern(regexp = Phone.REGEX, message = Phone.MESSAGE) String phone,
         @Valid AddressRequest address,
-        @Valid ContactRequest emergencyContact) {
+        @Valid ContactRequest emergencyContact,
+        @Pattern(regexp = Abha.REGEX, message = Abha.MESSAGE) String abhaNumber) {
+
+    /** ABHA number: 14 digits, optionally grouped 2-4-4-4 with hyphens. Format only, no checksum/ABDM check. */
+    static final class Abha {
+        static final String REGEX = "[0-9]{14}|[0-9]{2}-[0-9]{4}-[0-9]{4}-[0-9]{4}";
+        static final String MESSAGE = "must be 14 digits";
+
+        private Abha() {
+        }
+    }
 
     /** E.164, or a bare 10-digit Indian number. */
     static final class Phone {
@@ -47,6 +57,7 @@ record CreatePatientRequest(
                 address == null ? null : new RegisterPatientCommand.Address(address.line1(), address.line2(),
                         address.city(), address.state(), address.pincode()),
                 emergencyContact == null ? null : new RegisterPatientCommand.EmergencyContact(
-                        emergencyContact.name(), emergencyContact.relationship(), emergencyContact.phone()));
+                        emergencyContact.name(), emergencyContact.relationship(), emergencyContact.phone()),
+                abhaNumber);
     }
 }
