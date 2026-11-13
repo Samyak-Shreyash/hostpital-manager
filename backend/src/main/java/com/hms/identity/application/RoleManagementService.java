@@ -152,15 +152,10 @@ public class RoleManagementService {
     /**
      * Anti-escalation rule (api-design.md section 3): a caller may only grant permissions they hold themselves.
      * Permissions the role already has and the caller lacks may stay (or be removed); they cannot be added.
-     * A system administrator (holds both {@code user:update} and {@code role:manage}, the same definition as the
-     * last-administrator rule) is exempt: the default SYSTEM_ADMIN role deliberately lacks clinical and financial
-     * permissions but must still be able to set up staff roles, and already sits at the top of the hierarchy.
+     * There is no exemption: system administrators are bound by it too, so one cannot grant permissions (or assign
+     * roles) that carry permissions it lacks.
      */
     static void requireCallerHolds(AuthenticatedPrincipal actor, java.util.Collection<String> permissions) {
-        if (actor.permissions().contains(Permissions.USER_UPDATE)
-                && actor.permissions().contains(Permissions.ROLE_MANAGE)) {
-            return;
-        }
         List<String> missing = permissions.stream().filter(p -> !actor.permissions().contains(p)).sorted().toList();
         if (!missing.isEmpty()) {
             throw new ProblemException(HttpStatus.FORBIDDEN, "PRIVILEGE_ESCALATION",

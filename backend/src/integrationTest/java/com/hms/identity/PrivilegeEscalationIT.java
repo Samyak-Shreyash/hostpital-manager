@@ -89,10 +89,10 @@ class PrivilegeEscalationIT extends PostgresIT {
     }
 
     @Test
-    void aUserUpdaterCannotAssignSystemAdminButASystemAdminCan() throws Exception {
+    void aUserUpdaterCannotAssignSystemAdminButACallerHoldingASupersetCan() throws Exception {
         fx.role(org, "HR_CLERK", "user:update", "user:read", "user:create");
         AdminApiFixture.Session clerk = fx.loggedIn(org, "clerk", "HR_CLERK");
-        AdminApiFixture.Session admin = fx.loggedIn(org, "admin", "SYSTEM_ADMIN");
+        AdminApiFixture.Session superset = fx.withAllPermissions(org);
         UUID target = fx.user(org, fx.uniqueEmail("target"), "RECEPTIONIST");
 
         String body = "{\"version\":" + fx.version(target) + ",\"roleCodes\":[\"SYSTEM_ADMIN\"]}";
@@ -109,9 +109,41 @@ class PrivilegeEscalationIT extends PostgresIT {
                 + "ON r.id = ur.role_id WHERE ur.user_id = ?").param(target).query(String.class).list()))
                 .isEqualTo(List.of("RECEPTIONIST"));
 
-        mockMvc.perform(admin.apply(patch(USERS + "/" + target).contentType(MediaType.APPLICATION_JSON)
+        mockMvc.perform(superset.apply(patch(USERS + "/" + target).contentType(MediaType.APPLICATION_JSON)
                         .content(body)))
                 .andExpect(status().isOk());
+    }
+
+    @Test
+    void holdingUserUpdateAndRoleManageIsNotAnExemption() throws Exception {
+        fx.role(org, "ROLE_AND_USER_ADMIN", "user:update", "user:create", "user:read", "role:manage", "role:read");
+        AdminApiFixture.Session caller = fx.loggedIn(org, "both", "ROLE_AND_USER_ADMIN");
+        UUID target = fx.user(org, fx.uniqueEmail("target"), "NURSE");
+
+        mockMvc.perform(caller.apply(patch(USERS + "/" + target).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"version\":" + fx.version(target) + ",\"roleCodes\":[\"DOCTOR\"]}")))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("PRIVILEGE_ESCALATION"));
+        mockMvc.perform(caller.apply(post(ROLES).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"code\":\"NOPE\",\"name\":\"Nope\",\"permissionCodes\":[\"patient:read\"]}")))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("PRIVILEGE_ESCALATION"));
+    }
+
+    @Test
+    void aSystemAdministratorCannotAssignARoleCarryingPermissionsItLacks() throws Exception {
+        AdminApiFixture.Session admin = fx.loggedIn(org, "admin", "SYSTEM_ADMIN");
+        UUID target = fx.user(org, fx.uniqueEmail("target"), "NURSE");
+
+        mockMvc.perform(admin.apply(patch(USERS + "/" + target).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"version\":" + fx.version(target) + ",\"roleCodes\":[\"DOCTOR\"]}")))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("PRIVILEGE_ESCALATION"));
+        mockMvc.perform(admin.apply(post(USERS).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"" + fx.uniqueEmail("new") + "\",\"fullName\":\"Synthetic New\","
+                                + "\"roleCodes\":[\"DOCTOR\"]}")))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("PRIVILEGE_ESCALATION"));
     }
 
     @Test

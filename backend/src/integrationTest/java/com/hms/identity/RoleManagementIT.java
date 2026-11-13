@@ -123,9 +123,10 @@ class RoleManagementIT extends PostgresIT {
 
     @Test
     void createsACustomRoleAndRejectsDuplicatesUnknownPermissionsAndBadInput() throws Exception {
+        AdminApiFixture.Session everything = fx.withAllPermissions(org);
         String body = "{\"code\":\"LAB_TECH\",\"name\":\"Lab Technician\",\"permissionCodes\":"
                 + "[\"patient:read\",\"patient:search\"]}";
-        mockMvc.perform(admin.apply(post(ROLES).contentType(MediaType.APPLICATION_JSON).content(body)))
+        mockMvc.perform(everything.apply(post(ROLES).contentType(MediaType.APPLICATION_JSON).content(body)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.code").value("LAB_TECH"))
                 .andExpect(jsonPath("$.permissions.length()").value(2))
@@ -133,9 +134,9 @@ class RoleManagementIT extends PostgresIT {
         UUID id = fx.roleId(org, "LAB_TECH");
         assertThat(fx.auditActions(id)).containsExactly("ROLE_CREATED");
 
-        mockMvc.perform(admin.apply(post(ROLES).contentType(MediaType.APPLICATION_JSON).content(body)))
+        mockMvc.perform(everything.apply(post(ROLES).contentType(MediaType.APPLICATION_JSON).content(body)))
                 .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("DUPLICATE_ROLE_CODE"));
-        mockMvc.perform(admin.apply(post(ROLES).contentType(MediaType.APPLICATION_JSON)
+        mockMvc.perform(everything.apply(post(ROLES).contentType(MediaType.APPLICATION_JSON)
                         .content("{\"code\":\"BAD_PERM\",\"name\":\"X\",\"permissionCodes\":[\"made:up\"]}")))
                 .andExpect(status().isUnprocessableContent())
                 .andExpect(jsonPath("$.code").value("UNKNOWN_PERMISSION"));
@@ -143,26 +144,27 @@ class RoleManagementIT extends PostgresIT {
                 "{\"code\":\"lower\",\"name\":\"X\",\"permissionCodes\":[]}",
                 "{\"code\":\"OK_CODE\",\"name\":\"\",\"permissionCodes\":[]}",
                 "{\"code\":\"OK_CODE\",\"name\":\"X\"}")) {
-            mockMvc.perform(admin.apply(post(ROLES).contentType(MediaType.APPLICATION_JSON).content(invalid)))
+            mockMvc.perform(everything.apply(post(ROLES).contentType(MediaType.APPLICATION_JSON).content(invalid)))
                     .andExpect(status().isUnprocessableContent())
                     .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
         }
         // The same code is free in another organization.
         UUID otherOrg = fx.organization();
-        AdminApiFixture.Session otherAdmin = fx.loggedIn(otherOrg, "other", "SYSTEM_ADMIN");
-        mockMvc.perform(otherAdmin.apply(post(ROLES).contentType(MediaType.APPLICATION_JSON).content(body)))
+        AdminApiFixture.Session otherEverything = fx.withAllPermissions(otherOrg);
+        mockMvc.perform(otherEverything.apply(post(ROLES).contentType(MediaType.APPLICATION_JSON).content(body)))
                 .andExpect(status().isCreated());
     }
 
     @Test
     void updateChangesNameAndPermissionsEndsHoldersSessionsAndIsAudited() throws Exception {
+        AdminApiFixture.Session everything = fx.withAllPermissions(org);
         fx.role(org, "LAB_TECH", "patient:read", "patient:search");
         UUID roleId = fx.roleId(org, "LAB_TECH");
         String email = fx.uniqueEmail("lab");
         UUID holder = fx.user(org, email, "LAB_TECH");
         AdminApiFixture.Session holderSession = fx.login(holder, email);
 
-        mockMvc.perform(admin.apply(patch(ROLES + "/" + roleId).contentType(MediaType.APPLICATION_JSON)
+        mockMvc.perform(everything.apply(patch(ROLES + "/" + roleId).contentType(MediaType.APPLICATION_JSON)
                         .content("{\"version\":0,\"name\":\"Lab Tech\",\"permissionCodes\":[\"patient:read\","
                                 + "\"report:clinical\"]}")))
                 .andExpect(status().isOk())
@@ -181,16 +183,16 @@ class RoleManagementIT extends PostgresIT {
                 WHERE entity_id = ? AND action = 'ROLE_UPDATED'""").param(roleId).query(String.class).single())
                 .contains("name").contains("permissions");
 
-        mockMvc.perform(admin.apply(patch(ROLES + "/" + roleId).contentType(MediaType.APPLICATION_JSON)
+        mockMvc.perform(everything.apply(patch(ROLES + "/" + roleId).contentType(MediaType.APPLICATION_JSON)
                         .content("{\"version\":0,\"name\":\"Stale\"}")))
                 .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("CONCURRENT_MODIFICATION"));
-        mockMvc.perform(admin.apply(patch(ROLES + "/" + roleId).contentType(MediaType.APPLICATION_JSON)
+        mockMvc.perform(everything.apply(patch(ROLES + "/" + roleId).contentType(MediaType.APPLICATION_JSON)
                         .content("{\"version\":1,\"permissionCodes\":[\"made:up\"]}")))
                 .andExpect(status().isUnprocessableContent()).andExpect(jsonPath("$.code").value("UNKNOWN_PERMISSION"));
-        mockMvc.perform(admin.apply(patch(ROLES + "/" + roleId).contentType(MediaType.APPLICATION_JSON)
+        mockMvc.perform(everything.apply(patch(ROLES + "/" + roleId).contentType(MediaType.APPLICATION_JSON)
                         .content("{\"version\":1}")))
                 .andExpect(status().isUnprocessableContent()).andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
-        mockMvc.perform(admin.apply(patch(ROLES + "/" + roleId).contentType(MediaType.APPLICATION_JSON)
+        mockMvc.perform(everything.apply(patch(ROLES + "/" + roleId).contentType(MediaType.APPLICATION_JSON)
                         .content("{\"name\":\"No version\"}")))
                 .andExpect(status().isUnprocessableContent());
     }

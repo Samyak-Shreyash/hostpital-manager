@@ -149,8 +149,9 @@ class UserManagementIT extends PostgresIT {
 
     @Test
     void createReturnsATemporaryPasswordOnceAndTheUserMustChangeIt(CapturedOutput output) throws Exception {
+        AdminApiFixture.Session everything = fx.withAllPermissions(org);
         String email = "Dr.Rao-" + UUID.randomUUID() + "@Demo-Clinic.Example";
-        ResultActions created = mockMvc.perform(admin.apply(post(USERS).contentType(MediaType.APPLICATION_JSON)
+        ResultActions created = mockMvc.perform(everything.apply(post(USERS).contentType(MediaType.APPLICATION_JSON)
                         .content(createBody(email, "Dr. A. Rao", "DOCTOR"))))
                 .andExpect(status().isCreated())
                 .andExpect(header().string("Cache-Control", containsString("no-store")))
@@ -176,7 +177,7 @@ class UserManagementIT extends PostgresIT {
                 .andExpect(jsonPath("$.user.roles[0]").value("DOCTOR"));
 
         // Not retrievable again, not in the audit trail, not in the logs, not stored in clear text.
-        mockMvc.perform(admin.apply(get(USERS + "/" + id)))
+        mockMvc.perform(everything.apply(get(USERS + "/" + id)))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.temporaryPassword").doesNotExist());
         List<String> audit = jdbc.sql("SELECT row_to_json(a)::text FROM hms.audit_event a WHERE entity_id = ?")
                 .param(id).query(String.class).list();
@@ -189,17 +190,18 @@ class UserManagementIT extends PostgresIT {
 
     @Test
     void duplicateEmailIsRejectedAcrossOrganizationsAndIgnoringCase() throws Exception {
+        AdminApiFixture.Session everything = fx.withAllPermissions(org);
         String email = fx.uniqueEmail("dup");
-        mockMvc.perform(admin.apply(post(USERS).contentType(MediaType.APPLICATION_JSON)
+        mockMvc.perform(everything.apply(post(USERS).contentType(MediaType.APPLICATION_JSON)
                         .content(createBody(email, "First", "NURSE"))))
                 .andExpect(status().isCreated());
-        mockMvc.perform(admin.apply(post(USERS).contentType(MediaType.APPLICATION_JSON)
+        mockMvc.perform(everything.apply(post(USERS).contentType(MediaType.APPLICATION_JSON)
                         .content(createBody(email.toUpperCase(), "Second", "NURSE"))))
                 .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("DUPLICATE_EMAIL"));
 
         UUID otherOrg = fx.organization();
-        AdminApiFixture.Session otherAdmin = fx.loggedIn(otherOrg, "other-admin", "SYSTEM_ADMIN");
-        mockMvc.perform(otherAdmin.apply(post(USERS).contentType(MediaType.APPLICATION_JSON)
+        AdminApiFixture.Session otherEverything = fx.withAllPermissions(otherOrg);
+        mockMvc.perform(otherEverything.apply(post(USERS).contentType(MediaType.APPLICATION_JSON)
                         .content(createBody(email, "Third", "NURSE"))))
                 .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("DUPLICATE_EMAIL"));
         assertThat(jdbc.sql("SELECT count(*) FROM hms.app_user WHERE email = ?").param(email.toLowerCase())
@@ -285,13 +287,14 @@ class UserManagementIT extends PostgresIT {
 
     @Test
     void updateRenamesReplacesRolesEndsTheUsersSessionsAndIsAudited() throws Exception {
+        AdminApiFixture.Session everything = fx.withAllPermissions(org);
         String email = fx.uniqueEmail("doc");
         UUID doctor = fx.user(org, email, "DOCTOR");
         AdminApiFixture.Session doctorSession = fx.login(doctor, email);
         assertThat(fx.sessionCount(doctor)).isEqualTo(1);
         long versionBefore = fx.version(doctor);
 
-        mockMvc.perform(admin.apply(patch(USERS + "/" + doctor).contentType(MediaType.APPLICATION_JSON)
+        mockMvc.perform(everything.apply(patch(USERS + "/" + doctor).contentType(MediaType.APPLICATION_JSON)
                         .content("{\"version\":" + fx.version(doctor)
                                 + ",\"fullName\":\"  Dr. B. Rao \",\"roleCodes\":[\"NURSE\",\"RECEPTIONIST\"]}")))
                 .andExpect(status().isOk())
