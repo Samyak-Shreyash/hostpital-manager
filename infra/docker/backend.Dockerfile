@@ -15,6 +15,8 @@ FROM eclipse-temurin:21-jre
 # Pick up OS security fixes newer than the base image; the image scan in CI fails on fixable HIGH/CRITICAL.
 RUN apt-get update && apt-get upgrade -y --no-install-recommends && rm -rf /var/lib/apt/lists/*
 RUN groupadd --system hms && useradd --system --gid hms --no-create-home hms
+# Mount point for the first-run bootstrap password file (named volume in compose), writable only by hms.
+RUN mkdir -p /var/lib/hms/bootstrap && chown hms:hms /var/lib/hms/bootstrap && chmod 700 /var/lib/hms/bootstrap
 WORKDIR /app
 COPY --from=build /workspace/app.jar app.jar
 USER hms

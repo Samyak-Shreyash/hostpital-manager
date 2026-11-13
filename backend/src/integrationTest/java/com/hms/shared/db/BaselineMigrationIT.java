@@ -219,6 +219,7 @@ class BaselineMigrationIT extends PostgresIT {
     }
 
     private static long allocate(Connection connection, UUID org, String type, String period) throws SQLException {
+        inOrganization(connection, org);
         try (PreparedStatement ps = connection.prepareStatement(ALLOCATE)) {
             ps.setObject(1, org);
             ps.setString(2, type);
@@ -227,6 +228,23 @@ class BaselineMigrationIT extends PostgresIT {
                 rs.next();
                 return rs.getLong(1);
             }
+        }
+    }
+
+    /**
+     * document_sequence is under RLS and references organization ([E1-6]). These tests use their own short-lived,
+     * unpooled connections, so a session-level context is safe here; the application only sets it per transaction.
+     */
+    private static void inOrganization(Connection connection, UUID org) throws SQLException {
+        try (PreparedStatement ps = connection.prepareStatement(
+                "INSERT INTO hms.organization (id, name, status, created_at, updated_at) "
+                        + "VALUES (?, 'Demo Clinic', 'ACTIVE', now(), now()) ON CONFLICT (id) DO NOTHING")) {
+            ps.setObject(1, org);
+            ps.executeUpdate();
+        }
+        try (PreparedStatement ps = connection.prepareStatement("SELECT set_config('app.organization_id', ?, false)")) {
+            ps.setString(1, org.toString());
+            ps.executeQuery().close();
         }
     }
 

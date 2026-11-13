@@ -9,6 +9,9 @@ import static com.tngtech.archunit.library.dependencies.SlicesRuleDefinition.sli
 
 import com.tngtech.archunit.base.DescribedPredicate;
 import com.tngtech.archunit.core.domain.JavaClass;
+import com.tngtech.archunit.core.domain.properties.HasAnnotations;
+import com.tngtech.archunit.lang.conditions.ArchConditions;
+import java.util.regex.Pattern;
 import com.tngtech.archunit.core.importer.ImportOption;
 import com.tngtech.archunit.junit.AnalyzeClasses;
 import com.tngtech.archunit.junit.ArchTest;
@@ -68,6 +71,25 @@ class ArchitectureTest {
             .or().areAnnotatedWith(DeleteMapping.class)
             .or().areAnnotatedWith(RequestMapping.class)
             .should().beAnnotatedWith(PreAuthorize.class)
+            .allowEmptyShould(true);
+
+    private static final Pattern ROLE_CHECK = Pattern.compile("\\bhas(Any)?Role\\s*\\(");
+
+    private static final DescribedPredicate<HasAnnotations<?>> PREAUTHORIZE_CHECKS_A_ROLE = DescribedPredicate.describe(
+            "@PreAuthorize checking a role name",
+            element -> element.tryGetAnnotationOfType(PreAuthorize.class)
+                    .map(annotation -> ROLE_CHECK.matcher(annotation.value()).find())
+                    .orElse(false));
+
+    /** ADR-0006: code checks permissions only; roles are data and may be renamed or edited at any time. */
+    @ArchTest
+    static final ArchRule preauthorize_never_checks_role_names_on_methods = noMethods()
+            .should(ArchConditions.be(PREAUTHORIZE_CHECKS_A_ROLE))
+            .allowEmptyShould(true);
+
+    @ArchTest
+    static final ArchRule preauthorize_never_checks_role_names_on_classes = noClasses()
+            .should(ArchConditions.be(PREAUTHORIZE_CHECKS_A_ROLE))
             .allowEmptyShould(true);
 
     @ArchTest

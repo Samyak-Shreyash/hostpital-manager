@@ -109,6 +109,21 @@ CI (`.github/workflows/ci.yml`) runs on every PR and push to `main`: `backend` (
 
 Configuration is read from environment variables; all variables are documented in `.env.example`. Copy it to `.env` for local use (git-ignored). Repository layout and build decisions: ADR-0013.
 
+### First organization
+
+On a fresh database, set `HMS_BOOTSTRAP_ORG_NAME`, `HMS_BOOTSTRAP_ADMIN_EMAIL` and
+`HMS_BOOTSTRAP_ADMIN_PASSWORD_FILE=/var/lib/hms/bootstrap/admin-password.txt` in `.env` (see `.env.example`), then start the
+stack. The API creates the organization, default roles and a System Administrator; the temporary password is written only to
+that file on the `bootstrap-secret` volume:
+
+```bash
+docker compose -f infra/compose/compose.yml --env-file .env exec api cat /var/lib/hms/bootstrap/admin-password.txt
+```
+
+Log in, change the password, then **delete the file**
+(`... exec api rm /var/lib/hms/bootstrap/admin-password.txt`). Once an organization exists the bootstrap is a no-op, so
+restarts work with or without these variables.
+
 ## Backlog bootstrap
 The repository includes a one-off tool to create the planned issues:
 ```powershell

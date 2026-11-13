@@ -12,7 +12,7 @@
 | Extensions (section 5) | Implemented | `[E0-6]` |
 | `document_sequence` (section 6) | Table implemented; `DocumentNumberAllocator` comes with its first consumer | `[E0-6]` |
 | `hms.reject_modification()` (section 7) | Implemented; `HM001` → `409` mapping comes with its first consumer | `[E0-6]` |
-| Same-org composite FKs (section 4) | Planned | `[E1-6]` and each module |
+| Same-org composite FKs (section 4) | Planned (first used by V4 RBAC tables, section 13) | `[E1-6]` and each module |
 | RLS policies | Planned; mechanism confirmed by `[E1-2]` spike (ADR-0010) | `[E1-2]`, `[E1-6]` |
 
 ## 2. Conventions (apply to every migration from V1)
@@ -73,11 +73,11 @@ ALTER DEFAULT PRIVILEGES FOR ROLE hms_owner IN SCHEMA hms
 
 Flyway runs in-process at startup with the migration credentials (Spring Boot `spring.flyway.user`). Running migrations as a separate job is deferred until a deployment needs it.
 
-## 4. Organization ownership and same-org references (Planned)
-Referenced by domain-model invariant I11. Detail is written by `[E1-6]`; the intent fixed now so V1 does not contradict it:
-- Every business table has `organization_id uuid NOT NULL`, FK to `hms.organization(id)` once that table exists.
+## 4. Organization ownership and same-org references
+Referenced by domain-model invariant I11. Implemented by `[E1-6]` (V5, section 14):
+- Every business table has `organization_id uuid NOT NULL`, FK to `hms.organization(id)`.
 - High-risk parent tables expose `UNIQUE (organization_id, id)`; children reference them with composite FKs `(organization_id, <parent>_id) REFERENCES parent (organization_id, id)` so a row can never point at another org's row.
-- RLS is **not** part of the baseline; `[E1-6]` introduces it. The `[E1-2]` spike confirmed it works through HikariCP and JPA (ADR-0010, spike outcome). Pattern per business table: `ENABLE` + `FORCE ROW LEVEL SECURITY`; one policy `USING`/`WITH CHECK (organization_id = NULLIF(current_setting('app.organization_id', true), '')::uuid)`; the app sets the value per transaction with `set_config(..., true)`, never session-level. V1 keeps `hms_app` `NOBYPASSRLS` and non-owner so this can be enforced.
+- RLS is **not** part of the baseline; `[E1-6]` introduced it (V5, section 14, including the tables excluded from it). The `[E1-2]` spike confirmed it works through HikariCP and JPA (ADR-0010, spike outcome). Pattern per business table: `ENABLE` + `FORCE ROW LEVEL SECURITY`; one policy `USING`/`WITH CHECK (organization_id = NULLIF(current_setting('app.organization_id', true), '')::uuid)`; the app sets the value per transaction with `set_config(..., true)`, never session-level. V1 keeps `hms_app` `NOBYPASSRLS` and non-owner so this can be enforced.
 
 ## 5. Extensions
 | Extension | Why | Needed by |
@@ -147,7 +147,7 @@ REVOKE ALL ON FUNCTION hms.reject_modification() FROM PUBLIC;
 ## 8. Baseline migration (`V1__baseline.sql`) and order
 V1 contains, in order: extensions (section 5) → schema privileges and default privileges (section 3) → `hms.reject_modification()` (section 7) → `hms.document_sequence` (section 6). It creates no business tables.
 
-Applied: V2 `audit_event` + partitions `[E1-1]` (section 11); V3 `app_user` + Spring Session tables `[E1-3]` (section 12). Planned next (each in its issue): `organization`, FKs on `document_sequence`/`app_user` `[E1-6]` → roles, permissions `[E1-5]` → RLS policies `[E1-6]` (if ADR-0010 accepted) → M2+ modules.
+Applied: V2 `audit_event` + partitions `[E1-1]` (section 11); V3 `app_user` + Spring Session tables `[E1-3]` (section 12); V4 RBAC tables `[E1-5]` (section 13); V5 `organization`, organization FKs and RLS policies `[E1-6]` (section 14). Planned next: M2+ modules, each table with its RLS policy in the same migration.
 
 ## 9. Tests required for `[E0-6]`
 Integration tests (Testcontainers `postgres:17-alpine` with the role init script from section 3):
@@ -210,3 +210,58 @@ ADR-0007, PRD AUD-1/2/4, invariant I8. Written only through `audit.api.AuditReco
 - `audit_event.actor_id` now has an FK to `app_user (id)`.
 - Spring Session JDBC tables `hms.spring_session` and `hms.spring_session_attributes` follow Spring Session's PostgreSQL schema; `spring.session.jdbc.initialize-schema=never`. `hms_app` gets `DELETE` on both (sessions are transient technical rows, not business data). `principal_name` holds the user id, so all of a user's sessions can be revoked (`[E1-7]`).
 - Auth audit actions (entity `APP_USER`): `LOGIN_SUCCEEDED` (actor = user), `LOGIN_FAILED` (actor `NULL`; outcome `FAILURE`, or `DENIED` when locked/inactive), `ACCOUNT_LOCKED`, `LOGOUT`. A failed login for an unknown email is **not** audited: there is no organization to attribute it to.
+
+## 13. Roles and permissions (`V4__identity_rbac.sql`, `[E1-5]`, ADR-0006)
+| Table | Columns | Notes |
+|---|---|---|
+| `permission` | `code text` PK | Global catalogue, **not** org-owned; mirrors `com.hms.identity.api.Permissions` (an integration test compares both). `hms_app` has `SELECT` only: codes change by migration. |
+| `role` | `id`, `organization_id`, `code`, `name`, `version`, `created_at`, `updated_at` | Org-owned data. `UNIQUE (organization_id, code)`; `UNIQUE (organization_id, id)` as target for same-org FKs; `code` upper snake case. |
+| `role_permission` | `organization_id`, `role_id`, `permission_code` | PK `(role_id, permission_code)`; composite FK `(organization_id, role_id) → role`; FK to `permission`. |
+| `user_role` | `organization_id`, `user_id`, `role_id` | PK `(user_id, role_id)`; composite FKs to `app_user (organization_id, id)` and `role (organization_id, id)`, so a user can only hold roles of their own organization. |
+
+- Login loads the user's role codes and the union of their permissions into the session principal; the permissions become the Spring authorities. A change to a role takes effect on the user's next login (sessions are revoked on role change by role/user management).
+- Default roles (PRD section 3 personas: `SYSTEM_ADMIN`, `FACILITY_ADMIN`, `DOCTOR`, `NURSE`, `RECEPTIONIST`, `ACCOUNTANT`) are code templates (`DefaultRoleTemplates`) copied into an organization by `RoleProvisioning.provisionDefaultRoles`, not seeded by the migration (no organization exists at migration time). The PRD's `report:read` maps to `report:clinical`.
+- `DELETE` on `role_permission` / `user_role` is granted by `V6` (section 15). FK to `organization` and RLS policies were added by `[E1-6]` (section 14).
+
+## 14. Organization and row-level security (`V5__organization_rls.sql`, `[E1-6]`, ADR-0010)
+| Table | Columns | Notes |
+|---|---|---|
+| `organization` | `id`, `name`, `status` (`ACTIVE`/`INACTIVE`), `version`, `created_at`, `updated_at` | Minimal for M1; settings such as time zone come with organization management. No DELETE grant. |
+
+- FKs to `organization(id)` from `document_sequence`, `app_user`, `role`, `role_permission`, `user_role` and `audit_event`. V5 backfills an `organization` row for any `organization_id` already present (dev databases) before adding them.
+- **RLS tables** (`ENABLE` + `FORCE`, policy `org_isolation` with `USING` and `WITH CHECK` on `organization_id = NULLIF(current_setting('app.organization_id', true), '')::uuid`): `document_sequence`, `role`, `role_permission`, `user_role`. Every later org-owned table gets the same policy in the migration that creates it; `OrganizationIsolationIT` fails if a table with an `organization_id` column is neither under forced RLS nor listed below.
+- **Excluded from RLS (ruling, 2026-11-12):** `organization` (it is the tenant itself), `app_user` (login looks the user up by email before any organization is known), `audit_event` (written by unauthenticated login flows; read only through the org-scoped audit viewer) and `spring_session` / `spring_session_attributes` (technical rows, no `organization_id`). `permission` is global reference data. App-level scoping by the principal's organization still applies to every query on these tables.
+- **Context:** `OrganizationContext` (`com.hms.shared.tenancy`) yields the principal's organization (via `OrganizationPrincipal`, implemented by `AuthenticatedPrincipal`); `OrganizationTransactionListener` runs `set_config('app.organization_id', <org>, true)` as the first statement of every new transaction that has one. System or unauthenticated flows use `OrganizationContext.runAs(org, work)` or, when the organization is only learnt mid-transaction, `bindToCurrentTransaction(org)` (login after the email lookup; `RoleProvisioning.provisionDefaultRoles`). Both refuse an organization other than an authenticated principal's. No context means RLS tables return no rows (fail-closed).
+- **Jobs:** audit partition maintenance runs without a principal; it touches only `audit_event` through a `SECURITY DEFINER` function, so it needs no context. Future jobs that touch RLS tables iterate organizations with `runAs`.
+- **Migrations:** `FORCE` binds `hms_owner` too, so a migration that seeds or backfills rows of an RLS table must `set_config('app.organization_id', <org>, true)` per organization first.
+
+## 15. User and role management (`V6__user_role_management.sql`, `[E1-7]`)
+- **Explicit `DELETE` grants** to `hms_app` on `user_role` (remove a role from a user) and `role_permission` (remove a permission from a role). Justification: pure mapping rows with no identity and no clinical or financial data; each change is audited (`USER_UPDATED` / `ROLE_UPDATED`, field names) in the same transaction. No other table gains `DELETE`; `role` and `app_user` rows are never deleted.
+- **No `status` column on `role`** (decision for `[E1-7]`): api-design.md section 3 has no role deactivation, and an unused role is harmless. A role can be emptied of permissions instead. Add a status with its own migration if a requirement appears.
+- `app_user` is outside RLS (section 14), so every user-management query filters by the caller's `organization_id` explicitly (`AppUserRepository.findByIdAndOrganization*`, `UserAdminRepository`); the role tables are under RLS and queried in the principal's organization context.
+- **Last administrator rule**: changes that can remove an administrator (deactivate, role replacement, role permission edit) first `SELECT ... FOR UPDATE` the `organization` row, then count active users holding both `user:update` and `role:manage` before and after, and roll back with `409 LAST_ADMINISTRATOR` if the count would drop from at least one to zero. Lock order: organization, then user/role rows.
+- **Session revocation**: `DELETE FROM hms.spring_session WHERE principal_name = <user id>` (attributes cascade), optionally excluding the caller's own `session_id`. Applied on deactivate, admin password reset, role change, role permission change (for each holder) and self-service password change.
+
+## 16. Organization settings and bootstrap (`V7__organization_settings.sql`, `[E2-1]`)
+- `organization` gains `timezone text NOT NULL DEFAULT 'Asia/Kolkata'` (IANA id; the application validates it against the JDK zone list, the CHECK bounds its shape), `gstin text NULL` (CHECK `^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$`, format only) and `address text NULL` (1-500 chars). No new grants: still no DELETE on `organization`; the existing `name` CHECK (1-200) applies.
+- Settings updates are compare-and-set on `version` (`UPDATE ... WHERE id = ? AND version = ?`). `organization` is outside RLS, so each query is scoped by the principal's organization explicitly.
+- Bootstrap (organization, default roles, first System Administrator) runs in one transaction under `pg_advisory_xact_lock(hashtext('hms.bootstrap'))`, so concurrent instances cannot create two organizations; the loser finds one and does nothing. Lock order unaffected (nothing else is locked first).
+
+## 17. Departments and specialties (`V8__department_specialty.sql`, `[E2-2]`)
+- `department` and `specialty` (organization module) share one shape: `id uuid PK`, `organization_id` (FK `organization`), `code text` (CHECK `^[A-Z0-9_]{2,20}$`), `name text` (1-100), `active boolean NOT NULL DEFAULT true`, `version bigint`, `created_at`, `updated_at`.
+- `UNIQUE (organization_id, code)` enforces the per-organization code rule (the same code may exist in another organization); the insert is `ON CONFLICT DO NOTHING`, so concurrent duplicates lose cleanly and surface as `409 DUPLICATE_DEPARTMENT_CODE` / `DUPLICATE_SPECIALTY_CODE`. `UNIQUE (organization_id, id)` is the target for same-org composite FKs from later tables (practitioner, ward).
+- Both tables are under `ENABLE` + `FORCE ROW LEVEL SECURITY` with the standard `org_isolation` policy (section 14). Queries also filter by the principal's organization.
+- No DELETE grant: `hms_app` has the default SELECT/INSERT/UPDATE only. Retiring an entry is `active = false` (a test asserts the database refuses DELETE). The code is immutable after creation. Updates are compare-and-set on `version`.
+
+## 18. Service catalog and prices (`V9__service_catalog.sql`, `[E2-3]`)
+- `service_catalog_item` (billing module): `id`, `organization_id` (FK), `code` (`^[A-Z0-9_]{2,30}$`, `UNIQUE (organization_id, code)`), `name` (1-150), `active`, `version`, timestamps; `UNIQUE (organization_id, id)` is the target of same-org composite FKs (invoice items later). No DELETE grant; retire with `active = false`.
+- `service_price`: one row per price version: `amount numeric(14,2) CHECK (amount >= 0)`, `effective_from timestamptz NOT NULL`, `effective_to timestamptz NULL` (NULL = open-ended), `created_by`, `created_at`; composite FK `(organization_id, service_id)` to the item.
+- **Range choice**: `timestamptz` pair, not `daterange`, because a price can change mid-day and invoices are priced at an instant. Semantics are half-open `[effective_from, effective_to)`: the end instant belongs to the successor. `EXCLUDE USING gist (service_id WITH =, tstzrange(effective_from, effective_to, '[)') WITH &&)` (needs `btree_gist`, V1) makes overlap impossible even under concurrent inserts; `CHECK (effective_to IS NULL OR effective_to > effective_from)`. Adjacent ranges are allowed. "Price at T" is `effective_from <= T AND (effective_to IS NULL OR T < effective_to)`. Instants are stored and compared at microsecond precision (the service truncates).
+- **Immutability**: `hms_app` has no DELETE and only column-level `UPDATE (effective_to)`; trigger `hms.guard_service_price()` additionally rejects deleting a row or changing anything except setting `effective_to` once from NULL. A price change = close the latest open version at the new start, insert the new open-ended one, both under a `SELECT ... FOR UPDATE` on the service row (lock order: service, then prices).
+- Both tables are under `ENABLE` + `FORCE ROW LEVEL SECURITY` with the standard `org_isolation` policy (section 14). Invoices copy the amount (and may keep the price id); they never reference a price for its value.
+
+## 19. Patients (`V10__patient.sql`, `[E3-1]`)
+- `patient`: `id`, `organization_id` (FK), `uhid text` (`HMS-` + at least 6 digits), `full_name` (2-120), `sex` (M/F/O/U), `date_of_birth date NOT NULL` (an estimated age is stored as a derived date with `dob_estimated = true`), `phone` (E.164), `status` (`ACTIVE/INACTIVE/MERGED/DECEASED`, BR-P4), `created_by`, `version`, timestamps. `UNIQUE (organization_id, uhid)` (BR-P2), `UNIQUE (organization_id, id)` as the same-org FK target.
+- `patient_address` (one current address per type via partial unique index `(patient_id, address_type) WHERE is_current`) and `patient_contact` (`contact_type = 'EMERGENCY'`): composite FK `(organization_id, patient_id)` to `patient (organization_id, id)`.
+- UHID numbers come from `document_sequence` (`document_type = 'UHID'`, `period_key = 'ALL'`) through `com.hms.shared.numbering.DocumentNumberAllocator` (section 6): the registration allocates after validation and just before the inserts, the counter row lock is held until commit, a rollback returns the number, so the sequence is gapless per organization and registrations of one organization serialise on that row. The counter row is created by the first allocation (`INSERT ... ON CONFLICT DO UPDATE`, under the organization's RLS context).
+- All three tables: `ENABLE` + `FORCE ROW LEVEL SECURITY` with the standard `org_isolation` policy (section 14). No DELETE grant. Search indexes (trigram name) and duplicate detection arrive with `[E3-2]` / `[E3-3]`.

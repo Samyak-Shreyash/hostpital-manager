@@ -1,8 +1,12 @@
 package com.hms.identity.web;
 
 import com.hms.identity.api.AuthenticatedPrincipal;
+import com.hms.organization.api.OrganizationDirectory;
+import com.hms.organization.api.OrganizationSummary;
 import com.hms.identity.application.AuthenticationService;
+import com.hms.identity.application.ChangePasswordResult;
 import com.hms.identity.application.LoginResult;
+import com.hms.shared.domain.BusinessRuleException;
 import com.hms.shared.web.ProblemException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -13,6 +17,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.context.SecurityContextRepository;
@@ -30,8 +35,11 @@ class AuthController {
 
     private final AuthenticationService authentication;
     private final SecurityContextRepository securityContextRepository;
+    private final OrganizationDirectory organizations;
 
-    AuthController(AuthenticationService authentication, SecurityContextRepository securityContextRepository) {
+    AuthController(AuthenticationService authentication, SecurityContextRepository securityContextRepository,
+            OrganizationDirectory organizations) {
+        this.organizations = organizations;
         this.authentication = authentication;
         this.securityContextRepository = securityContextRepository;
     }
@@ -40,10 +48,13 @@ class AuthController {
     @PreAuthorize("permitAll()")
     LoginResponse login(@Valid @RequestBody LoginRequest request,
             HttpServletRequest httpRequest, HttpServletResponse httpResponse) {
+        // A login attempt acts as nobody until it succeeds: an identity already in this session must not lend
+        // its organization to the attempt (ADR-0010). The stored session is untouched unless login succeeds.
+        SecurityContextHolder.clearContext();
         return switch (authentication.login(request.email(), request.password())) {
             case LoginResult.Succeeded ok -> {
                 startSession(ok.principal(), httpRequest, httpResponse);
-                yield LoginResponse.of(ok.principal(), ok.mustChangePassword());
+                yield LoginResponse.of(ok.principal(), ok.mustChangePassword(), organization(ok.principal()));
             }
             case LoginResult.InvalidCredentials ignored -> throw new ProblemException(
                     HttpStatus.UNAUTHORIZED, "INVALID_CREDENTIALS", "Email or password is incorrect.");
@@ -69,7 +80,24 @@ class AuthController {
     @GetMapping("/me")
     @PreAuthorize("isAuthenticated()")
     LoginResponse me(@AuthenticationPrincipal AuthenticatedPrincipal principal) {
-        return LoginResponse.of(principal, false);
+        return LoginResponse.of(principal, authentication.isPasswordChangeRequired(principal.userId()),
+                organization(principal));
+    }
+
+    @PostMapping("/change-password")
+    @PreAuthorize("isAuthenticated()")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    void changePassword(@AuthenticationPrincipal AuthenticatedPrincipal principal,
+            @Valid @RequestBody ChangePasswordRequest request, HttpServletRequest httpRequest) {
+        String sessionId = httpRequest.getSession().getId();
+        switch (authentication.changePassword(principal.userId(), request.currentPassword(), request.newPassword(),
+                sessionId)) {
+            case ChangePasswordResult.Changed ignored -> { }
+            case ChangePasswordResult.WrongCurrentPassword ignored -> throw new BusinessRuleException(
+                    "INVALID_CURRENT_PASSWORD", "The current password is incorrect.");
+            case ChangePasswordResult.Locked ignored -> throw new ProblemException(
+                    HttpStatus.LOCKED, "ACCOUNT_LOCKED", "Too many failed attempts. Try again later.");
+        }
     }
 
     private void startSession(AuthenticatedPrincipal principal,
@@ -79,9 +107,17 @@ class AuthController {
             request.changeSessionId();
         }
         SecurityContext context = SecurityContextHolder.createEmptyContext();
-        // Authorities come with RBAC ([E1-5]).
-        context.setAuthentication(UsernamePasswordAuthenticationToken.authenticated(principal, null, List.of()));
+        // Authorities are the permission codes loaded at login (ADR-0006); a role change applies on next login.
+        List<SimpleGrantedAuthority> authorities = principal.permissions().stream()
+                .map(SimpleGrantedAuthority::new)
+                .toList();
+        context.setAuthentication(UsernamePasswordAuthenticationToken.authenticated(principal, null, authorities));
         SecurityContextHolder.setContext(context);
         securityContextRepository.saveContext(context, request, response);
+    }
+
+    private OrganizationSummary organization(AuthenticatedPrincipal principal) {
+        return organizations.find(principal.organizationId())
+                .orElseThrow(() -> new IllegalStateException("organization of a logged-in user is missing"));
     }
 }
