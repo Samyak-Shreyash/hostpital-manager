@@ -4,7 +4,11 @@ import com.hms.patient.application.PatientService;
 import com.hms.patient.application.PatientView;
 import com.hms.shared.tenancy.OrganizationPrincipal;
 import jakarta.validation.Valid;
+import com.hms.patient.application.PatientSummary;
+import com.hms.shared.PageResult;
+import java.time.LocalDate;
 import java.util.UUID;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -33,6 +37,17 @@ class PatientController {
     PatientView register(@AuthenticationPrincipal OrganizationPrincipal actor,
             @Valid @RequestBody CreatePatientRequest request) {
         return patients.register(actor, request.toCommand());
+    }
+
+    @GetMapping
+    @PreAuthorize("hasAuthority('patient:search')")
+    PageResult<PatientSummary> search(@AuthenticationPrincipal OrganizationPrincipal actor,
+            @RequestParam(required = false) String q, @RequestParam(required = false) String uhid,
+            @RequestParam(required = false) String phone,
+            @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(
+                    iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) LocalDate dob,
+            @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
+        return patients.search(actor, q, uhid, phone, dob, page, size);
     }
 
     @GetMapping("/{id}")

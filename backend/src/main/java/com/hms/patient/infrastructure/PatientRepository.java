@@ -7,6 +7,8 @@ import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -18,6 +20,10 @@ public class PatientRepository {
 
     public record PatientRow(UUID id, String uhid, String fullName, String sex, LocalDate dateOfBirth,
             boolean dobEstimated, String phone, String status, long version, Instant createdAt, Instant updatedAt) {
+    }
+
+    /** Search filters; null = not given. {@code name} is a trigram query, the rest are exact. */
+    public record SearchFilter(String name, String uhid, String phone, LocalDate dateOfBirth) {
     }
 
     private final JdbcClient jdbc;
@@ -78,6 +84,65 @@ public class PatientRepository {
                 ORDER BY created_at, id LIMIT 1
                 """).params(org, patientId).query((rs, n) -> new ContactView(rs.getString("name"),
                 rs.getString("relationship"), rs.getString("phone"))).optional();
+    }
+
+    /**
+     * Fuzzy name (pg_trgm similarity at the default 0.3 threshold, or a substring match; both are served by
+     * ix_patient_full_name_trgm) AND exact UHID / phone / date of birth. Best name match first.
+     */
+    public List<PatientRow> search(UUID org, SearchFilter f, int limit, long offset) {
+        Where w = where(org, f);
+        String order = f.name() == null ? "full_name, id"
+                : "hms.similarity(full_name, :name) DESC, full_name, id";
+        var spec = jdbc.sql("""
+                SELECT id, uhid, full_name, sex, date_of_birth, dob_estimated, phone, status, version, created_at,
+                    updated_at
+                FROM hms.patient WHERE %s ORDER BY %s LIMIT :limit OFFSET :offset
+                """.formatted(w.sql(), order)).param("limit", limit).param("offset", offset);
+        for (var e : w.params().entrySet()) {
+            spec = spec.param(e.getKey(), e.getValue());
+        }
+        return spec.query(PatientRepository::mapPatient).list();
+    }
+
+    public long countSearch(UUID org, SearchFilter f) {
+        Where w = where(org, f);
+        var spec = jdbc.sql("SELECT count(*) FROM hms.patient WHERE " + w.sql());
+        for (var e : w.params().entrySet()) {
+            spec = spec.param(e.getKey(), e.getValue());
+        }
+        return spec.query(Long.class).single();
+    }
+
+    private static String escapeLike(String s) {
+        return s.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
+    }
+
+    private record Where(String sql, java.util.Map<String, Object> params) {
+    }
+
+    private static Where where(UUID org, SearchFilter f) {
+        List<String> clauses = new ArrayList<>(List.of("organization_id = :org"));
+        java.util.Map<String, Object> params = new java.util.LinkedHashMap<>();
+        params.put("org", org);
+        if (f.name() != null) {
+            clauses.add("(full_name OPERATOR(hms.%) :name OR full_name ILIKE :like ESCAPE '\\')");
+            params.put("name", f.name());
+            params.put("like", "%" + escapeLike(f.name()) + "%");
+        }
+        if (f.uhid() != null) {
+            clauses.add("uhid = :uhid");
+            params.put("uhid", f.uhid());
+        }
+        if (f.phone() != null) {
+            clauses.add("phone = :phone");
+            params.put("phone", f.phone());
+        }
+        if (f.dateOfBirth() != null) {
+            clauses.add("date_of_birth = :dob");
+            params.put("dob", f.dateOfBirth());
+        }
+        return new Where(String.join(" AND ", clauses), params);
     }
 
     private static PatientRow mapPatient(ResultSet rs, int n) throws SQLException {

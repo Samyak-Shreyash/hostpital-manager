@@ -19,6 +19,7 @@ import java.util.regex.Pattern;
  * @param entityId       affected entity, or {@code null} when there is none (e.g. failed login)
  * @param changedFields  camelCase field names, optionally dotted ({@code address.city}); at most 50,
  *                       stored de-duplicated and sorted
+ * @param resultCount    number of results for search events, otherwise {@code null}; a count is not PHI
  */
 public record AuditEntry(
         UUID organizationId,
@@ -27,7 +28,8 @@ public record AuditEntry(
         String entityType,
         UUID entityId,
         AuditOutcome outcome,
-        List<String> changedFields) {
+        List<String> changedFields,
+        Integer resultCount) {
 
     public static final int MAX_CHANGED_FIELDS = 50;
 
@@ -35,7 +37,16 @@ public record AuditEntry(
     private static final Pattern FIELD_NAME =
             Pattern.compile("[a-z][A-Za-z0-9]{0,63}(\\.[a-z][A-Za-z0-9]{0,63})*");
 
+    /** Event without a result count (everything except searches). */
+    public AuditEntry(UUID organizationId, UUID actorId, String action, String entityType, UUID entityId,
+            AuditOutcome outcome, List<String> changedFields) {
+        this(organizationId, actorId, action, entityType, entityId, outcome, changedFields, null);
+    }
+
     public AuditEntry {
+        if (resultCount != null && resultCount < 0) {
+            throw new IllegalArgumentException("resultCount must not be negative");
+        }
         Objects.requireNonNull(organizationId, "organizationId");
         Objects.requireNonNull(outcome, "outcome");
         requireCode(action, "action");
