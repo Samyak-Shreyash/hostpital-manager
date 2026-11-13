@@ -1,6 +1,6 @@
 # Review notes and open questions
 
-> Reconciliation log across the design documents. Add an entry when documents disagree or a question is deferred; close it by pointing to the document or ADR that settled it. Last reviewed 2026-11-12.
+> Reconciliation log across the design documents. Add an entry when documents disagree or a question is deferred; close it by pointing to the document or ADR that settled it. Last reviewed 2026-11-14.
 
 ## 1. Decisions settled
 
@@ -56,6 +56,7 @@ Legal review flags (for `[E10-8]`, not decided here): ABHA retention and masking
 | Q7 | Time zone handling for daily charges | ADR candidates | `[E8-5]` | Facility time zone from org settings |
 | Q8 | The staff screen/API neither shows nor assigns roles; roles are managed only via `PATCH /users/{id}` (owner decision 2026-11-14) | `[E4-2]` | `[E4-4]` | Revisit when building the staff UI (`[E4-4]`) |
 | Q9 | `[E4-3]` (#44) criterion "slots honour existing bookings" is deferred to the appointment module: subtract bookings from `PractitionerAvailability.freeSlots` and flag (never cancel) bookings that clash with leave; also decide whether `isAvailable` must align to slot boundaries | `[E4-3]` | `[E5-1]` | Free slots ignore bookings until `[E5-1]`; `isAvailable` checks window/leave containment only |
+| Q10 | `GET /doctors/{id}/slots` requires `appointment:read` (the front desk books from it), not `practitioner:read`. Reviewer recommends keeping; owner to confirm | `[E4-3]` | `[E5-1]` | Keep `appointment:read` |
 
 ## 3. Legal / regulatory review required (no compliance claimed)
 
@@ -67,3 +68,8 @@ Tracked for `[E10-8]`: lawful basis for health-data processing (clinic as fiduci
 - `issues.json` and `Create-Issues.ps1` are referenced by CLAUDE.md section 11 but are not in the working tree. GitHub issues are the backlog of record.
 - ADRs 0002–0012 are condensed (some lack Problem/Options sections). Expand an ADR when it is next revised.
 - Backend modules are empty package skeletons; only `shared` has code. Docs describing module behaviour are design, not implementation.
+
+## 5. Upgrade notes
+
+- **V21 (`V21__role_templates_staff_permissions.sql`, owner decisions 2026-11-14).** Users who are logged in when V21 is applied keep their old authorities until they log in again (authorities are read at login and kept in the session, ADR-0005); ask affected users to log out and in, or end their sessions. The built-in `RECEPTIONIST` roles lose `patient:update-clinical` and `patient:update-identity`, `DOCTOR` and `NURSE` gain `patient:update-clinical`, and `FACILITY_ADMIN` gains `staff:*`. Custom roles are untouched. Consequence for custom user-manager roles: assigning a built-in `NURSE` or `DOCTOR` role is subject to the privilege-escalation check (`[E1-7]`: you cannot grant permissions you do not hold), so a role with `role:assign` that lacks `patient:update-clinical` now gets the privilege-escalation error when assigning `NURSE` or `DOCTOR`; give that role `patient:update-clinical` (or assign through a facility administrator).
+- **Configuration.** Outside the new `dev` and `test` profiles the application requires `HMS_FIELD_ENCRYPTION_KEYS` and `HMS_ABHA_HMAC_KEY` (ABHA encryption and lookup hash, ADR-0009); see `.env.example`.
