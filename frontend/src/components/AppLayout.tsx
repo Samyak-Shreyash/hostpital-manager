@@ -28,6 +28,7 @@ export function AppLayout() {
         <span className="font-semibold">{data?.organization.name}</span>
         <nav aria-label="Main" className="flex gap-2">
           <NavLink to="/" end className={linkClass}>Home</NavLink>
+          {can('patient:search') && <NavLink to="/patients" className={linkClass}>Patients</NavLink>}
           {can('user:read') && <NavLink to="/users" className={linkClass}>Users</NavLink>}
           {can('role:read') && <NavLink to="/roles" className={linkClass}>Roles</NavLink>}
           {can('audit:read') && <NavLink to="/audit" className={linkClass}>Audit</NavLink>}
