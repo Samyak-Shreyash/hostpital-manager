@@ -5,10 +5,11 @@ import { useForm } from 'react-hook-form'
 import { Link, useNavigate } from 'react-router'
 import { ApiError } from '../../api/client'
 import { patientKeys, registerPatient, type DuplicateCandidate, type RegisterPatientBody } from '../../api/patients'
-import { Field, FormError, inputClass, primaryButton, secondaryButton } from '../../components/ui'
+import { Field, FormError, inputClass, primaryButton } from '../../components/ui'
 import { errorMessage } from '../auth/messages'
 import { useCan } from '../auth/useSession'
 import { AddressFields } from './AddressFields'
+import { DuplicateCandidates } from './DuplicateCandidates'
 import { registerSchema, toAddress, type RegisterValues } from './schemas'
 
 function toBody(v: RegisterValues): RegisterPatientBody {
@@ -30,8 +31,6 @@ export function PatientRegisterPage() {
   const canOverride = useCan('patient:override-duplicate')
   const [pending, setPending] = useState<RegisterPatientBody | null>(null)
   const [candidates, setCandidates] = useState<DuplicateCandidate[] | null>(null)
-  const [reason, setReason] = useState('')
-  const [reasonError, setReasonError] = useState<string | null>(null)
   const form = useForm<RegisterValues>({
     resolver: zodResolver(registerSchema),
     defaultValues: { fullName: '', sex: undefined, dateOfBirth: '', ageYears: '', phone: '', abhaNumber: '', line1: '', line2: '', city: '', state: '', pincode: '' },
@@ -55,14 +54,6 @@ export function PatientRegisterPage() {
   const abhaTaken = apiError?.code === 'DUPLICATE_ABHA'
   const generalError = register.isError && apiError?.code !== 'DUPLICATE_SUSPECTED' && !abhaTaken ? errorMessage(register.error) : null
 
-  const registerAnyway = () => {
-    if (!pending) return
-    if (!reason.trim()) {
-      setReasonError('Enter a reason for registering a new patient')
-      return
-    }
-    register.mutate({ ...pending, confirmNotDuplicate: true, overrideReason: reason.trim() })
-  }
 
   return (
     <section>
@@ -114,35 +105,13 @@ export function PatientRegisterPage() {
       </form>
 
       {candidates && (
-        <div role="region" aria-label="Possible duplicates" className="mt-6 max-w-xl rounded border border-amber-300 bg-amber-50 p-4">
-          <h2 className="mb-2 font-semibold">This patient may already be registered</h2>
-          <ul className="mb-3 text-sm">
-            {candidates.map((c) => (
-              <li key={c.id} className="mb-1">
-                <Link className="text-blue-700 underline" to={`/patients/${encodeURIComponent(c.id)}`}>{c.fullName}</Link>
-                {' '}<span className="font-mono">{c.uhid}</span> · {c.dateOfBirth ?? 'DOB unknown'} · {c.phoneMasked}
-              </li>
-            ))}
-          </ul>
-          {canOverride ? (
-            <>
-              <Field label="Reason this is a different person" htmlFor="overrideReason" error={reasonError ?? undefined}>
-                <textarea
-                  id="overrideReason"
-                  className={inputClass}
-                  maxLength={500}
-                  value={reason}
-                  onChange={(e) => { setReason(e.target.value); setReasonError(null) }}
-                />
-              </Field>
-              <button type="button" className={secondaryButton} disabled={register.isPending} onClick={registerAnyway}>
-                Register anyway
-              </button>
-            </>
-          ) : (
-            <p className="text-sm">Open the existing record, or ask a user allowed to override duplicates to register this patient.</p>
-          )}
-        </div>
+        <DuplicateCandidates
+          candidates={candidates}
+          canOverride={canOverride}
+          submitting={register.isPending}
+          actionLabel="Register anyway"
+          onOverride={(reason) => pending && register.mutate({ ...pending, confirmNotDuplicate: true, overrideReason: reason })}
+        />
       )}
     </section>
   )

@@ -107,6 +107,8 @@ describe('patient registration', () => {
     expect(registerSchema.safeParse({ ...base, ageYears: '35' }).success).toBe(true)
     expect(registerSchema.safeParse({ ...base, ageYears: '35', abhaNumber: '123' }).success).toBe(false)
     expect(registerSchema.safeParse({ ...base, ageYears: '35', abhaNumber: '12-3456-7890-1234' }).success).toBe(true)
+    expect(registerSchema.safeParse({ ...base, ageYears: '130' }).success).toBe(true)
+    expect(registerSchema.safeParse({ ...base, ageYears: '131' }).success).toBe(false)
   })
 
   const candidate = { id: 'p-9', uhid: 'DEMO-000009', fullName: 'Asha Testpatient', dateOfBirth: '1990-05-10', phoneMasked: '+91******0001', score: 0.92 }
@@ -138,7 +140,7 @@ describe('patient registration', () => {
     let n = 0
     const { calls } = await submitDuplicate(['patient:create', 'patient:read', 'patient:override-duplicate'], () => (++n === 1 ? dup() : json(201, PATIENT)))
     fireEvent.click(screen.getByRole('button', { name: 'Register anyway' }))
-    expect(await screen.findByText('Enter a reason for registering a new patient')).toBeInTheDocument()
+    expect(await screen.findByText('Reason must be at least 5 characters')).toBeInTheDocument()
     fireEvent.change(screen.getByLabelText('Reason this is a different person'), { target: { value: 'Different father name' } })
     fireEvent.click(screen.getByRole('button', { name: 'Register anyway' }))
     expect(await screen.findByRole('region', { name: 'Patient banner' })).toHaveTextContent('DEMO-000001')
@@ -191,6 +193,9 @@ describe('patient detail', () => {
     fireEvent.change(await screen.findByLabelText('Full name'), { target: { value: 'Asha T. Testpatient' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
     expect(await screen.findByText('A reason is required to change name, sex or date of birth')).toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('Reason for identity change'), { target: { value: 'typo' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+    expect(await screen.findByText('Reason must be at least 5 characters')).toBeInTheDocument()
     fireEvent.change(screen.getByLabelText('Reason for identity change'), { target: { value: 'Spelling fix' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
     expect(await screen.findByText('Changes saved.')).toBeInTheDocument()
@@ -229,6 +234,51 @@ describe('patient detail', () => {
     renderApp('/patients/p-1')
     expect(await screen.findByText('Penicillin')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /entered in error/ })).not.toBeInTheDocument()
+  })
+
+  it('clears a stored ABHA with "Remove ABHA" (sends empty string)', async () => {
+    document.cookie = 'XSRF-TOKEN=t'
+    const { calls } = detailRoutes(['patient:read', 'patient:update'], { 'PATCH /api/v1/patients/p-1': json(200, { ...PATIENT, abhaLast4: null, version: 4 }) })
+    renderApp('/patients/p-1')
+    fireEvent.click(await screen.findByLabelText('Remove ABHA'))
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+    expect(await screen.findByText('Changes saved.')).toBeInTheDocument()
+    expect(screen.getByTestId('abha')).toHaveTextContent('Not recorded')
+    const patch = calls.find((c) => c.key === 'PATCH /api/v1/patients/p-1')!
+    expect(JSON.parse(String(patch.init?.body))).toEqual({ version: 3, abhaNumber: '' })
+  })
+
+  const editCandidate = { id: 'p-9', uhid: 'DEMO-000009', fullName: 'Asha Testpatient', dateOfBirth: '1990-05-10', phoneMasked: '+91******0002', score: 0.9 }
+  const editDup = () => json(409, { code: 'DUPLICATE_SUSPECTED', detail: 'may exist', candidates: [editCandidate] })
+
+  it('shows duplicate candidates on edit and lets an overrider save anyway with a reason', async () => {
+    document.cookie = 'XSRF-TOKEN=t'
+    let n = 0
+    const { calls } = detailRoutes(['patient:read', 'patient:update', 'patient:override-duplicate'], {
+      'PATCH /api/v1/patients/p-1': () => (++n === 1 ? editDup() : json(200, { ...PATIENT, phone: '9800000002', version: 4 })),
+    })
+    renderApp('/patients/p-1')
+    fireEvent.change(await screen.findByLabelText('Phone'), { target: { value: '9800000002' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+    expect(await screen.findByText(/\+91\*{6}0002/)).toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('Reason this is a different person'), { target: { value: 'abc' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save anyway' }))
+    expect(await screen.findByText('Reason must be at least 5 characters')).toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('Reason this is a different person'), { target: { value: 'Shared family phone' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save anyway' }))
+    expect(await screen.findByText('Changes saved.')).toBeInTheDocument()
+    const patches = calls.filter((c) => c.key === 'PATCH /api/v1/patients/p-1')
+    expect(JSON.parse(String(patches[1].init?.body))).toEqual({ version: 3, phone: '9800000002', confirmNotDuplicate: true, overrideReason: 'Shared family phone' })
+  })
+
+  it('shows duplicate candidates on edit without an override for other users', async () => {
+    document.cookie = 'XSRF-TOKEN=t'
+    detailRoutes(['patient:read', 'patient:update'], { 'PATCH /api/v1/patients/p-1': editDup })
+    renderApp('/patients/p-1')
+    fireEvent.change(await screen.findByLabelText('Phone'), { target: { value: '9800000002' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+    expect(await screen.findByText(/DEMO-000009/)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Save anyway' })).not.toBeInTheDocument()
   })
 
   it('is forbidden without patient:read', async () => {

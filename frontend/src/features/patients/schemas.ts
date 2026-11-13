@@ -5,6 +5,11 @@ export const ABHA_PATTERN = /^(\d{14}|\d{2}-\d{4}-\d{4}-\d{4})$/
 /** E.164 or a bare 10-digit Indian number. */
 export const PHONE_PATTERN = /^(\+[1-9]\d{7,14}|\d{10})$/
 
+/** identityChangeReason / overrideReason: 5-500 characters. */
+export const reasonSchema = (label: string) =>
+  z.string().trim().min(5, `${label} must be at least 5 characters`).max(500, `${label} must be at most 500 characters`)
+export const overrideReasonSchema = reasonSchema('Reason')
+
 const optionalAbha = z.string().trim().refine((v) => v === '' || ABHA_PATTERN.test(v), 'ABHA number must be 14 digits')
 const notFuture = (v: string) => v === '' || v <= new Date().toISOString().slice(0, 10)
 
@@ -37,7 +42,7 @@ export const registerSchema = z
     fullName: z.string().trim().min(2, 'Full name must be at least 2 characters').max(120, 'Full name is too long'),
     sex: z.enum(['M', 'F', 'O', 'U'], { message: 'Select sex' }),
     dateOfBirth: z.string().refine(notFuture, 'Date of birth cannot be in the future'),
-    ageYears: z.string().trim().refine((v) => v === '' || (/^\d{1,3}$/.test(v) && Number(v) <= 150), 'Enter age in whole years'),
+    ageYears: z.string().trim().refine((v) => v === '' || (/^\d{1,3}$/.test(v) && Number(v) <= 130), 'Enter age in whole years'),
     phone: z.string().trim().regex(PHONE_PATTERN, 'Enter a 10-digit mobile number or +<country><number>'),
     abhaNumber: optionalAbha,
     ...addressFields,
@@ -57,8 +62,12 @@ export const updateSchema = z
     dateOfBirth: z.string().refine(notFuture, 'Date of birth cannot be in the future'),
     phone: z.string().trim().regex(PHONE_PATTERN, 'Enter a 10-digit mobile number or +<country><number>'),
     abhaNumber: optionalAbha,
-    identityChangeReason: z.string().trim().max(500, 'Reason is too long'),
+    identityChangeReason: z.string().trim().max(500, 'Reason must be at most 500 characters'),
+    removeAbha: z.boolean(),
     ...addressFields,
   })
-  .superRefine((v, ctx) => checkAddress(v, ctx))
+  .superRefine((v, ctx) => {
+    if (v.removeAbha && v.abhaNumber) ctx.addIssue({ code: 'custom', path: ['abhaNumber'], message: 'Leave blank when removing the ABHA number' })
+    checkAddress(v, ctx)
+  })
 export type UpdateValues = z.infer<typeof updateSchema>

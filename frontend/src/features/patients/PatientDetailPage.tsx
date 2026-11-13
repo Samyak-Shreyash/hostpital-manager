@@ -2,9 +2,10 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { Link, useParams } from 'react-router'
 import { ApiError } from '../../api/client'
-import { getPatient, listAllergies, listHistory, patientKeys, updatePatient, type UpdatePatientBody } from '../../api/patients'
+import { getPatient, listAllergies, listHistory, patientKeys, updatePatient, type DuplicateCandidate, type UpdatePatientBody } from '../../api/patients'
 import { errorMessage } from '../auth/messages'
 import { useCan } from '../auth/useSession'
+import { DuplicateCandidates } from './DuplicateCandidates'
 import { AllergyList, HistoryList } from './ClinicalEntries'
 import { maskedAbha } from './format'
 import { PatientBanner } from './PatientBanner'
@@ -16,6 +17,9 @@ export function PatientDetailPage() {
   const canUpdate = useCan('patient:update')
   const canIdentity = useCan('patient:update-identity')
   const canClinical = useCan('patient:update-clinical')
+  const canOverride = useCan('patient:override-duplicate')
+  const [pending, setPending] = useState<UpdatePatientBody | null>(null)
+  const [candidates, setCandidates] = useState<DuplicateCandidate[] | null>(null)
   const [saved, setSaved] = useState(false)
   const patient = useQuery({ queryKey: patientKeys.detail(id), queryFn: () => getPatient(id) })
   const allergies = useQuery({ queryKey: patientKeys.allergies(id), queryFn: () => listAllergies(id), enabled: patient.isSuccess })
@@ -26,6 +30,12 @@ export function PatientDetailPage() {
       queryClient.setQueryData(patientKeys.detail(id), updated)
       void queryClient.invalidateQueries({ queryKey: ['patients', 'search'] })
       setSaved(true)
+      setCandidates(null)
+    },
+    onError: (error) => {
+      if (error instanceof ApiError && error.code === 'DUPLICATE_SUSPECTED') {
+        setCandidates((error.properties.candidates as DuplicateCandidate[] | undefined) ?? [])
+      }
     },
   })
 
@@ -36,6 +46,7 @@ export function PatientDetailPage() {
   }
   const p = patient.data
   const conflict = save.error instanceof ApiError && save.error.code === 'CONCURRENT_MODIFICATION'
+  const duplicate = save.error instanceof ApiError && save.error.code === 'DUPLICATE_SUSPECTED'
   const addr = p.address
 
   return (
@@ -65,9 +76,18 @@ export function PatientDetailPage() {
             patient={p}
             canEditIdentity={canIdentity}
             submitting={save.isPending}
-            serverError={save.isError && !conflict ? errorMessage(save.error) : null}
-            onSubmit={(body) => { setSaved(false); save.mutate(body) }}
+            serverError={save.isError && !conflict && !duplicate ? errorMessage(save.error) : null}
+            onSubmit={(body) => { setSaved(false); setCandidates(null); setPending(body); save.mutate(body) }}
           />
+          {candidates && duplicate && (
+            <DuplicateCandidates
+              candidates={candidates}
+              canOverride={canOverride}
+              submitting={save.isPending}
+              actionLabel="Save anyway"
+              onOverride={(reason) => pending && save.mutate({ ...pending, confirmNotDuplicate: true, overrideReason: reason })}
+            />
+          )}
         </div>
       )}
       {allergies.isError && <p role="alert" className="text-red-700">{errorMessage(allergies.error)}</p>}

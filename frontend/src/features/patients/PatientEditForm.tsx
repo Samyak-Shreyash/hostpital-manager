@@ -4,7 +4,7 @@ import type { Patient, UpdatePatientBody } from '../../api/patients'
 import { Field, FormError, inputClass, primaryButton } from '../../components/ui'
 import { AddressFields } from './AddressFields'
 import { maskedAbha } from './format'
-import { toAddress, updateSchema, type UpdateValues } from './schemas'
+import { reasonSchema, toAddress, updateSchema, type UpdateValues } from './schemas'
 
 interface Props {
   patient: Patient
@@ -26,6 +26,7 @@ export function PatientEditForm({ patient, canEditIdentity, submitting, serverEr
       phone: patient.phone,
       abhaNumber: '',
       identityChangeReason: '',
+      removeAbha: false,
       line1: a?.line1 ?? '',
       line2: a?.line2 ?? '',
       city: a?.city ?? '',
@@ -46,11 +47,17 @@ export function PatientEditForm({ patient, canEditIdentity, submitting, serverEr
           form.setError('identityChangeReason', { message: 'A reason is required to change name, sex or date of birth' })
           return
         }
-        body.identityChangeReason = v.identityChangeReason
+        const reason = reasonSchema('Reason').safeParse(v.identityChangeReason)
+        if (!reason.success) {
+          form.setError('identityChangeReason', { message: reason.error.issues[0].message })
+          return
+        }
+        body.identityChangeReason = reason.data
       }
     }
     if (v.phone !== patient.phone) body.phone = v.phone
-    if (v.abhaNumber) body.abhaNumber = v.abhaNumber
+    if (v.removeAbha) body.abhaNumber = '' // backend contract: empty string clears the ABHA number
+    else if (v.abhaNumber) body.abhaNumber = v.abhaNumber
     const address = toAddress(v)
     if (address && JSON.stringify(address) !== JSON.stringify(toAddress({ line1: a?.line1 ?? '', line2: a?.line2 ?? '', city: a?.city ?? '', state: a?.state ?? '', pincode: a?.pincode ?? '' }))) {
       body.address = address
@@ -90,6 +97,11 @@ export function PatientEditForm({ patient, canEditIdentity, submitting, serverEr
       <Field label={`New ABHA number (current: ${maskedAbha(patient.abhaLast4)})`} htmlFor="edit-abhaNumber" error={errors.abhaNumber?.message}>
         <input id="edit-abhaNumber" inputMode="numeric" className={inputClass} autoComplete="off" placeholder="Leave blank to keep" {...form.register('abhaNumber')} />
       </Field>
+      {patient.abhaLast4 && (
+        <label className="-mt-2 mb-4 flex items-center gap-2 text-sm">
+          <input type="checkbox" {...form.register('removeAbha')} /> Remove ABHA
+        </label>
+      )}
       <AddressFields register={form.register} errors={errors} />
       <button type="submit" className={primaryButton} disabled={submitting}>Save changes</button>
     </form>
