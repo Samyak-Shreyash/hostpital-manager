@@ -42,4 +42,19 @@ public class DocumentNumberAllocator {
                 RETURNING next_value - 1
                 """).params(organizationId, documentType, periodKey, now, now).query(Long.class).single();
     }
+
+    /**
+     * Locks the counter row of {@code documentType}/{@code periodKey} until the caller's transaction ends, without
+     * allocating a number, so a check can run serialized with the issuers of that counter (no row: no lock needed,
+     * nothing has been issued yet).
+     */
+    public void lock(UUID organizationId, String documentType, String periodKey) {
+        if (!TransactionSynchronizationManager.isActualTransactionActive()) {
+            throw new IllegalStateException("a document counter must be locked inside the business transaction");
+        }
+        jdbc.sql("""
+                SELECT 1 FROM hms.document_sequence
+                WHERE organization_id = ? AND document_type = ? AND period_key = ? FOR UPDATE
+                """).params(organizationId, documentType, periodKey).query(Integer.class).list();
+    }
 }

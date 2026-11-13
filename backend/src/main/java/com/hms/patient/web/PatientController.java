@@ -17,6 +17,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -77,5 +78,22 @@ class PatientController {
     @PreAuthorize("hasAuthority('patient:read')")
     PatientView get(@AuthenticationPrincipal OrganizationPrincipal actor, @PathVariable UUID id) {
         return patients.get(actor, id);
+    }
+
+    /**
+     * Partial update ([E3-5]). Name, sex and date of birth also need {@code patient:update-identity} and a reason;
+     * accepting suspected duplicates after an identity or phone edit needs {@code patient:override-duplicate}.
+     */
+    @PatchMapping("/{id}")
+    @PreAuthorize("hasAuthority('patient:update')")
+    PatientView update(@AuthenticationPrincipal OrganizationPrincipal actor, @PathVariable UUID id,
+            @Valid @RequestBody UpdatePatientRequest request, Authentication authentication) {
+        return patients.update(actor, id, request.toCommand(),
+                has(authentication, Permissions.PATIENT_UPDATE_IDENTITY),
+                has(authentication, Permissions.PATIENT_OVERRIDE_DUPLICATE));
+    }
+
+    private static boolean has(Authentication authentication, String permission) {
+        return authentication.getAuthorities().stream().anyMatch(a -> permission.equals(a.getAuthority()));
     }
 }
