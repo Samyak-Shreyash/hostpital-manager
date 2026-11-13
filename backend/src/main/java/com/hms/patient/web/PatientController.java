@@ -1,5 +1,7 @@
 package com.hms.patient.web;
 
+import com.hms.identity.api.Permissions;
+import com.hms.patient.application.DuplicateCandidate;
 import com.hms.patient.application.PatientService;
 import com.hms.patient.application.PatientView;
 import com.hms.shared.tenancy.OrganizationPrincipal;
@@ -7,10 +9,12 @@ import jakarta.validation.Valid;
 import com.hms.patient.application.PatientSummary;
 import com.hms.shared.PageResult;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.UUID;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -20,7 +24,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
-/** Patients (api-design.md section 6). Registration and audited detail; search, update and duplicates come later. */
+/** Patients (api-design.md section 6): registration with duplicate check, search, audited detail. */
 @RestController
 @RequestMapping("/api/v1/patients")
 class PatientController {
@@ -35,8 +39,18 @@ class PatientController {
     @PreAuthorize("hasAuthority('patient:create')")
     @ResponseStatus(HttpStatus.CREATED)
     PatientView register(@AuthenticationPrincipal OrganizationPrincipal actor,
-            @Valid @RequestBody CreatePatientRequest request) {
-        return patients.register(actor, request.toCommand());
+            @Valid @RequestBody CreatePatientRequest request, Authentication authentication) {
+        boolean mayOverride = authentication.getAuthorities().stream()
+                .anyMatch(a -> Permissions.PATIENT_OVERRIDE_DUPLICATE.equals(a.getAuthority()));
+        return patients.register(actor, request.toCommand(), mayOverride);
+    }
+
+    /** Pre-registration duplicate lookup (BR-P3); a POST so name, birth date and phone stay out of URLs and logs. */
+    @PostMapping("/duplicate-check")
+    @PreAuthorize("hasAuthority('patient:create')")
+    List<DuplicateCandidate> duplicateCheck(@AuthenticationPrincipal OrganizationPrincipal actor,
+            @Valid @RequestBody DuplicateCheckRequest request) {
+        return patients.checkDuplicates(actor, request.fullName(), request.dateOfBirth(), request.phone());
     }
 
     @GetMapping

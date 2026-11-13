@@ -74,9 +74,19 @@ class PatientAbhaIT extends PostgresIT {
         reception = fx.loggedIn(org, "reception", "RECEPTIONIST");
     }
 
+
+    /** Distinct synthetic birth date and phone per call, so [E3-3] duplicate detection does not fire between them. */
+    private static final java.util.concurrent.atomic.AtomicInteger UNIQUE = new java.util.concurrent.atomic.AtomicInteger();
+
+    private static String unique(String json) {
+        int n = UNIQUE.incrementAndGet();
+        return json.replace("1988-04-12", java.time.LocalDate.of(1950, 1, 1).plusDays(n).toString())
+                .replace("+910000000001", String.format("+9101%08d", n));
+    }
+
     private static String body(String name, String abha) {
-        return "{\"fullName\":\"" + name + "\",\"sex\":\"F\",\"dateOfBirth\":\"1988-04-12\",\"phone\":\"+910000000001\""
-                + (abha == null ? "" : ",\"abhaNumber\":\"" + abha + "\"") + "}";
+        return unique("{\"fullName\":\"" + name + "\",\"sex\":\"F\",\"dateOfBirth\":\"1988-04-12\",\"phone\":\"+910000000001\""
+                + (abha == null ? "" : ",\"abhaNumber\":\"" + abha + "\"") + "}");
     }
 
     private org.springframework.test.web.servlet.ResultActions register(AdminApiFixture.Session s, String json)
