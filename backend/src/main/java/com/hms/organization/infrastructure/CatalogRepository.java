@@ -59,6 +59,22 @@ public class CatalogRepository {
                 .param("org", org).param("active", active, Types.BOOLEAN).query(Long.class).single();
     }
 
+    /**
+     * Active flag per id for the given ids of the organization, share-locked until commit (an entry cannot be
+     * deactivated while it is being assigned). Unknown and other-org ids are absent from the result.
+     */
+    public java.util.Map<UUID, Boolean> activeFlags(CatalogKind kind, UUID org, java.util.Collection<UUID> ids) {
+        java.util.Map<UUID, Boolean> result = new java.util.HashMap<>();
+        if (ids.isEmpty()) {
+            return result;
+        }
+        jdbc.sql("SELECT id, active FROM hms." + kind.table()
+                        + " WHERE organization_id = ? AND id = ANY(?) ORDER BY id FOR SHARE")
+                .params(org, ids.toArray(new UUID[0]))
+                .query((rs, n) -> result.put(rs.getObject("id", UUID.class), rs.getBoolean("active"))).list();
+        return result;
+    }
+
     /** Compare-and-set on {@code version}: false when the row changed since the caller read it. */
     public boolean update(CatalogKind kind, UUID org, UUID id, long expectedVersion, String name, boolean active,
             Instant now) {
