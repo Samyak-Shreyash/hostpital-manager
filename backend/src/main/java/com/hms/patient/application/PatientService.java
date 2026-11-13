@@ -97,7 +97,7 @@ public class PatientService {
         UUID org = actor.organizationId();
         UUID id = ids.next();
         Instant now = clock.instant().truncatedTo(ChronoUnit.MICROS);
-        String fullName = command.fullName().trim();
+        String fullName = trimmedName(command.fullName(), "fullName");
         String phone = normalizePhone(command.phone());
         AbhaColumns abha = null;
         if (blankToNull(command.abhaNumber()) != null) {
@@ -151,7 +151,7 @@ public class PatientService {
         if (command.emergencyContact() != null) {
             RegisterPatientCommand.EmergencyContact c = command.emergencyContact();
             repository.insertEmergencyContact(ids.next(), org, id,
-                    new ContactView(c.name().trim(), c.relationship().trim(), normalizePhone(c.phone())), now);
+                    new ContactView(trimmedName(c.name(), "emergencyContact.name"), c.relationship().trim(), normalizePhone(c.phone())), now);
             fields.addAll(List.of("emergencyContact.name", "emergencyContact.relationship",
                     "emergencyContact.phone"));
         }
@@ -194,7 +194,7 @@ public class PatientService {
             throw concurrentModification();
         }
 
-        String fullName = command.fullName() == null ? current.fullName() : command.fullName().trim();
+        String fullName = command.fullName() == null ? current.fullName() : trimmedName(command.fullName(), "fullName");
         String sex = command.sex() == null ? current.sex() : command.sex();
         LocalDate dateOfBirth = command.dateOfBirth() == null ? current.dateOfBirth() : command.dateOfBirth();
         if (command.dateOfBirth() != null && (dateOfBirth.isAfter(today) || dateOfBirth.isBefore(EARLIEST_BIRTH))) {
@@ -276,7 +276,7 @@ public class PatientService {
         ContactView newContact = null;
         if (command.emergencyContact() != null) {
             RegisterPatientCommand.EmergencyContact c = command.emergencyContact();
-            ContactView wanted = new ContactView(c.name().trim(), c.relationship().trim(), normalizePhone(c.phone()));
+            ContactView wanted = new ContactView(trimmedName(c.name(), "emergencyContact.name"), c.relationship().trim(), normalizePhone(c.phone()));
             ContactView old = repository.findEmergencyContact(org, id).orElse(null);
             List<String> changed = new ArrayList<>();
             addIfChanged(changed, "emergencyContact.name", old == null ? null : old.name(), wanted.name());
@@ -461,8 +461,8 @@ public class PatientService {
             int size) {
         UUID org = actor.organizationId();
         List<PatientSummary> items = repository.search(org, filter, size, (long) page * size).stream()
-                .map(p -> new PatientSummary(p.id(), p.uhid(), p.fullName(), p.sex(), p.dateOfBirth(), p.phone(),
-                        p.abhaLast4(), p.status()))
+                .map(p -> new PatientSummary(p.id(), p.uhid(), p.fullName(), p.sex(), p.dateOfBirth(),
+                        DuplicateCandidate.maskPhone(p.phone()), p.abhaLast4(), p.status()))
                 .toList();
         long total = repository.countSearch(org, filter);
         audit.record(new AuditEntry(org, actor.userId(), "PATIENT_SEARCH", "PATIENT", null, AuditOutcome.SUCCESS,
@@ -518,6 +518,15 @@ public class PatientService {
     }
 
     /** E.164 as is; a bare 10-digit number is an Indian number (+91). */
+    /** Bean Validation counts untrimmed characters, so the 2-character minimum is enforced here after trimming. */
+    private static String trimmedName(String value, String field) {
+        String trimmed = value.trim();
+        if (trimmed.length() < 2) {
+            throw new BusinessRuleException("VALIDATION_ERROR", field + " must have at least 2 characters.");
+        }
+        return trimmed;
+    }
+
     static String normalizePhone(String phone) {
         String trimmed = phone.trim();
         return trimmed.startsWith("+") ? trimmed : "+91" + trimmed;
