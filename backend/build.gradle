@@ -110,3 +110,10 @@ configurations {
 tasks.named('check') {
     dependsOn testing.suites.integrationTest, testing.suites.architectureTest, tasks.named('seedClasses')
 }
+
+// Show assertion messages in CI logs, not only "AssertionError at File.java:N".
+tasks.withType(Test).configureEach {
+    testLogging {
+        exceptionFormat = 'full'
+    }
+}
