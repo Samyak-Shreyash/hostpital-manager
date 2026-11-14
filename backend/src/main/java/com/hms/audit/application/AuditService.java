@@ -42,6 +42,7 @@ class AuditService implements AuditRecorder {
                 entry.entityId(),
                 entry.outcome().name(),
                 MDC.get(CorrelationIdFilter.MDC_KEY),
-                entry.changedFields().toArray(String[]::new)));
+                entry.changedFields().toArray(String[]::new),
+                entry.resultCount()));
     }
 }

@@ -49,6 +49,9 @@ public class AuditEventEntity implements Persistable<UUID> {
     @Column(name = "changed_fields", nullable = false)
     private String[] changedFields;
 
+    @Column(name = "result_count")
+    private Integer resultCount;
+
     @Transient
     private boolean isNew = true;
 
@@ -56,7 +59,8 @@ public class AuditEventEntity implements Persistable<UUID> {
     }
 
     public AuditEventEntity(UUID id, UUID organizationId, Instant occurredAt, UUID actorId, String action,
-            String entityType, UUID entityId, String outcome, String correlationId, String[] changedFields) {
+            String entityType, UUID entityId, String outcome, String correlationId, String[] changedFields,
+            Integer resultCount) {
         this.id = id;
         this.organizationId = organizationId;
         this.occurredAt = occurredAt;
@@ -67,6 +71,7 @@ public class AuditEventEntity implements Persistable<UUID> {
         this.outcome = outcome;
         this.correlationId = correlationId;
         this.changedFields = changedFields;
+        this.resultCount = resultCount;
     }
 
     @Override

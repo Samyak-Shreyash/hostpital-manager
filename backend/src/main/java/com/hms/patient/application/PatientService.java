@@ -6,8 +6,14 @@ import com.hms.audit.api.AuditRecorder;
 import com.hms.patient.application.PatientView.AddressView;
 import com.hms.patient.application.PatientView.ContactView;
 import com.hms.patient.infrastructure.PatientRepository;
+import com.hms.patient.infrastructure.PatientRepository.AbhaColumns;
 import com.hms.patient.infrastructure.PatientRepository.PatientRow;
+import com.hms.patient.infrastructure.PatientRepository.SearchFilter;
+import com.hms.shared.PageResult;
+import com.hms.shared.crypto.FieldCipher;
+import com.hms.shared.crypto.LookupHasher;
 import com.hms.shared.domain.BusinessRuleException;
+import com.hms.shared.domain.ConflictException;
 import com.hms.shared.domain.NotFoundException;
 import com.hms.shared.id.UuidV7Generator;
 import com.hms.shared.numbering.DocumentNumberAllocator;
@@ -34,6 +40,7 @@ public class PatientService {
     static final String UHID = "UHID";
     static final String PERIOD_ALL = "ALL";
     static final int MAX_AGE_YEARS = 130;
+    static final int MAX_PAGE_SIZE = 100;
     private static final LocalDate EARLIEST_BIRTH = LocalDate.of(1900, 1, 1);
 
     private final PatientRepository repository;
@@ -41,9 +48,13 @@ public class PatientService {
     private final AuditRecorder audit;
     private final UuidV7Generator ids;
     private final Clock clock;
+    private final FieldCipher cipher;
+    private final LookupHasher abhaHasher;
 
     public PatientService(PatientRepository repository, DocumentNumberAllocator numbers, AuditRecorder audit,
-            UuidV7Generator ids, Clock clock) {
+            UuidV7Generator ids, Clock clock, FieldCipher cipher, LookupHasher abhaHasher) {
+        this.cipher = cipher;
+        this.abhaHasher = abhaHasher;
         this.repository = repository;
         this.numbers = numbers;
         this.audit = audit;
@@ -60,12 +71,25 @@ public class PatientService {
         Instant now = clock.instant().truncatedTo(ChronoUnit.MICROS);
         String fullName = command.fullName().trim();
         String phone = normalizePhone(command.phone());
+        AbhaColumns abha = null;
+        if (blankToNull(command.abhaNumber()) != null) {
+            String digits = normalizeAbha(command.abhaNumber());
+            FieldCipher.Encrypted encrypted = cipher.encrypt(digits, abhaContext(org, id));
+            abha = new AbhaColumns(encrypted.value(), encrypted.keyId(), abhaHasher.hash(digits),
+                    digits.substring(digits.length() - 4));
+        }
 
         // Last step before the writes: the counter row stays locked until this transaction commits.
         String uhid = formatUhid(numbers.next(org, UHID, PERIOD_ALL));
-        repository.insertPatient(id, org, uhid, fullName, command.sex(), dateOfBirth, command.dobEstimated(), phone,
-                actor.userId(), now);
+        if (!repository.insertPatient(id, org, uhid, fullName, command.sex(), dateOfBirth, command.dobEstimated(),
+                phone, abha, actor.userId(), now)) {
+            // Rolls back, so the UHID is not consumed. The message never echoes the number.
+            throw new ConflictException("DUPLICATE_ABHA", "Another patient already has this ABHA number.");
+        }
         List<String> fields = new ArrayList<>(List.of("fullName", "sex", "dateOfBirth", "dobEstimated", "phone"));
+        if (abha != null) {
+            fields.add("abhaNumber"); // field name only, never the value
+        }
         if (command.address() != null) {
             RegisterPatientCommand.Address a = command.address();
             String line2 = blankToNull(a.line2());
@@ -97,6 +121,84 @@ public class PatientService {
         return view;
     }
 
+    /**
+     * Search (PAT-4). Filters combine with AND; at least one is required. One {@code PATIENT_SEARCH} audit event
+     * records the result count only (owner decision 2026-11-13): query terms are PHI and are never audited.
+     * ABHA has its own POST endpoint ({@link #searchByAbha}) so the number never appears in a URL or access log.
+     */
+    @Transactional
+    public PageResult<PatientSummary> search(OrganizationPrincipal actor, String q, String uhid, String phone,
+            LocalDate dob, int page, int size) {
+        checkPage(page, size);
+        String name = blankToNull(q);
+        if (name != null && name.length() < 3) {
+            throw new BusinessRuleException("VALIDATION_ERROR", "q must be at least 3 characters.");
+        }
+        String uhidTerm = blankToNull(uhid) == null ? null : uhid.trim().toUpperCase(java.util.Locale.ROOT);
+        String phoneTerm = null;
+        if (blankToNull(phone) != null) {
+            phoneTerm = normalizePhone(phone.replaceAll("[\\s-]", ""));
+            if (!phoneTerm.matches("\\+[1-9][0-9]{7,14}")) {
+                throw new BusinessRuleException("VALIDATION_ERROR", "phone is not a valid number.");
+            }
+        }
+        if (name == null && uhidTerm == null && phoneTerm == null && dob == null) {
+            throw new BusinessRuleException("VALIDATION_ERROR", "Give at least one of q, uhid, phone or dob.");
+        }
+        return runSearch(actor, new SearchFilter(name, uhidTerm, phoneTerm, null, dob), page, size);
+    }
+
+    /**
+     * Exact ABHA search (ADR-0009): matched on the keyed hash, organization-scoped, same response and the same single
+     * {@code PATIENT_SEARCH} audit event (result count only) as {@link #search}. The number is never logged.
+     */
+    @Transactional
+    public PageResult<PatientSummary> searchByAbha(OrganizationPrincipal actor, String abhaNumber, int page,
+            int size) {
+        checkPage(page, size);
+        if (blankToNull(abhaNumber) == null) {
+            throw new BusinessRuleException("VALIDATION_ERROR", "abhaNumber is required.");
+        }
+        byte[] hash = abhaHasher.hash(normalizeAbha(abhaNumber));
+        return runSearch(actor, new SearchFilter(null, null, null, hash, null), page, size);
+    }
+
+    private static void checkPage(int page, int size) {
+        if (page < 0 || size < 1 || size > MAX_PAGE_SIZE) {
+            throw new BusinessRuleException("VALIDATION_ERROR",
+                    "page must be 0 or more and size 1 to " + MAX_PAGE_SIZE + ".");
+        }
+    }
+
+    private PageResult<PatientSummary> runSearch(OrganizationPrincipal actor, SearchFilter filter, int page,
+            int size) {
+        UUID org = actor.organizationId();
+        List<PatientSummary> items = repository.search(org, filter, size, (long) page * size).stream()
+                .map(p -> new PatientSummary(p.id(), p.uhid(), p.fullName(), p.sex(), p.dateOfBirth(), p.phone(),
+                        p.abhaLast4(), p.status()))
+                .toList();
+        long total = repository.countSearch(org, filter);
+        audit.record(new AuditEntry(org, actor.userId(), "PATIENT_SEARCH", "PATIENT", null, AuditOutcome.SUCCESS,
+                List.of(), (int) Math.min(total, Integer.MAX_VALUE)));
+        return new PageResult<>(items, page, size, total);
+    }
+
+    /** 14 digits, optionally grouped 2-4-4-4 with hyphens (format only; no checksum or ABDM verification). */
+    static final String ABHA_FORMAT = "[0-9]{14}|[0-9]{2}-[0-9]{4}-[0-9]{4}-[0-9]{4}";
+
+    /** Associated data binding an ABHA ciphertext to its field, organization and patient row. */
+    static String[] abhaContext(UUID org, UUID patientId) {
+        return new String[] {"patient.abha", org.toString(), patientId.toString()};
+    }
+
+    static String normalizeAbha(String abha) {
+        String trimmed = abha.trim();
+        if (!trimmed.matches(ABHA_FORMAT)) {
+            throw new BusinessRuleException("VALIDATION_ERROR", "abhaNumber must be 14 digits.");
+        }
+        return trimmed.replace("-", "");
+    }
+
     static String formatUhid(long number) {
         return String.format("HMS-%06d", number);
     }
@@ -104,7 +206,7 @@ public class PatientService {
     private PatientView load(UUID org, UUID id) {
         PatientRow p = repository.findPatient(org, id).orElseThrow(() -> new NotFoundException("Patient not found."));
         return new PatientView(p.id(), p.uhid(), p.fullName(), p.sex(), p.dateOfBirth(), p.dobEstimated(), p.phone(),
-                repository.findCurrentAddress(org, id).orElse(null),
+                p.abhaLast4(), repository.findCurrentAddress(org, id).orElse(null),
                 repository.findEmergencyContact(org, id).orElse(null), p.status(), p.version(), p.createdAt(),
                 p.updatedAt());
     }
