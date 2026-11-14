@@ -189,6 +189,9 @@ class PatientSearchIT extends PostgresIT {
         seed(org, "HMS-900001", "Test Priya Sharma", "+910000900001", "1988-04-12");
         List<String> queries = List.of("?q=Priya Sharma", "?q=Priya Sharmma", "?q=sharma", "?uhid=HMS-050000",
                 "?phone=0000050000", "?dob=1988-04-12&q=Priya", "?q=a3f9c1");
+        for (String q : queries) { // warm-up, not measured: plan cache, connection pool and JIT on a cold runner
+            mockMvc.perform(reception.apply(get(URL + q))).andExpect(status().isOk());
+        }
         List<Long> millis = new ArrayList<>();
         for (int round = 0; round < 5; round++) {
             for (String q : queries) {
@@ -199,7 +202,7 @@ class PatientSearchIT extends PostgresIT {
         }
         Collections.sort(millis);
         long p95 = millis.get((int) Math.ceil(millis.size() * 0.95) - 1);
-        assertThat(p95).as("p95 ms over %s", millis).isLessThan(500);
+        assertThat(p95).withFailMessage("p95 %d ms over %s", p95, millis).isLessThan(500);
     }
 
     private int searchAuditCount(UUID searcherId) {
