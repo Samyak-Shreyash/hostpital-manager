@@ -314,6 +314,24 @@ class PatientUpdateIT extends PostgresIT {
     }
 
     @Test
+    void reasonsMustBeFiveToFiveHundredCharacters() throws Exception {
+        registered("Ananya Rao", "1979-06-15", "+910300000091");
+        UUID id = registered("Kabir Nair", "1990-07-07", "+910300000092");
+        String tooLong = "x".repeat(501);
+        for (String reason : new String[] {"abcd", "    ab    ", "", tooLong}) {
+            update(reception, id, "{\"version\":0,\"sex\":\"O\",\"identityChangeReason\":\"" + reason + "\"}")
+                    .andExpect(status().isUnprocessableContent()).andExpect(jsonPath("$.code", is("VALIDATION_ERROR")));
+        }
+        String duplicate = "{\"version\":0,\"fullName\":\"Ananya Rau\",\"dateOfBirth\":\"1979-06-15\","
+                + "\"identityChangeReason\":\"" + REASON + "\",\"confirmNotDuplicate\":true,\"overrideReason\":\"";
+        for (String reason : new String[] {"abcd", tooLong}) {
+            update(reception, id, duplicate + reason + "\"}")
+                    .andExpect(status().isUnprocessableContent()).andExpect(jsonPath("$.code", is("VALIDATION_ERROR")));
+        }
+        update(reception, id, duplicate + "abcde\"}").andExpect(status().isOk());
+    }
+
+    @Test
     void requestThatChangesNothingKeepsTheVersionAndAuditsOnlyTheView() throws Exception {
         UUID id = registered();
         update(contactOnly, id, "{\"version\":0,\"phone\":\"+910300000001\"}")
