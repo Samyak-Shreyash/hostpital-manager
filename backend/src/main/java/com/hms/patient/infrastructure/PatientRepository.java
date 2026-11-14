@@ -99,7 +99,8 @@ public class PatientRepository {
 
     /**
      * Fuzzy name (pg_trgm similarity at the default 0.3 threshold, or a substring match; both are served by
-     * ix_patient_full_name_trgm) AND exact UHID / phone / date of birth. Best name match first.
+     * ix_patient_full_name_trgm) AND exact UHID / phone / date of birth. Merged records are skipped, as in duplicate
+     * detection. Best name match first.
      */
     public List<PatientRow> search(UUID org, SearchFilter f, int limit, long offset) {
         Where w = where(org, f);
@@ -257,7 +258,7 @@ public class PatientRepository {
     }
 
     private static Where where(UUID org, SearchFilter f) {
-        List<String> clauses = new ArrayList<>(List.of("organization_id = :org"));
+        List<String> clauses = new ArrayList<>(List.of("organization_id = :org", "status <> 'MERGED'"));
         java.util.Map<String, Object> params = new java.util.LinkedHashMap<>();
         params.put("org", org);
         if (f.name() != null) {
