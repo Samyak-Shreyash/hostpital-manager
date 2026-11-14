@@ -13,18 +13,21 @@ export class ApiError extends Error {
   readonly status: number
   readonly code: string
   readonly fieldErrors: FieldError[]
+  /** Extra problem properties (e.g. `candidates` on DUPLICATE_SUSPECTED). */
+  readonly properties: Record<string, unknown>
 
-  constructor(status: number, code: string, message: string, fieldErrors: FieldError[] = []) {
+  constructor(status: number, code: string, message: string, fieldErrors: FieldError[] = [], properties: Record<string, unknown> = {}) {
     super(message)
     this.name = 'ApiError'
     this.status = status
     this.code = code
     this.fieldErrors = fieldErrors
+    this.properties = properties
   }
 }
 
 async function toApiError(response: Response): Promise<ApiError> {
-  let body: { code?: string; detail?: string; title?: string; errors?: FieldError[] } = {}
+  let body: { code?: string; detail?: string; title?: string; errors?: FieldError[]; [key: string]: unknown } = {}
   try {
     body = await response.json()
   } catch {
@@ -35,6 +38,7 @@ async function toApiError(response: Response): Promise<ApiError> {
     body.code ?? `HTTP_${response.status}`,
     body.detail ?? body.title ?? `Request failed (${response.status})`,
     body.errors ?? [],
+    body,
   )
 }
 
@@ -73,4 +77,5 @@ export const api = {
   get: <T>(path: string) => request<T>('GET', path),
   post: <T>(path: string, body?: unknown) => request<T>('POST', path, body),
   patch: <T>(path: string, body: unknown) => request<T>('PATCH', path, body),
+  put: <T>(path: string, body: unknown) => request<T>('PUT', path, body),
 }
