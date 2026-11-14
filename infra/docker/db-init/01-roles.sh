@@ -10,4 +10,9 @@ psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" \
 CREATE ROLE hms_owner LOGIN PASSWORD :'owner_pw';
 CREATE ROLE hms_app LOGIN PASSWORD :'app_pw' NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS;
 ALTER DATABASE :"db" OWNER TO hms_owner;
+-- pg_trgm before Flyway, so name search can use its trigram index under row-level security (ADR-0010):
+-- the operator function must be LEAKPROOF, which only a superuser can set. V1 then skips the extension.
+CREATE SCHEMA hms AUTHORIZATION hms_owner;
+CREATE EXTENSION pg_trgm WITH SCHEMA hms;
+ALTER FUNCTION hms.word_similarity_commutator_op(text, text) LEAKPROOF;
 SQL
