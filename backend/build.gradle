@@ -34,16 +34,45 @@ dependencies {
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
+// Dev/staging seed data generator ([E2-4]). A separate source set, so it is never part of the application jar or of
+// normal startup (and not subject to the module-boundary ArchUnit rules: it is tooling that drives every module's
+// application services). Run with `./gradlew seedData` (see README).
+sourceSets {
+    seed {
+        compileClasspath += sourceSets.main.output
+        runtimeClasspath += sourceSets.main.output
+    }
+}
+
+configurations {
+    seedImplementation.extendsFrom implementation
+    seedRuntimeOnly.extendsFrom runtimeOnly
+}
+
+tasks.register('seedData', JavaExec) {
+    group = 'application'
+    description = 'Seeds synthetic dev/staging data (idempotent). Refused unless profile dev/staging or HMS_ENV=dev|staging. ' +
+            'Use --args="--large" for 100k patients, --args="--patients=N" for a custom count.'
+    classpath = sourceSets.seed.runtimeClasspath
+    mainClass = 'com.hms.seed.SeedApplication'
+    // No default profile is injected: the environment must say dev (SPRING_PROFILES_ACTIVE=dev) or
+    // HMS_ENV=dev|staging explicitly, otherwise the guard refuses.
+}
+
 // Test suites per ADR-0013: `test` (unit, no Docker), `integrationTest` (Testcontainers), `architectureTest` (ArchUnit).
 testing {
     suites {
         test {
             useJUnitJupiter()
+            dependencies {
+                implementation sourceSets.seed.output
+            }
         }
 
         integrationTest(JvmTestSuite) {
             dependencies {
                 implementation project()
+                implementation sourceSets.seed.output
                 implementation libs.spring.boot.starter.test
                 implementation libs.spring.boot.starter.webmvc.test
                 implementation libs.spring.boot.testcontainers
@@ -77,6 +106,7 @@ configurations {
     architectureTestImplementation.extendsFrom implementation
 }
 
+
 tasks.named('check') {
-    dependsOn testing.suites.integrationTest, testing.suites.architectureTest
+    dependsOn testing.suites.integrationTest, testing.suites.architectureTest, tasks.named('seedClasses')
 }
