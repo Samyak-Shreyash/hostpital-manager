@@ -99,9 +99,10 @@ public class PatientRepository {
 
     /**
      * Fuzzy name (pg_trgm word similarity: the query is close to some part of the name, default threshold 0.6, served
-     * by ix_patient_full_name_trgm) AND exact UHID / phone / date of birth. Best name match first. The index is usable
-     * under row-level security only because hms.word_similarity_commutator_op is LEAKPROOF (ADR-0010; set by the
-     * superuser database init step, checked by PatientSearchIndexIT).
+     * by ix_patient_full_name_trgm) AND exact UHID / phone / date of birth. Merged records are skipped, as in duplicate
+     * detection. Best name match first. The index is usable under row-level security only because
+     * hms.word_similarity_commutator_op is LEAKPROOF (ADR-0010; set by the superuser database init step, checked by
+     * PatientSearchIndexIT).
      */
     public List<PatientRow> search(UUID org, SearchFilter f, int limit, long offset) {
         Where w = where(org, f);
@@ -255,7 +256,7 @@ public class PatientRepository {
     }
 
     private static Where where(UUID org, SearchFilter f) {
-        List<String> clauses = new ArrayList<>(List.of("organization_id = :org"));
+        List<String> clauses = new ArrayList<>(List.of("organization_id = :org", "status <> 'MERGED'"));
         java.util.Map<String, Object> params = new java.util.LinkedHashMap<>();
         params.put("org", org);
         if (f.name() != null) {

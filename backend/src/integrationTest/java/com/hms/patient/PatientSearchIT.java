@@ -107,6 +107,14 @@ class PatientSearchIT extends PostgresIT {
     }
 
     @Test
+    void mergedPatientsAreNotReturned() throws Exception {
+        seedStandardSet(org);
+        fx.inOrg(org, () -> jdbc.sql("UPDATE hms.patient SET status = 'MERGED' WHERE uhid = 'HMS-000003'").update());
+        assertThat(uhids("?dob=1988-04-12")).containsExactly("HMS-000001");
+        assertThat(uhids("?uhid=HMS-000003")).isEmpty();
+    }
+
+    @Test
     void responseShapePaginationAndValidation() throws Exception {
         seedStandardSet(org);
         mockMvc.perform(reception.apply(get(URL + "?q=Test&size=2")))
