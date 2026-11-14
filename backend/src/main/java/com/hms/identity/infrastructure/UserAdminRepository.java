@@ -37,6 +37,19 @@ public class UserAdminRepository {
         this.jdbc = jdbc;
     }
 
+    /** The organization's user, row share-locked until commit; empty for an unknown or other-org id. */
+    public java.util.Optional<UserRow> findForShare(UUID organizationId, UUID userId) {
+        return jdbc.sql("""
+                SELECT id, email, full_name, status, must_change_password, version, created_at, updated_at
+                FROM hms.app_user WHERE organization_id = ? AND id = ? FOR SHARE
+                """).params(organizationId, userId)
+                .query((rs, n) -> new UserRow(rs.getObject("id", UUID.class), rs.getString("email"),
+                        rs.getString("full_name"), rs.getString("status"), rs.getBoolean("must_change_password"),
+                        rs.getLong("version"), rs.getTimestamp("created_at").toInstant(),
+                        rs.getTimestamp("updated_at").toInstant()))
+                .optional();
+    }
+
     /** Serializes first-run bootstrap across application instances; released at the end of the transaction. */
     public void lockBootstrap() {
         jdbc.sql("SELECT pg_advisory_xact_lock(hashtext('hms.bootstrap'))").query().singleValue();

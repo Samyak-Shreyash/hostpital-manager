@@ -54,6 +54,8 @@ Legal review flags (for `[E10-8]`, not decided here): ABHA retention and masking
 | Q5 | PDF generation library | ADR candidates | `[E6-5]`, `[E7-5]` | Decided by `[E6-4]` |
 | Q6 | Practitioners without a login | domain-model.md | — | [A] deferred; every practitioner has a user |
 | Q7 | Time zone handling for daily charges | ADR candidates | `[E8-5]` | Facility time zone from org settings |
+| Q8 | The staff screen/API neither shows nor assigns roles; roles are managed only via `PATCH /users/{id}` (owner decision 2026-11-14) | `[E4-2]` | `[E4-4]` | Revisit when building the staff UI (`[E4-4]`) |
+| Q9 | `[E4-3]` (#44) criterion "slots honour existing bookings" is deferred to the appointment module: subtract bookings from `PractitionerAvailability.freeSlots` and flag (never cancel) bookings that clash with leave; also decide whether `isAvailable` must align to slot boundaries | `[E4-3]` | `[E5-1]` | Free slots ignore bookings until `[E5-1]`; `isAvailable` checks window/leave containment only |
 
 ## 3. Legal / regulatory review required (no compliance claimed)
 
