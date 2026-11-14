@@ -1,5 +1,6 @@
 package com.hms.patient;
 
+import static org.hamcrest.Matchers.matchesPattern;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.is;
@@ -113,7 +114,8 @@ class PatientSearchIT extends PostgresIT {
                 .andExpect(jsonPath("$.items", hasSize(2)))
                 .andExpect(jsonPath("$.totalItems", is(4)))
                 .andExpect(jsonPath("$.items[0].fullName").exists())
-                .andExpect(jsonPath("$.items[0].phone").exists());
+                .andExpect(jsonPath("$.items[0].phone").doesNotExist())
+                .andExpect(jsonPath("$.items[0].phoneMasked", matchesPattern("[+]91[*]{6}[0-9]{4}")));
         mockMvc.perform(reception.apply(get(URL + "?q=Test&size=2&page=1")))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.items", hasSize(2)));
         mockMvc.perform(reception.apply(get(URL))).andExpect(status().isUnprocessableEntity());

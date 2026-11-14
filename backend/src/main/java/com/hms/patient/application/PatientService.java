@@ -28,8 +28,10 @@ import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
@@ -51,6 +53,8 @@ public class PatientService {
     static final int MIN_REASON = 5;
     static final int MAX_REASON = 500;
     private static final LocalDate EARLIEST_BIRTH = LocalDate.of(1900, 1, 1);
+    /** Excluded id for a check that has no patient row yet (never a real UUIDv7). */
+    private static final UUID NO_PATIENT = new UUID(0L, 0L);
 
     private final PatientRepository repository;
     private final DocumentNumberAllocator numbers;
@@ -93,7 +97,7 @@ public class PatientService {
         UUID org = actor.organizationId();
         UUID id = ids.next();
         Instant now = clock.instant().truncatedTo(ChronoUnit.MICROS);
-        String fullName = command.fullName().trim();
+        String fullName = trimmedName(command.fullName(), "fullName");
         String phone = normalizePhone(command.phone());
         AbhaColumns abha = null;
         if (blankToNull(command.abhaNumber()) != null) {
@@ -106,7 +110,7 @@ public class PatientService {
         // Last step before the checks and writes: the counter row stays locked until this transaction commits,
         // which serializes the duplicate check with every other registration of the organization.
         String uhid = formatUhid(numbers.next(org, UHID, PERIOD_ALL));
-        List<DuplicateCandidate> candidates = findCandidates(org, fullName, dateOfBirth, phone);
+        List<DuplicateCandidate> candidates = findCandidates(org, id, fullName, dateOfBirth, phone);
         String overrideReason = null;
         if (!candidates.isEmpty()) {
             if (!command.confirmNotDuplicate()) {
@@ -147,7 +151,7 @@ public class PatientService {
         if (command.emergencyContact() != null) {
             RegisterPatientCommand.EmergencyContact c = command.emergencyContact();
             repository.insertEmergencyContact(ids.next(), org, id,
-                    new ContactView(c.name().trim(), c.relationship().trim(), normalizePhone(c.phone())), now);
+                    new ContactView(trimmedName(c.name(), "emergencyContact.name"), c.relationship().trim(), normalizePhone(c.phone())), now);
             fields.addAll(List.of("emergencyContact.name", "emergencyContact.relationship",
                     "emergencyContact.phone"));
         }
@@ -164,6 +168,212 @@ public class PatientService {
     }
 
     /**
+     * Partial update ([E3-5], owner decision 2026-11-13): every field except the UHID is editable. Changing the name,
+     * sex, date of birth or dobEstimated needs {@code patient:update-identity} ({@code mayUpdateIdentity}) and a
+     * reason, stored append-only in {@code patient_identity_change}; audit records field names only. A field counts
+     * as changed only when its value differs, so resending an unchanged value needs no extra permission, and a request
+     * that changes nothing writes nothing (the version is still checked).
+     *
+     * <p>Concurrency: the row is locked FOR UPDATE, then {@code version} is compared ({@code 409
+     * CONCURRENT_MODIFICATION}). When the name, date of birth or phone changes, the duplicate rule (BR-P3) runs again
+     * under the UHID counter lock, serialized with registrations exactly like {@link #register}: suspected duplicates
+     * are {@code 409 DUPLICATE_SUSPECTED} unless confirmed with a reason ({@code patient:override-duplicate}).
+     */
+    @Transactional
+    public PatientView update(OrganizationPrincipal actor, UUID id, UpdatePatientCommand command,
+            boolean mayUpdateIdentity, boolean mayOverrideDuplicate) {
+        if (command.uhid() != null) {
+            throw new BusinessRuleException("UHID_IMMUTABLE", "The UHID cannot be changed.");
+        }
+        UUID org = actor.organizationId();
+        Instant now = clock.instant().truncatedTo(ChronoUnit.MICROS);
+        LocalDate today = LocalDate.now(clock.withZone(ZoneOffset.UTC));
+        PatientRow current = repository.lockPatient(org, id)
+                .orElseThrow(() -> new NotFoundException("Patient not found."));
+        if (current.version() != command.version()) {
+            throw concurrentModification();
+        }
+
+        String fullName = command.fullName() == null ? current.fullName() : trimmedName(command.fullName(), "fullName");
+        String sex = command.sex() == null ? current.sex() : command.sex();
+        LocalDate dateOfBirth = command.dateOfBirth() == null ? current.dateOfBirth() : command.dateOfBirth();
+        if (command.dateOfBirth() != null && (dateOfBirth.isAfter(today) || dateOfBirth.isBefore(EARLIEST_BIRTH))) {
+            throw new BusinessRuleException("VALIDATION_ERROR", "dateOfBirth is not a plausible date.");
+        }
+        boolean dobEstimated = command.dobEstimated() == null ? current.dobEstimated() : command.dobEstimated();
+        String phone = command.phone() == null ? current.phone() : normalizePhone(command.phone());
+
+        List<String> identity = new ArrayList<>();
+        if (!fullName.equals(current.fullName())) {
+            identity.add("fullName");
+        }
+        if (!sex.equals(current.sex())) {
+            identity.add("sex");
+        }
+        if (!dateOfBirth.equals(current.dateOfBirth())) {
+            identity.add("dateOfBirth");
+        }
+        if (dobEstimated != current.dobEstimated()) {
+            identity.add("dobEstimated");
+        }
+        List<String> fields = new ArrayList<>(identity);
+        boolean phoneChanged = !phone.equals(current.phone());
+        if (phoneChanged) {
+            fields.add("phone");
+        }
+
+        String identityReason = null;
+        if (!identity.isEmpty()) {
+            if (!mayUpdateIdentity) {
+                throw new AccessDeniedException("Changing name, sex or date of birth needs patient:update-identity.");
+            }
+            identityReason = requireReason(command.identityChangeReason(), "identityChangeReason",
+                    "change name, sex or date of birth");
+        }
+
+        // ABHA: "" clears, a number sets or changes it; compared through the keyed hash, never decrypted.
+        AbhaColumns abha = null;
+        boolean abhaChanged = false;
+        if (command.abhaNumber() != null) {
+            byte[] currentHash = repository.findAbhaHash(org, id);
+            if (command.abhaNumber().isBlank()) {
+                abhaChanged = currentHash != null;
+            } else {
+                String digits = normalizeAbha(command.abhaNumber());
+                byte[] hash = abhaHasher.hash(digits);
+                if (!Arrays.equals(hash, currentHash)) {
+                    if (repository.abhaTakenByOther(org, id, hash)) {
+                        throw duplicateAbha();
+                    }
+                    FieldCipher.Encrypted encrypted = cipher.encrypt(digits, abhaContext(org, id));
+                    abha = new AbhaColumns(encrypted.value(), encrypted.keyId(), hash,
+                            digits.substring(digits.length() - 4));
+                    abhaChanged = true;
+                }
+            }
+            if (abhaChanged) {
+                fields.add("abhaNumber"); // field name only, never the value
+            }
+        }
+
+        AddressView newAddress = null;
+        if (command.address() != null) {
+            RegisterPatientCommand.Address a = command.address();
+            AddressView wanted = new AddressView(a.line1().trim(), blankToNull(a.line2()), a.city().trim(),
+                    a.state().trim(), a.pincode());
+            AddressView old = repository.findCurrentAddress(org, id).orElse(null);
+            List<String> changed = new ArrayList<>();
+            addIfChanged(changed, "address.line1", old == null ? null : old.line1(), wanted.line1());
+            addIfChanged(changed, "address.line2", old == null ? null : old.line2(), wanted.line2());
+            addIfChanged(changed, "address.city", old == null ? null : old.city(), wanted.city());
+            addIfChanged(changed, "address.state", old == null ? null : old.state(), wanted.state());
+            addIfChanged(changed, "address.pincode", old == null ? null : old.pincode(), wanted.pincode());
+            if (!changed.isEmpty()) {
+                newAddress = wanted;
+                fields.addAll(changed);
+            }
+        }
+        ContactView newContact = null;
+        if (command.emergencyContact() != null) {
+            RegisterPatientCommand.EmergencyContact c = command.emergencyContact();
+            ContactView wanted = new ContactView(trimmedName(c.name(), "emergencyContact.name"), c.relationship().trim(), normalizePhone(c.phone()));
+            ContactView old = repository.findEmergencyContact(org, id).orElse(null);
+            List<String> changed = new ArrayList<>();
+            addIfChanged(changed, "emergencyContact.name", old == null ? null : old.name(), wanted.name());
+            addIfChanged(changed, "emergencyContact.relationship", old == null ? null : old.relationship(),
+                    wanted.relationship());
+            addIfChanged(changed, "emergencyContact.phone", old == null ? null : old.phone(), wanted.phone());
+            if (!changed.isEmpty()) {
+                newContact = wanted;
+                fields.addAll(changed);
+            }
+        }
+
+        if (fields.isEmpty()) {
+            return load(org, id); // nothing changed: no write, no audit, same version
+        }
+
+        List<DuplicateCandidate> candidates = List.of();
+        String overrideReason = null;
+        if (identity.contains("fullName") || identity.contains("dateOfBirth") || phoneChanged) {
+            // Same serialization as registration: hold the organization's UHID counter row lock until commit.
+            numbers.lock(org, UHID, PERIOD_ALL);
+            candidates = findCandidates(org, id, fullName, dateOfBirth, phone);
+            if (!candidates.isEmpty()) {
+                if (!command.confirmNotDuplicate()) {
+                    throw new ConflictException("DUPLICATE_SUSPECTED",
+                            "After this change the patient may match another registered patient. Check the "
+                                    + "candidates or confirm it is a different person.",
+                            Map.of("candidates", candidates));
+                }
+                if (!mayOverrideDuplicate) {
+                    throw new AccessDeniedException(
+                            "Confirming a suspected duplicate needs patient:override-duplicate.");
+                }
+                overrideReason = requireReason(command.overrideReason(), "overrideReason",
+                        "confirm a suspected duplicate");
+            }
+        }
+
+        if (!repository.updatePatient(org, id, command.version(), fullName, sex, dateOfBirth, dobEstimated, phone,
+                now)) {
+            throw concurrentModification();
+        }
+        if (abhaChanged && !repository.updateAbha(org, id, abha)) {
+            throw duplicateAbha();
+        }
+        if (newAddress != null) {
+            repository.retireCurrentAddress(org, id, now);
+            repository.insertAddress(ids.next(), org, id, newAddress, now);
+        }
+        if (newContact != null && !repository.updateEmergencyContact(org, id, newContact, now)) {
+            repository.insertEmergencyContact(ids.next(), org, id, newContact, now);
+        }
+        audit.record(new AuditEntry(org, actor.userId(), "PATIENT_UPDATED", "PATIENT", id, AuditOutcome.SUCCESS,
+                fields));
+        if (identityReason != null) {
+            repository.insertIdentityChange(ids.next(), org, id, identity, identityReason, actor.userId(), now);
+            // Field names only: the reason is free text and stays in patient_identity_change.
+            List<String> identityFields = new ArrayList<>(identity);
+            identityFields.add("identityChange.reason");
+            audit.record(new AuditEntry(org, actor.userId(), "PATIENT_IDENTITY_CHANGED", "PATIENT", id,
+                    AuditOutcome.SUCCESS, identityFields));
+        }
+        if (overrideReason != null) {
+            repository.insertDuplicateOverride(ids.next(), org, id,
+                    candidates.stream().map(DuplicateCandidate::id).toList(), overrideReason, actor.userId(), now);
+            audit.record(new AuditEntry(org, actor.userId(), "PATIENT_DUPLICATE_OVERRIDDEN", "PATIENT", id,
+                    AuditOutcome.SUCCESS, List.of("duplicateOverride.reason", "duplicateOverride.candidateIds")));
+        }
+        return load(org, id);
+    }
+
+    private static String requireReason(String value, String field, String purpose) {
+        String reason = blankToNull(value);
+        if (reason == null || reason.length() < MIN_REASON || reason.length() > MAX_REASON) {
+            throw new BusinessRuleException("VALIDATION_ERROR", field + " (" + MIN_REASON + " to " + MAX_REASON
+                    + " characters) is required to " + purpose + ".");
+        }
+        return reason;
+    }
+
+    private static void addIfChanged(List<String> changed, String field, String before, String after) {
+        if (!Objects.equals(before, after)) {
+            changed.add(field);
+        }
+    }
+
+    private static ConflictException concurrentModification() {
+        return new ConflictException("CONCURRENT_MODIFICATION",
+                "The patient was changed by someone else. Reload and try again.");
+    }
+
+    private static ConflictException duplicateAbha() {
+        // The message never echoes the number.
+        return new ConflictException("DUPLICATE_ABHA", "Another patient already has this ABHA number.");
+    }
+
+    /**
      * Pre-registration duplicate lookup (BR-P3): the same rule and thresholds as {@link #register}. Audited as one
      * {@code PATIENT_DUPLICATE_CHECK} event with the candidate count; the query terms are PHI and are not audited.
      */
@@ -171,16 +381,17 @@ public class PatientService {
     public List<DuplicateCandidate> checkDuplicates(OrganizationPrincipal actor, String fullName,
             LocalDate dateOfBirth, String phone) {
         UUID org = actor.organizationId();
-        List<DuplicateCandidate> candidates = findCandidates(org, fullName.trim(), dateOfBirth,
+        List<DuplicateCandidate> candidates = findCandidates(org, NO_PATIENT, fullName.trim(), dateOfBirth,
                 normalizePhone(phone));
         audit.record(new AuditEntry(org, actor.userId(), "PATIENT_DUPLICATE_CHECK", "PATIENT", null,
                 AuditOutcome.SUCCESS, List.of(), candidates.size()));
         return candidates;
     }
 
-    private List<DuplicateCandidate> findCandidates(UUID org, String fullName, LocalDate dateOfBirth, String phone) {
+    private List<DuplicateCandidate> findCandidates(UUID org, UUID excludeId, String fullName, LocalDate dateOfBirth,
+            String phone) {
         DuplicateThresholds t = organizations.duplicateThresholds(org);
-        return repository.findDuplicateCandidates(org, fullName, dateOfBirth, phone, t.dob(), t.phone(),
+        return repository.findDuplicateCandidates(org, excludeId, fullName, dateOfBirth, phone, t.dob(), t.phone(),
                 MAX_CANDIDATES).stream()
                 .map(c -> new DuplicateCandidate(c.id(), c.uhid(), c.fullName(), c.dateOfBirth(),
                         DuplicateCandidate.maskPhone(c.phone()),
@@ -250,8 +461,8 @@ public class PatientService {
             int size) {
         UUID org = actor.organizationId();
         List<PatientSummary> items = repository.search(org, filter, size, (long) page * size).stream()
-                .map(p -> new PatientSummary(p.id(), p.uhid(), p.fullName(), p.sex(), p.dateOfBirth(), p.phone(),
-                        p.abhaLast4(), p.status()))
+                .map(p -> new PatientSummary(p.id(), p.uhid(), p.fullName(), p.sex(), p.dateOfBirth(),
+                        DuplicateCandidate.maskPhone(p.phone()), p.abhaLast4(), p.status()))
                 .toList();
         long total = repository.countSearch(org, filter);
         audit.record(new AuditEntry(org, actor.userId(), "PATIENT_SEARCH", "PATIENT", null, AuditOutcome.SUCCESS,
@@ -307,6 +518,15 @@ public class PatientService {
     }
 
     /** E.164 as is; a bare 10-digit number is an Indian number (+91). */
+    /** Bean Validation counts untrimmed characters, so the 2-character minimum is enforced here after trimming. */
+    private static String trimmedName(String value, String field) {
+        String trimmed = value.trim();
+        if (trimmed.length() < 2) {
+            throw new BusinessRuleException("VALIDATION_ERROR", field + " must have at least 2 characters.");
+        }
+        return trimmed;
+    }
+
     static String normalizePhone(String phone) {
         String trimmed = phone.trim();
         return trimmed.startsWith("+") ? trimmed : "+91" + trimmed;

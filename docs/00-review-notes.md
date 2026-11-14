@@ -29,7 +29,7 @@ Owner decisions for the unimplemented M2 issues. Already settled in merged code 
 
 New permission implied: `patient:update-identity` (add to the catalogue in the `[E3-5]` migration).
 
-Legal review flags (for `[E10-8]`, not decided here): ABHA retention and masking policy; whether a patient-search audit event needs the query terms (currently excluded as PHI).
+Legal review flags (for `[E10-8]`, not decided here): ABHA retention and masking policy; whether a patient-search audit event needs the query terms (currently excluded as PHI); duplicate-candidate payload shows full name and DOB (phone masked) to users with patient:create — confirm acceptable under DPDP minimisation.
 
 ### M2 → M1 hard dependencies
 

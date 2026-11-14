@@ -1,5 +1,6 @@
 package com.hms.patient;
 
+import static org.hamcrest.Matchers.matchesPattern;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.hamcrest.Matchers.is;
@@ -209,6 +210,8 @@ class PatientAbhaIT extends PostgresIT {
         assertThat(uhids(reception, "00123456789013")).isEmpty();
         searchAbha(reception, ABHA).andExpect(status().isOk()).andExpect(jsonPath("$.totalItems", is(1)))
                 .andExpect(jsonPath("$.items[0].abhaLast4", is("9012")))
+                .andExpect(jsonPath("$.items[0].phone").doesNotExist())
+                .andExpect(jsonPath("$.items[0].phoneMasked", matchesPattern("[+]91[*]{6}[0-9]{4}")))
                 .andExpect(jsonPath("$.items[0].abhaNumber").doesNotExist());
 
         UUID other = fx.organization();

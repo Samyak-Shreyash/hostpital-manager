@@ -142,6 +142,9 @@ class OrganizationIsolationIT extends PostgresIT {
                     org.serviceId()).contentType(MediaType.APPLICATION_JSON).content(CATALOG_PATCH_BODY))),
             Map.entry("GET /api/v1/patients/{id}",
                     new CrossOrgCase(org -> get("/api/v1/patients/{id}", org.patientId()))),
+            Map.entry("PATCH /api/v1/patients/{id}", new CrossOrgCase(org -> patch("/api/v1/patients/{id}",
+                    org.patientId()).contentType(MediaType.APPLICATION_JSON)
+                    .content("{\"version\":0,\"phone\":\"+910300009999\"}"))),
             Map.entry("GET /api/v1/services/{id}/prices",
                     new CrossOrgCase(org -> get("/api/v1/services/{id}/prices", org.serviceId()))),
             Map.entry("POST /api/v1/services/{id}/prices", new CrossOrgCase(org -> post(
