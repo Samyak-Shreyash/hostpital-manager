@@ -1,5 +1,6 @@
 package com.hms.organization.infrastructure;
 
+import java.math.BigDecimal;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.Optional;
@@ -15,7 +16,8 @@ import org.springframework.stereotype.Repository;
 public class OrganizationRepository {
 
     public record Row(UUID id, String name, String timezone, String gstin, String address, String status, long version,
-            Instant createdAt, Instant updatedAt) {
+            Instant createdAt, Instant updatedAt, BigDecimal duplicateDobThreshold,
+            BigDecimal duplicatePhoneThreshold) {
     }
 
     private final JdbcClient jdbc;
@@ -26,13 +28,15 @@ public class OrganizationRepository {
 
     public Optional<Row> find(UUID id) {
         return jdbc.sql("""
-                SELECT id, name, timezone, gstin, address, status, version, created_at, updated_at
+                SELECT id, name, timezone, gstin, address, status, version, created_at, updated_at,
+                    duplicate_dob_threshold, duplicate_phone_threshold
                 FROM hms.organization WHERE id = ?
                 """).param(id)
                 .query((rs, n) -> new Row(rs.getObject("id", UUID.class), rs.getString("name"),
                         rs.getString("timezone"), rs.getString("gstin"), rs.getString("address"),
                         rs.getString("status"), rs.getLong("version"),
-                        rs.getTimestamp("created_at").toInstant(), rs.getTimestamp("updated_at").toInstant()))
+                        rs.getTimestamp("created_at").toInstant(), rs.getTimestamp("updated_at").toInstant(),
+                        rs.getBigDecimal("duplicate_dob_threshold"), rs.getBigDecimal("duplicate_phone_threshold")))
                 .optional();
     }
 
@@ -49,12 +53,14 @@ public class OrganizationRepository {
 
     /** Compare-and-set on {@code version}: false when the row changed since the caller read it. */
     public boolean update(UUID id, long expectedVersion, String name, String timezone, String gstin, String address,
-            Instant now) {
+            BigDecimal duplicateDobThreshold, BigDecimal duplicatePhoneThreshold, Instant now) {
         return jdbc.sql("""
                 UPDATE hms.organization
-                SET name = ?, timezone = ?, gstin = ?, address = ?, version = version + 1, updated_at = ?
+                SET name = ?, timezone = ?, gstin = ?, address = ?, duplicate_dob_threshold = ?,
+                    duplicate_phone_threshold = ?, version = version + 1, updated_at = ?
                 WHERE id = ? AND version = ?
-                """).params(name, timezone, gstin, address, Timestamp.from(now), id, expectedVersion)
+                """).params(name, timezone, gstin, address, duplicateDobThreshold, duplicatePhoneThreshold,
+                        Timestamp.from(now), id, expectedVersion)
                 .update() == 1;
     }
 }

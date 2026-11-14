@@ -3,6 +3,7 @@ package com.hms.organization.application;
 import com.hms.audit.api.AuditEntry;
 import com.hms.audit.api.AuditOutcome;
 import com.hms.audit.api.AuditRecorder;
+import com.hms.organization.api.DuplicateThresholds;
 import com.hms.organization.api.OrganizationRules;
 import com.hms.organization.infrastructure.OrganizationRepository;
 import com.hms.organization.infrastructure.OrganizationRepository.Row;
@@ -10,6 +11,7 @@ import com.hms.shared.domain.BusinessRuleException;
 import com.hms.shared.domain.ConflictException;
 import com.hms.shared.domain.NotFoundException;
 import com.hms.shared.tenancy.OrganizationPrincipal;
+import java.math.BigDecimal;
 import java.time.Clock;
 import java.util.ArrayList;
 import java.util.List;
@@ -48,10 +50,11 @@ public class OrganizationSettingsService {
      */
     @Transactional
     public OrganizationView update(OrganizationPrincipal actor, long version, String name, String timezone,
-            String gstin, String address) {
-        if (name == null && timezone == null && gstin == null && address == null) {
-            throw new BusinessRuleException("VALIDATION_ERROR",
-                    "Provide at least one of name, timezone, address, gstin.");
+            String gstin, String address, BigDecimal duplicateDobThreshold, BigDecimal duplicatePhoneThreshold) {
+        if (name == null && timezone == null && gstin == null && address == null && duplicateDobThreshold == null
+                && duplicatePhoneThreshold == null) {
+            throw new BusinessRuleException("VALIDATION_ERROR", "Provide at least one of name, timezone, address, "
+                    + "gstin, duplicateDobThreshold, duplicatePhoneThreshold.");
         }
         UUID org = actor.organizationId();
         Row current = load(org);
@@ -91,15 +94,36 @@ public class OrganizationSettingsService {
                 changed.add("address");
             }
         }
+        BigDecimal newDob = threshold(duplicateDobThreshold, current.duplicateDobThreshold(), "duplicateDobThreshold",
+                changed);
+        BigDecimal newPhone = threshold(duplicatePhoneThreshold, current.duplicatePhoneThreshold(),
+                "duplicatePhoneThreshold", changed);
         if (changed.isEmpty()) {
             return view(current);
         }
-        if (!organizations.update(org, version, newName, newTimezone, newGstin, newAddress, clock.instant())) {
+        if (!organizations.update(org, version, newName, newTimezone, newGstin, newAddress, newDob, newPhone,
+                clock.instant())) {
             throw concurrentModification();
         }
         audit.record(new AuditEntry(org, actor.userId(), "ORGANIZATION_UPDATED", ENTITY, org, AuditOutcome.SUCCESS,
                 changed));
         return view(load(org));
+    }
+
+    /** A duplicate threshold (BR-P3): in (0, 1], at most 2 decimals; {@code null} keeps the current value. */
+    private static BigDecimal threshold(BigDecimal wanted, BigDecimal current, String field, List<String> changed) {
+        if (wanted == null) {
+            return current;
+        }
+        if (!DuplicateThresholds.isValid(wanted)) {
+            throw new BusinessRuleException("VALIDATION_ERROR",
+                    field + " must be greater than 0 and at most 1, with at most 2 decimals.");
+        }
+        if (wanted.compareTo(current) == 0) {
+            return current;
+        }
+        changed.add(field);
+        return wanted;
     }
 
     private Row load(UUID org) {
@@ -112,7 +136,8 @@ public class OrganizationSettingsService {
     }
 
     private static OrganizationView view(Row r) {
-        return new OrganizationView(r.id(), r.name(), r.timezone(), r.gstin(), r.address(), r.version(),
+        return new OrganizationView(r.id(), r.name(), r.timezone(), r.gstin(), r.address(), r.duplicateDobThreshold(),
+                r.duplicatePhoneThreshold(), r.version(),
                 r.createdAt(), r.updatedAt());
     }
 }

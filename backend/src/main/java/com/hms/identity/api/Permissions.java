@@ -50,6 +50,7 @@ public final class Permissions {
     public static final String PATIENT_SEARCH = "patient:search";
     public static final String PATIENT_UPDATE = "patient:update";
     public static final String PATIENT_UPDATE_CLINICAL = "patient:update-clinical";
+    public static final String PATIENT_OVERRIDE_DUPLICATE = "patient:override-duplicate";
     public static final String PAYMENT_CREATE = "payment:create";
     public static final String PAYMENT_READ = "payment:read";
     public static final String PRACTITIONER_CREATE = "practitioner:create";
@@ -84,7 +85,7 @@ public final class Permissions {
             ENCOUNTER_UPDATE_ANY, ENCOUNTER_FINALIZE, ENCOUNTER_ADDENDUM, INVOICE_CREATE,
             INVOICE_READ, INVOICE_UPDATE, INVOICE_ISSUE, INVOICE_CREDIT, INVOICE_PRICE_OVERRIDE,
             OBSERVATION_WRITE, ORG_READ, ORG_UPDATE, PATIENT_CREATE, PATIENT_READ, PATIENT_SEARCH,
-            PATIENT_UPDATE, PATIENT_UPDATE_CLINICAL, PAYMENT_CREATE, PAYMENT_READ,
+            PATIENT_UPDATE, PATIENT_UPDATE_CLINICAL, PATIENT_OVERRIDE_DUPLICATE, PAYMENT_CREATE, PAYMENT_READ,
             PRACTITIONER_CREATE, PRACTITIONER_READ, PRACTITIONER_UPDATE, PRACTITIONER_SCHEDULE,
             PRESCRIPTION_CREATE, PRESCRIPTION_READ, PRESCRIPTION_ISSUE, REFUND_CREATE, REFUND_READ,
             REFUND_APPROVE, REPORT_CLINICAL, REPORT_FINANCE, ROLE_READ, ROLE_MANAGE, ROLE_ASSIGN, USER_CREATE,

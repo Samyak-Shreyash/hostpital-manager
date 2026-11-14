@@ -34,6 +34,6 @@ class OrganizationController {
     OrganizationView update(@AuthenticationPrincipal OrganizationPrincipal actor,
             @Valid @RequestBody UpdateOrganizationRequest request) {
         return settings.update(actor, request.version(), request.name(), request.timezone(), request.gstin(),
-                request.address());
+                request.address(), request.duplicateDobThreshold(), request.duplicatePhoneThreshold());
     }
 }

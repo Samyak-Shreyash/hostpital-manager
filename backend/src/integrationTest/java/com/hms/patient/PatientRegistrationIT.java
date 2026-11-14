@@ -91,9 +91,20 @@ class PatientRegistrationIT extends PostgresIT {
         reception = fx.loggedIn(org, "reception", "RECEPTIONIST");
     }
 
+
+    /** Distinct synthetic birth date and phone per call, so [E3-3] duplicate detection does not fire between them. */
+    private static final java.util.concurrent.atomic.AtomicInteger UNIQUE = new java.util.concurrent.atomic.AtomicInteger();
+
+    private static String unique(String json) {
+        int n = UNIQUE.incrementAndGet();
+        return json.replace("1988-04-12", java.time.LocalDate.of(1950, 1, 1).plusDays(n).toString())
+                .replace("+910000000001", String.format("+9101%08d", n));
+    }
+
+    /** Minimal registration body with a distinct birth date and phone (see {@link #unique}). */
     private static String body(String name) {
-        return "{\"fullName\":\"" + name + "\",\"sex\":\"F\",\"dateOfBirth\":\"1988-04-12\",\"phone\":\"" + PHONE
-                + "\"}";
+        return unique("{\"fullName\":\"" + name + "\",\"sex\":\"F\",\"dateOfBirth\":\"1988-04-12\",\"phone\":\""
+                + PHONE + "\"}");
     }
 
     private static String fullBody(String name) {
@@ -293,7 +304,7 @@ class PatientRegistrationIT extends PostgresIT {
                         barrier.await(); // the first wave starts together
                     }
                     var response = mockMvc.perform(reception.apply(post(URL)).contentType(JSON)
-                            .content(fullBody(name))).andReturn().getResponse();
+                            .content(unique(fullBody(name)))).andReturn().getResponse();
                     assertThat(response.getStatus()).as(response.getContentAsString()).isEqualTo(201);
                     return uhid(response.getContentAsString());
                 }));

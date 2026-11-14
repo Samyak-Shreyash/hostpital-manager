@@ -3,6 +3,8 @@ package com.hms.patient.application;
 import com.hms.audit.api.AuditEntry;
 import com.hms.audit.api.AuditOutcome;
 import com.hms.audit.api.AuditRecorder;
+import com.hms.organization.api.DuplicateThresholds;
+import com.hms.organization.api.OrganizationDirectory;
 import com.hms.patient.application.PatientView.AddressView;
 import com.hms.patient.application.PatientView.ContactView;
 import com.hms.patient.infrastructure.PatientRepository;
@@ -18,6 +20,8 @@ import com.hms.shared.domain.NotFoundException;
 import com.hms.shared.id.UuidV7Generator;
 import com.hms.shared.numbering.DocumentNumberAllocator;
 import com.hms.shared.tenancy.OrganizationPrincipal;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -25,7 +29,9 @@ import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -41,6 +47,9 @@ public class PatientService {
     static final String PERIOD_ALL = "ALL";
     static final int MAX_AGE_YEARS = 130;
     static final int MAX_PAGE_SIZE = 100;
+    static final int MAX_CANDIDATES = 10;
+    static final int MIN_REASON = 5;
+    static final int MAX_REASON = 500;
     private static final LocalDate EARLIEST_BIRTH = LocalDate.of(1900, 1, 1);
 
     private final PatientRepository repository;
@@ -50,9 +59,12 @@ public class PatientService {
     private final Clock clock;
     private final FieldCipher cipher;
     private final LookupHasher abhaHasher;
+    private final OrganizationDirectory organizations;
 
     public PatientService(PatientRepository repository, DocumentNumberAllocator numbers, AuditRecorder audit,
-            UuidV7Generator ids, Clock clock, FieldCipher cipher, LookupHasher abhaHasher) {
+            UuidV7Generator ids, Clock clock, FieldCipher cipher, LookupHasher abhaHasher,
+            OrganizationDirectory organizations) {
+        this.organizations = organizations;
         this.cipher = cipher;
         this.abhaHasher = abhaHasher;
         this.repository = repository;
@@ -62,8 +74,20 @@ public class PatientService {
         this.clock = clock;
     }
 
+    /**
+     * Registers a patient (PAT-1) after the duplicate check (BR-P3). Suspected duplicates are {@code 409
+     * DUPLICATE_SUSPECTED} with masked candidates unless the command confirms "not a duplicate" with a reason, which
+     * needs {@code patient:override-duplicate} ({@code mayOverrideDuplicate}) and is recorded and audited.
+     *
+     * <p>Concurrency: the UHID counter row of the organization is locked <em>before</em> the duplicate query and held
+     * to commit, so registrations of one organization run the check-and-insert one at a time. Under READ COMMITTED the
+     * second of two simultaneous registrations of the same person waits for the first, then its query sees the first
+     * one's committed row and it gets {@code DUPLICATE_SUSPECTED}. A fuzzy rule cannot be a unique constraint, so this
+     * lock (taken anyway for the gapless UHID) is the guarantee.
+     */
     @Transactional
-    public PatientView register(OrganizationPrincipal actor, RegisterPatientCommand command) {
+    public PatientView register(OrganizationPrincipal actor, RegisterPatientCommand command,
+            boolean mayOverrideDuplicate) {
         LocalDate today = LocalDate.now(clock.withZone(ZoneOffset.UTC));
         LocalDate dateOfBirth = resolveDateOfBirth(command, today);
         UUID org = actor.organizationId();
@@ -79,8 +103,28 @@ public class PatientService {
                     digits.substring(digits.length() - 4));
         }
 
-        // Last step before the writes: the counter row stays locked until this transaction commits.
+        // Last step before the checks and writes: the counter row stays locked until this transaction commits,
+        // which serializes the duplicate check with every other registration of the organization.
         String uhid = formatUhid(numbers.next(org, UHID, PERIOD_ALL));
+        List<DuplicateCandidate> candidates = findCandidates(org, fullName, dateOfBirth, phone);
+        String overrideReason = null;
+        if (!candidates.isEmpty()) {
+            if (!command.confirmNotDuplicate()) {
+                // Rolls back, so the UHID is not consumed.
+                throw new ConflictException("DUPLICATE_SUSPECTED",
+                        "This patient may already be registered. Check the candidates or confirm it is a new person.",
+                        Map.of("candidates", candidates));
+            }
+            if (!mayOverrideDuplicate) {
+                throw new AccessDeniedException("Confirming a suspected duplicate needs patient:override-duplicate.");
+            }
+            overrideReason = blankToNull(command.overrideReason());
+            if (overrideReason == null || overrideReason.length() < MIN_REASON
+                    || overrideReason.length() > MAX_REASON) {
+                throw new BusinessRuleException("VALIDATION_ERROR", "overrideReason (" + MIN_REASON + " to "
+                        + MAX_REASON + " characters) is required to confirm a suspected duplicate.");
+            }
+        }
         if (!repository.insertPatient(id, org, uhid, fullName, command.sex(), dateOfBirth, command.dobEstimated(),
                 phone, abha, actor.userId(), now)) {
             // Rolls back, so the UHID is not consumed. The message never echoes the number.
@@ -109,7 +153,39 @@ public class PatientService {
         }
         audit.record(new AuditEntry(org, actor.userId(), "PATIENT_CREATED", "PATIENT", id, AuditOutcome.SUCCESS,
                 fields));
+        if (overrideReason != null) {
+            repository.insertDuplicateOverride(ids.next(), org, id,
+                    candidates.stream().map(DuplicateCandidate::id).toList(), overrideReason, actor.userId(), now);
+            // Field names only: the reason is free text and stays in patient_duplicate_override.
+            audit.record(new AuditEntry(org, actor.userId(), "PATIENT_DUPLICATE_OVERRIDDEN", "PATIENT", id,
+                    AuditOutcome.SUCCESS, List.of("duplicateOverride.reason", "duplicateOverride.candidateIds")));
+        }
         return load(org, id);
+    }
+
+    /**
+     * Pre-registration duplicate lookup (BR-P3): the same rule and thresholds as {@link #register}. Audited as one
+     * {@code PATIENT_DUPLICATE_CHECK} event with the candidate count; the query terms are PHI and are not audited.
+     */
+    @Transactional
+    public List<DuplicateCandidate> checkDuplicates(OrganizationPrincipal actor, String fullName,
+            LocalDate dateOfBirth, String phone) {
+        UUID org = actor.organizationId();
+        List<DuplicateCandidate> candidates = findCandidates(org, fullName.trim(), dateOfBirth,
+                normalizePhone(phone));
+        audit.record(new AuditEntry(org, actor.userId(), "PATIENT_DUPLICATE_CHECK", "PATIENT", null,
+                AuditOutcome.SUCCESS, List.of(), candidates.size()));
+        return candidates;
+    }
+
+    private List<DuplicateCandidate> findCandidates(UUID org, String fullName, LocalDate dateOfBirth, String phone) {
+        DuplicateThresholds t = organizations.duplicateThresholds(org);
+        return repository.findDuplicateCandidates(org, fullName, dateOfBirth, phone, t.dob(), t.phone(),
+                MAX_CANDIDATES).stream()
+                .map(c -> new DuplicateCandidate(c.id(), c.uhid(), c.fullName(), c.dateOfBirth(),
+                        DuplicateCandidate.maskPhone(c.phone()),
+                        BigDecimal.valueOf(c.score()).setScale(2, RoundingMode.HALF_UP)))
+                .toList();
     }
 
     /** Detail view. Audited, so it writes: not read-only. Another organization's id is a plain 404. */
