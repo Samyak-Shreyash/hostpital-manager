@@ -98,14 +98,16 @@ public class PatientRepository {
     }
 
     /**
-     * Fuzzy name (pg_trgm similarity at the default 0.3 threshold, or a substring match; both are served by
-     * ix_patient_full_name_trgm) AND exact UHID / phone / date of birth. Merged records are skipped, as in duplicate
-     * detection. Best name match first.
+     * Fuzzy name (pg_trgm word similarity: the query is close to some part of the name, default threshold 0.6, served
+     * by ix_patient_full_name_trgm) AND exact UHID / phone / date of birth. Merged records are skipped, as in duplicate
+     * detection. Best name match first. The index is usable under row-level security only because
+     * hms.word_similarity_commutator_op is LEAKPROOF (ADR-0010; set by the superuser database init step, checked by
+     * PatientSearchIndexIT).
      */
     public List<PatientRow> search(UUID org, SearchFilter f, int limit, long offset) {
         Where w = where(org, f);
         String order = f.name() == null ? "full_name, id"
-                : "hms.similarity(full_name, :name) DESC, full_name, id";
+                : "hms.word_similarity(:name, full_name) DESC, full_name, id";
         var spec = jdbc.sql("""
                 SELECT id, uhid, full_name, sex, date_of_birth, dob_estimated, phone, abha_last4, status, version,
                     created_at,
@@ -250,10 +252,6 @@ public class PatientRepository {
                 Timestamp.from(now)).update();
     }
 
-    private static String escapeLike(String s) {
-        return s.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
-    }
-
     private record Where(String sql, java.util.Map<String, Object> params) {
     }
 
@@ -262,9 +260,8 @@ public class PatientRepository {
         java.util.Map<String, Object> params = new java.util.LinkedHashMap<>();
         params.put("org", org);
         if (f.name() != null) {
-            clauses.add("(full_name OPERATOR(hms.%) :name OR full_name ILIKE :like ESCAPE '\\')");
+            clauses.add("full_name OPERATOR(hms.%>) :name");
             params.put("name", f.name());
-            params.put("like", "%" + escapeLike(f.name()) + "%");
         }
         if (f.uhid() != null) {
             clauses.add("uhid = :uhid");
