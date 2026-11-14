@@ -147,10 +147,12 @@ Rules: ≥1 specialty; exactly one primary; windows on same weekday may not over
 | GET `/patients/{id}` | Detail (audited view) | `patient:read` |
 | PATCH `/patients/{id}` | Update demographics (name/sex/DOB also need `patient:update-identity`) | `patient:update` |
 | POST `/patients/{id}/contacts` · PATCH/… | Emergency contacts | `patient:update` |
-| POST `/patients/{id}/allergies` · PATCH `…/{aid}` | Allergies | `patient:update-clinical` (doctor/nurse) |
-| POST `/patients/{id}/medical-history` | History entry | `patient:update-clinical` |
+| GET · POST `/patients/{id}/allergies` · PATCH `…/{aid}` | Allergies | read `patient:read`; write `patient:update-clinical` (doctor/nurse) |
+| GET · POST `/patients/{id}/medical-history` · PATCH `…/{eid}` | History entries | read `patient:read`; write `patient:update-clinical` |
 | GET `/patients/{id}/timeline` | Encounters + admissions history | `patient:read` + `encounter:read` |
 | POST `/patients/duplicate-check` | Pre-register candidate lookup | `patient:create` |
+
+**Allergies and medical history (`[E3-4]`, V17).** Append-only: `POST` adds an entry (allergy `{substance, reaction?, severity MILD|MODERATE|SEVERE}`, history `{condition, notes?}`); content is never edited and nothing is deleted. `PATCH` accepts only `{"status":"ENTERED_IN_ERROR"}` (anything else `422 VALIDATION_ERROR`); the entry stays listed with `status: ENTERED_IN_ERROR` and `enteredInErrorAt`. Marking twice is `409 ENTRY_ALREADY_ENTERED_IN_ERROR`. Another organization's patient or entry id (or an allergy id on the history path) is `404`. The database enforces it: `hms_app` has a column-level UPDATE grant on the three status columns only, no DELETE, and a trigger makes the change one-way and rejects any content change or delete for every role. Audit (field names and entry ids only, never text): `PATIENT_ALLERGY_ADDED`, `PATIENT_ALLERGY_MARKED_IN_ERROR`, `PATIENT_HISTORY_ADDED`, `PATIENT_HISTORY_MARKED_IN_ERROR`, and the reads `PATIENT_ALLERGIES_VIEWED` / `PATIENT_HISTORY_VIEWED`. The default DOCTOR and NURSE role templates do not yet include `patient:update-clinical` (granted via `patient:*` to receptionists); assign it per organization.
 
 ```json
 POST /patients

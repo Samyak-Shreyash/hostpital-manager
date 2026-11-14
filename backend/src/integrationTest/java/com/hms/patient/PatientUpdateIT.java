@@ -301,10 +301,10 @@ class PatientUpdateIT extends PostgresIT {
     }
 
     @Test
-    void requestThatChangesNothingKeepsTheVersionAndWritesNoAudit() throws Exception {
+    void requestThatChangesNothingKeepsTheVersionAndAuditsOnlyTheView() throws Exception {
         UUID id = registered();
         update(contactOnly, id, "{\"version\":0,\"phone\":\"+910300000001\"}")
                 .andExpect(status().isOk()).andExpect(jsonPath("$.version", is(0)));
-        assertThat(fx.auditActions(id)).containsExactly("PATIENT_CREATED");
+        assertThat(fx.auditActions(id)).containsExactly("PATIENT_CREATED", "PATIENT_VIEWED"); // no PATIENT_UPDATED
     }
 }
