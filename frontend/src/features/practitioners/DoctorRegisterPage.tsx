@@ -51,7 +51,7 @@ export function DoctorRegisterPage() {
       <form noValidate onSubmit={form.handleSubmit(submit)}>
         <FormError message={save.isError ? errorMessage(save.error) : null} />
         {catalog.error && <FormError message={errorMessage(catalog.error)} />}
-        <UserPicker id="doctor-userId" registration={form.register('userId')} error={errors.userId?.message} />
+        <UserPicker id="doctor-userId" role="DOCTOR" registration={form.register('userId')} error={errors.userId?.message} />
         <Field label="Full name" htmlFor="doctor-fullName" error={errors.fullName?.message}>
           <input id="doctor-fullName" className={inputClass} autoComplete="off" {...form.register('fullName')} />
         </Field>

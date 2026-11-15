@@ -35,6 +35,7 @@ const catalogRoutes: Routes = {
   'GET /api/v1/specialties?size=100': json(200, SPECIALTIES),
   'GET /api/v1/departments?size=100': json(200, DEPARTMENTS),
   'GET /api/v1/users?status=ACTIVE&size=100': json(200, USERS),
+  'GET /api/v1/users?status=ACTIVE&size=100&role=DOCTOR': json(200, USERS),
 }
 function doctorRoutes(permissions: string[], extra: Routes = {}) {
   return mockApi({
