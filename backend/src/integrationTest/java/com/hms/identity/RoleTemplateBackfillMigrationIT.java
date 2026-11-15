@@ -110,7 +110,7 @@ class RoleTemplateBackfillMigrationIT extends PostgresIT {
     @Test
     void facilityAdministratorGainsStaffPermissions() throws SQLException {
         assertThat(permissions("FACILITY_ADMIN")).containsExactlyInAnyOrder(
-                "practitioner:read", "audit:read", "staff:read", "staff:create", "staff:update");
+                "practitioner:read", "audit:read", "staff:read", "staff:create", "staff:update", "user:read");
     }
 
     @Test
