@@ -25,6 +25,7 @@ Owner decisions for the unimplemented M2 issues. Already settled in merged code 
 | `[E3-7]` | Read audit | Fail-closed on detail reads (`GET /patients/{id}` and sub-resources): the audit write shares the transaction, so a failed audit write fails the read. A search writes one `PATIENT_SEARCH` event with the result count, not one per patient. |
 | `[E2-4]` | Seed data | Idempotent Gradle task behind `dev`/`staging` profiles, refused under `prod`. Default: 1 org, ~10 staff, 2k patients. `--large` gives 100k patients for the `[E3-2]` p95 check. Synthetic names from a fixed list. |
 | `[E4-2]` | Staff login | Every staff record links 1:1 to a user (consistent with Q6). Roles assigned via the existing `role:assign` path (`[E1-7]`). |
+| `[E4-2]`, `[E4-4]` | Linking staff/doctors to users (2026-11-16) | Built-in FACILITY_ADMIN gets `user:read` only (template + `V21` backfill), so the user picker works. User creation and `role:*` stay with SYSTEM_ADMIN (separation of duties). |
 | `[E4-3]` | Leave exceptions | A date plus an optional time range (full day or partial block). Existing bookings that clash are flagged, not auto-cancelled. |
 
 New permission implied: `patient:update-identity` (add to the catalogue in the `[E3-5]` migration).
