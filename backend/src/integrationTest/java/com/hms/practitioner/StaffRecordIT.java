@@ -141,6 +141,18 @@ class StaffRecordIT extends PostgresIT {
     }
 
     @Test
+    void facilityAdministratorCanListUsersToLinkButNotCreateOrChangeThem() throws Exception {
+        UUID nurse = nurseUser(org);
+        mockMvc.perform(admin.apply(get("/api/v1/users").param("status", "ACTIVE"))).andExpect(status().isOk());
+        mockMvc.perform(json(post("/api/v1/users"), "{\"email\":\"" + fx.uniqueEmail("new")
+                        + "\",\"fullName\":\"Synthetic New\",\"roleCodes\":[\"NURSE\"]}"))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(json(patch("/api/v1/users/" + nurse), "{\"version\":" + fx.version(nurse)
+                        + ",\"roleCodes\":[\"FACILITY_ADMIN\"]}"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
     void eachEndpointNeedsItsPermission() throws Exception {
         UUID staff = register(body(nurseUser(org), "NURSE", opd));
         fx.role(org, "STF_READ", "staff:read");
