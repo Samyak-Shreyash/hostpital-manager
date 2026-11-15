@@ -1,1 +1,35 @@
 @import "tailwindcss";
+
+/* Design tokens: see design-system/hms/MASTER.md. Use these semantic names, not raw palette colours. */
+@theme {
+  --font-sans: ui-sans-serif, system-ui, "Segoe UI", Roboto, "Noto Sans", "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "Cascadia Mono", Consolas, "Liberation Mono", monospace;
+
+  --color-surface: var(--color-white);
+  --color-canvas: var(--color-slate-50);
+  --color-border: var(--color-slate-200);
+  --color-ink: var(--color-slate-900);
+  --color-ink-muted: var(--color-slate-600);
+
+  --color-primary: var(--color-blue-700);
+  --color-primary-hover: var(--color-blue-800);
+  --color-primary-soft: var(--color-blue-50);
+  --color-focus: var(--color-blue-600);
+
+  --color-success: var(--color-green-700);
+  --color-success-soft: var(--color-green-50);
+  --color-warning: var(--color-amber-800);
+  --color-warning-soft: var(--color-amber-50);
+  --color-danger: var(--color-red-700);
+  --color-danger-soft: var(--color-red-50);
+}
+
+@layer base {
+  :focus-visible {
+    outline: 2px solid var(--color-focus);
+    outline-offset: 2px;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, ::before, ::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
+  }
+}
