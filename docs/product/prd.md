@@ -21,7 +21,7 @@ Legend: **[C]** confirmed decision · **[P]** proposed recommendation · **[A]**
 | Persona | Goals | Key permissions |
 |---|---|---|
 | System Administrator | Provision organization, users, roles; no clinical access by default | `user:*`, `role:*` (incl. `role:assign`), `org:*`, `audit:read` |
-| Facility Administrator | Run facility config: departments, wards, beds, service catalog, schedules | `catalog:*`, `ward:*`, `bed:*`, `practitioner:*`, `report:read` |
+| Facility Administrator | Run facility config: departments, wards, beds, service catalog, schedules | `catalog:*`, `ward:*`, `bed:*`, `practitioner:*`, `staff:*`, `user:read` (link accounts; owner 2026-11-16), `report:read` |
 | Doctor | Consult, document, prescribe, admit/discharge | `patient:read`, `encounter:*`, `prescription:*`, `admission:*`, `discharge:*` |
 | Nurse | Vitals/observations, bed management support, IPD care notes (basic) | `patient:read`, `observation:write`, `bed:assign`, `admission:read` |
 | Receptionist | Registration, appointments, check-in, admission desk, collect payments | `patient:*`, `appointment:*`, `admission:create`, `payment:create` |
