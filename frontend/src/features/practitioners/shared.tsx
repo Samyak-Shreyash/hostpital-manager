@@ -25,12 +25,13 @@ export function useCatalog() {
   }
 }
 
-/** Picks an active user ([E1-7] list) to link; labelled by name and email, never by id. */
-export function UserPicker({ id, registration, error }: { id: string; registration: UseFormRegisterReturn; error?: string }) {
+/** Picks an active user ([E1-7] list) to link, optionally only holders of `role`; labelled by name and email, never by id. */
+export function UserPicker({ id, registration, error, role }: { id: string; registration: UseFormRegisterReturn; error?: string; role?: string }) {
   const canRead = useCan('user:read')
+  const filters = { status: 'ACTIVE', size: 100, role }
   const users = useQuery({
-    queryKey: ['users', { status: 'ACTIVE', size: 100 }],
-    queryFn: () => listUsers({ status: 'ACTIVE', size: 100 }),
+    queryKey: ['users', filters],
+    queryFn: () => listUsers(filters),
     enabled: canRead,
   })
   return (

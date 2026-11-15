@@ -18,8 +18,11 @@ public final class DefaultRoleTemplates {
 
     public static final List<Template> ALL = List.of(
             template("SYSTEM_ADMIN", "System Administrator", "user:*", "role:*", "org:*", Permissions.AUDIT_READ),
+            // Owner decision 2026-11-16: user:read (only) so staff and doctors can be linked to user accounts;
+            // creating users and assigning roles stays with the System Administrator.
             template("FACILITY_ADMIN", "Facility Administrator",
-                    "catalog:*", "ward:*", "bed:*", "practitioner:*", "staff:*", Permissions.AUDIT_READ, Permissions.REPORT_CLINICAL),
+                    "catalog:*", "ward:*", "bed:*", "practitioner:*", "staff:*", Permissions.USER_READ,
+                    Permissions.AUDIT_READ, Permissions.REPORT_CLINICAL),
             template("DOCTOR", "Doctor", Permissions.PATIENT_READ, Permissions.PATIENT_UPDATE_CLINICAL,
                     "encounter:*", "prescription:*", "admission:*", "discharge:*"),
             template("NURSE", "Nurse", Permissions.PATIENT_READ, Permissions.PATIENT_UPDATE_CLINICAL,
