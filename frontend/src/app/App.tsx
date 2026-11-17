@@ -9,6 +9,7 @@ import { LoginPage } from '../features/auth/LoginPage'
 import { SESSION_KEY } from '../features/auth/useSession'
 import { HomePage } from '../features/HomePage'
 import { AuditPage } from '../features/audit/AuditPage'
+import { CatalogPage } from '../features/catalog/CatalogPage'
 import { PatientDetailPage } from '../features/patients/PatientDetailPage'
 import { PatientRegisterPage } from '../features/patients/PatientRegisterPage'
 import { PatientSearchPage } from '../features/patients/PatientSearchPage'
@@ -82,6 +83,9 @@ export function AppRoutes() {
           </Route>
           <Route element={<RequirePermission permission="staff:create" />}>
             <Route path="staff/new" element={<StaffRegisterPage />} />
+          </Route>
+          <Route element={<RequirePermission permission="catalog:read" />}>
+            <Route path="catalog" element={<CatalogPage />} />
           </Route>
           <Route element={<RequirePermission permission="audit:read" />}>
             <Route path="audit" element={<AuditPage />} />

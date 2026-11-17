@@ -33,6 +33,7 @@ export function AppLayout() {
           {can('staff:read') && <NavLink to="/staff" className={linkClass}>Staff</NavLink>}
           {can('user:read') && <NavLink to="/users" className={linkClass}>Users</NavLink>}
           {can('role:read') && <NavLink to="/roles" className={linkClass}>Roles</NavLink>}
+          {can('catalog:read') && <NavLink to="/catalog" className={linkClass}>Departments</NavLink>}
           {can('audit:read') && <NavLink to="/audit" className={linkClass}>Audit</NavLink>}
         </nav>
         <span className="ml-auto text-sm text-slate-600">{data?.user.fullName}</span>
