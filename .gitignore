@@ -12,6 +12,9 @@ frontend/dist/
 .env.*
 !.env.example
 
+# Database dumps (infra/compose db-backup)
+backups/
+
 # IDE
 .idea/
 *.iml
