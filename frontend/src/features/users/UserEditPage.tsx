@@ -8,6 +8,7 @@ import { errorMessage } from '../auth/messages'
 import { useCan, useSession } from '../auth/useSession'
 import { TemporaryPassword } from './TemporaryPassword'
 import { UserForm } from './UserForm'
+import { useRoleNames } from './UserListPage'
 
 export function UserEditPage() {
   const { id = '' } = useParams()
@@ -19,6 +20,7 @@ export function UserEditPage() {
   const roles = useQuery({ queryKey: ['roles'], queryFn: listRoles })
   const [temporaryPassword, setTemporaryPassword] = useState<string | null>(null)
   const [saved, setSaved] = useState(false)
+  const roleNames = useRoleNames()
 
   const refresh = () => {
     void queryClient.invalidateQueries({ queryKey: ['users'] })
@@ -73,7 +75,7 @@ export function UserEditPage() {
       ) : (
         <dl className="mb-4 text-sm">
           <dt className="font-medium">Email</dt><dd>{u.email}</dd>
-          <dt className="mt-2 font-medium">Roles</dt><dd>{u.roleCodes.join(', ') || 'None'}</dd>
+          <dt className="mt-2 font-medium">Roles</dt><dd>{roleNames(u.roleCodes) || 'None'}</dd>
         </dl>
       )}
       {conflict && (
