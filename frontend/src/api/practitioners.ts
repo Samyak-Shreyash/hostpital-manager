@@ -134,6 +134,11 @@ function query(filters: object): string {
 /** At most 100 per page (api-design.md section 1); enough for a clinic's catalogue. */
 export const listSpecialties = () => api.get<Page<CatalogItem>>('/specialties?size=100')
 export const listDepartments = () => api.get<Page<CatalogItem>>('/departments?size=100')
+export type CatalogPath = 'departments' | 'specialties'
+export const createCatalogItem = (path: CatalogPath, body: { code: string; name: string }) =>
+  api.post<CatalogItem>(`/${path}`, body)
+export const updateCatalogItem = (path: CatalogPath, id: string, body: { version: number; name?: string; active?: boolean }) =>
+  api.patch<CatalogItem>(`/${path}/${enc(id)}`, body)
 
 export interface DoctorFilters { specialtyId?: string; departmentId?: string; q?: string; status?: string; page?: number; size?: number }
 export const listDoctors = (f: DoctorFilters) => api.get<Page<Doctor>>(`/doctors?${query(f)}`)
