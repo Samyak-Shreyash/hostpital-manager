@@ -73,9 +73,11 @@ Prerequisites: JDK 21, Node.js 22+ (see `frontend/.nvmrc`), Docker (needed for P
 ```bash
 # Whole stack in Docker (Postgres + API + proxy serving the SPA), from the repo root:
 cp .env.example .env                              # then fill in every value (compose refuses to start with blanks)
-# DB roles (ADR-0015) are created on first start of an empty volume; a volume from before [E0-6] needs one `... down -v`.
-docker compose -f infra/compose/compose.yml --env-file .env up -d --build --wait
-# -> http://localhost:8080 (SPA; /api/* goes to the backend). Stop: ... down  (add -v to wipe the database)
+# DB roles (ADR-0015) are created on first start of an empty volume; re-init needs `docker volume rm hms-db-data`.
+infra/compose/up.sh                               # reuses the DB volume if present, else creates it (fresh DB)
+# -> http://localhost:8080 (SPA; /api/* goes to the backend). Stop: docker compose -f infra/compose/compose.yml down
+# The DB volume (HMS_DB_VOLUME, default hms-db-data) is external, so even `down -v` keeps it; wipe: docker volume rm hms-db-data
+# Backups: the db-backup service dumps to ./backups at start and every 6h, keeping 14; restore: infra/backup/restore.sh <dump>
 # Monitoring ([E0-7]): add `--profile monitoring` to up/down. Prometheus scrapes the API service at /actuator/prometheus
 # inside the network (the proxy never routes /actuator); Grafana with the "HMS overview" dashboard on
 # http://localhost:${HMS_GRAFANA_PORT}.
