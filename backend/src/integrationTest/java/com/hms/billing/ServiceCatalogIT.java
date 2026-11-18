@@ -488,11 +488,20 @@ class ServiceCatalogIT extends PostgresIT {
                         insertPrice(service, amount, from, null);
                         return true;
                     } catch (RuntimeException e) {
+                        // Raw concurrent inserts can wait on each other's exclusion check; Postgres then aborts one
+                        // with deadlock_detected (40P01) instead of the constraint error. Either is a rejection. The
+                        // service path locks the service row first, so it never gets here.
                         Throwable root = e;
+                        String sqlState = null;
                         while (root.getCause() != null) {
                             root = root.getCause();
+                            if (root instanceof java.sql.SQLException sql && sql.getSQLState() != null) {
+                                sqlState = sql.getSQLState();
+                            }
                         }
-                        assertThat(root.getMessage()).contains("ex_service_price_no_overlap");
+                        if (!"40P01".equals(sqlState)) {
+                            assertThat(root.getMessage()).contains("ex_service_price_no_overlap");
+                        }
                         return false;
                     }
                 };
