@@ -7,17 +7,24 @@ import java.util.UUID;
 
 /**
  * Availability of a practitioner for other modules ([E4-3]; hld.md section 4: appointment depends on practitioner).
- * The appointment module ([E5-*]) will use it to validate bookings (BR-A2) and to list free slots; it must also
- * remove its own booked appointments from {@link #freeSlots}, since this module knows nothing about bookings.
- * Unknown, other-organization and inactive practitioners have no availability.
+ * The appointment module uses it to validate bookings (BR-A2). Free slots already leave out booked times, which
+ * this module learns through the {@link BookedTimes} port. Unknown, other-organization and inactive practitioners
+ * have no availability.
  */
 public interface PractitionerAvailability {
 
-    /** Free slots on the organization-local dates {@code from..to} (inclusive, at most 31 days). */
+    /** Free (unbooked) slots on the organization-local dates {@code from..to} (inclusive, at most 31 days). */
     List<TimeSlot> freeSlots(UUID organizationId, UUID practitionerId, LocalDate from, LocalDate to);
 
-    /** Whether {@code [start, end)} lies inside one weekly window of the practitioner and touches no active leave. */
+    /**
+     * Whether {@code [start, end)} lies inside one weekly window of the practitioner, on that window's slot grid
+     * (start and end a whole number of slots from the window start; owner decision 2026-11-18, Q9), and touches no
+     * active leave. Says nothing about existing bookings.
+     */
     boolean isAvailable(UUID organizationId, UUID practitionerId, Instant start, Instant end);
+
+    /** Whether the practitioner exists in the organization and is ACTIVE. */
+    boolean isActive(UUID organizationId, UUID practitionerId);
 
     /** Half-open {@code [startAt, endAt)} in UTC. */
     record TimeSlot(Instant startAt, Instant endAt) {

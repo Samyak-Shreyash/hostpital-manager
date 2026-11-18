@@ -76,6 +76,7 @@ class OrganizationIsolationIT extends PostgresIT {
     /** Mappings without a path id: nothing to cross-check by id (list endpoints are scoped by the principal). */
     private static final Set<String> EXEMPT = Set.of(
             "POST /api/v1/auth/login",
+            "POST /api/v1/appointments", // ids in the body; cross-org patient/doctor covered by AppointmentBookingIT
             "POST /api/v1/auth/logout",
             "GET /api/v1/auth/me",
             "GET /api/v1/patients",
@@ -170,6 +171,8 @@ class OrganizationIsolationIT extends PostgresIT {
                     "/api/v1/patients/{id}/medical-history/{e}", org.patientId(), org.historyId())
                     .contentType(MediaType.APPLICATION_JSON).content(ENTERED_IN_ERROR_BODY))),
             // No-op bodies (unchanged values) so the shared fixture keeps version 0 whatever order cases run in.
+            Map.entry("GET /api/v1/appointments/{id}",
+                    new CrossOrgCase(org -> get("/api/v1/appointments/" + org.appointmentId()))),
             Map.entry("GET /api/v1/doctors/{id}",
                     new CrossOrgCase(org -> get("/api/v1/doctors/{id}", org.practitionerId()))),
             Map.entry("PATCH /api/v1/doctors/{id}", new CrossOrgCase(org -> patch("/api/v1/doctors/{id}",
@@ -212,7 +215,7 @@ class OrganizationIsolationIT extends PostgresIT {
     /** One organization's ids that endpoints can be called with. Extend as modules add entities. */
     record OrgFixture(UUID organizationId, UUID roleId, UUID lifecycleUserId, UUID patchUserId, UUID departmentId,
             UUID specialtyId, UUID serviceId, UUID patientId, UUID allergyId, UUID historyId, UUID practitionerId,
-            UUID staffId, UUID exceptionId) {
+            UUID staffId, UUID exceptionId, UUID appointmentId) {
     }
 
     /**
@@ -393,7 +396,7 @@ class OrganizationIsolationIT extends PostgresIT {
         assertThat(expected).contains("role", "role_permission", "user_role", "document_sequence", "department",
                 "specialty", "service_catalog_item", "service_price", "patient", "patient_address",
                 "patient_contact", "practitioner", "practitioner_specialty", "practitioner_department", "staff",
-                "practitioner_availability", "availability_exception");
+                "practitioner_availability", "availability_exception", "appointment");
         assertThat(new TreeSet<>(rlsTables())).isEqualTo(expected);
     }
 
@@ -451,6 +454,7 @@ class OrganizationIsolationIT extends PostgresIT {
         UUID staffId = UUID.randomUUID();
         UUID staffUserId = insertUser(organizationId);
         UUID exceptionId = UUID.randomUUID();
+        UUID appointmentId = UUID.randomUUID();
         inOrg(organizationId, () -> {
             jdbc.sql("""
                     INSERT INTO hms.department (id, organization_id, code, name, created_at, updated_at)
@@ -497,13 +501,18 @@ class OrganizationIsolationIT extends PostgresIT {
                     INSERT INTO hms.availability_exception (id, organization_id, practitioner_id, leave_date,
                         created_by, created_at, updated_at) VALUES (?, ?, ?, DATE '2026-11-16', ?, now(), now())""")
                     .params(exceptionId, organizationId, practitionerId, practitionerUserId).update();
+            jdbc.sql("""
+                    INSERT INTO hms.appointment (id, organization_id, patient_id, practitioner_id, start_at, end_at,
+                        created_by, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, TIMESTAMPTZ '2026-11-16 04:00Z', TIMESTAMPTZ '2026-11-16 04:15Z', ?, now(), now())""")
+                    .params(appointmentId, organizationId, patientId, practitionerId, practitionerUserId).update();
             return jdbc.sql("""
                     INSERT INTO hms.practitioner_department (organization_id, practitioner_id, department_id,
                         created_at) VALUES (?, ?, ?, now())""")
                     .params(organizationId, practitionerId, departmentId).update();
         });
         return new OrgFixture(organizationId, roleId, lifecycleUserId, patchUserId, departmentId, specialtyId, serviceId, patientId,
-                allergyId, historyId, practitionerId, staffId, exceptionId);
+                allergyId, historyId, practitionerId, staffId, exceptionId, appointmentId);
     }
 
     private UUID insertUser(UUID organizationId) {

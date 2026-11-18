@@ -45,6 +45,10 @@ Legal review flags (for `[E10-8]`, not decided here): ABHA retention and masking
 | `[E4-3]` availability | `[E4-1]` |
 | `[E4-4]` UI | `[E1-8]`, `[E4-1]`..`[E4-3]` |
 
+### 1b. Appointment decisions (2026-11-18, `[E5-1]`)
+- Q9 resolved: practitioner.api gains a `BookedTimes` port, implemented by the appointment module; `freeSlots` leaves out booked times. Clashes of leave with existing bookings are still flagged, never cancelled (flagging UI is later work).
+- Q9 resolved: a booking must sit on the window's slot grid and last a whole number of slots; `appointment:override` (`outsideAvailability:true`) bypasses availability entirely and is audited.
+
 ## 2. Open questions
 
 | ID | Question | Raised in | Blocks | Default until answered |
@@ -56,7 +60,6 @@ Legal review flags (for `[E10-8]`, not decided here): ABHA retention and masking
 | Q6 | Practitioners without a login | domain-model.md | — | [A] deferred; every practitioner has a user |
 | Q7 | Time zone handling for daily charges | ADR candidates | `[E8-5]` | Facility time zone from org settings |
 | Q8 | The staff screen/API neither shows nor assigns roles; roles are managed only via `PATCH /users/{id}` (owner decision 2026-11-14) | `[E4-2]` | `[E4-4]` | Revisit when building the staff UI (`[E4-4]`) |
-| Q9 | `[E4-3]` (#44) criterion "slots honour existing bookings" is deferred to the appointment module: subtract bookings from `PractitionerAvailability.freeSlots` and flag (never cancel) bookings that clash with leave; also decide whether `isAvailable` must align to slot boundaries | `[E4-3]` | `[E5-1]` | Free slots ignore bookings until `[E5-1]`; `isAvailable` checks window/leave containment only |
 | Q10 | `GET /doctors/{id}/slots` requires `appointment:read` (the front desk books from it), not `practitioner:read`. Reviewer recommends keeping; owner to confirm | `[E4-3]` | `[E5-1]` | Keep `appointment:read` |
 | Q11 | UI log B1 (`hms_ui_issues.md`): should `SYSTEM_ADMIN` see Departments & specialties? Recommendation: no grant (catalog is facility config owned by `FACILITY_ADMIN`; keeps platform/facility admin apart for multi-tenant). A read-only `catalog:read` grant would need a Flyway migration and roles-doc update | UI review 2026-11-17 | — | No permission change; the Forbidden page names the screen and the permission it needs (uncommitted, owner to confirm) |
 | Q12 | UI log G3: Home page shortcuts and counts. Counts need a summary/reporting endpoint | UI review 2026-11-17 | — | Home stays a welcome line; counts go to a reporting backlog issue (M5/M6); permission-filtered shortcut links are front-end only if wanted sooner |

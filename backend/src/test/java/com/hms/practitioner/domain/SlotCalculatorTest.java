@@ -105,4 +105,16 @@ class SlotCalculatorTest {
         assertThat(SlotCalculator.isAvailable(windows, List.of(), nine.plusSeconds(86_400),
                 nine.plusSeconds(87_300), IST)).isFalse(); // Tuesday
     }
+
+    @Test
+    void isAvailableRequiresTheSlotGrid() {
+        List<Window> windows = List.of(window(1, "09:00", "12:00", 15));
+        Instant nine = Instant.parse("2026-11-16T03:30:00Z");
+        assertThat(SlotCalculator.isAvailable(windows, List.of(), nine.plusSeconds(900), nine.plusSeconds(2700), IST))
+                .isTrue(); // 09:15-09:45, two slots
+        assertThat(SlotCalculator.isAvailable(windows, List.of(), nine.plusSeconds(300), nine.plusSeconds(1200), IST))
+                .isFalse(); // starts 09:05
+        assertThat(SlotCalculator.isAvailable(windows, List.of(), nine, nine.plusSeconds(1200), IST))
+                .isFalse(); // 20 minutes is not whole slots
+    }
 }
