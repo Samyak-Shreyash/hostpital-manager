@@ -268,6 +268,26 @@ class UserManagementIT extends PostgresIT {
     }
 
     @Test
+    void listSortsByAllowedKeysAndFiltersByIdsWithinTheCallersOrganization() throws Exception {
+        UUID alpha = fx.user(org, fx.uniqueEmail("alpha"), "NURSE");
+        UUID zulu = fx.user(org, fx.uniqueEmail("zulu"), "NURSE");
+        jdbc.sql("UPDATE hms.app_user SET full_name = 'Aaa Alpha' WHERE id = ?").param(alpha).update();
+        jdbc.sql("UPDATE hms.app_user SET full_name = 'Zzz Zulu' WHERE id = ?").param(zulu).update();
+        UUID elsewhere = fx.user(fx.organization(), fx.uniqueEmail("elsewhere"), "NURSE");
+
+        mockMvc.perform(admin.apply(get(USERS).param("role", "NURSE").param("sort", "name")))
+                .andExpect(jsonPath("$.items[0].id").value(alpha.toString()));
+        mockMvc.perform(admin.apply(get(USERS).param("role", "NURSE").param("sort", "-name")))
+                .andExpect(jsonPath("$.items[0].id").value(zulu.toString()));
+        // Another organization's id is silently not matched, like any unknown id.
+        mockMvc.perform(admin.apply(get(USERS).param("ids", zulu.toString(), elsewhere.toString())))
+                .andExpect(jsonPath("$.totalItems").value(1))
+                .andExpect(jsonPath("$.items[0].id").value(zulu.toString()));
+        mockMvc.perform(admin.apply(get(USERS).param("sort", "password_hash")))
+                .andExpect(status().isUnprocessableContent());
+    }
+
+    @Test
     void getReturnsTheUserIsAuditedAndAnotherOrganizationsUserIs404() throws Exception {
         UUID doctor = fx.user(org, fx.uniqueEmail("doc"), "DOCTOR");
         mockMvc.perform(admin.apply(get(USERS + "/" + doctor)))

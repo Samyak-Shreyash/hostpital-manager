@@ -1,5 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useForm } from 'react-hook-form'
+import { Link } from 'react-router'
 import { z } from 'zod'
 import { Field, FormError, inputClass, primaryButton } from '../../components/ui'
 
@@ -31,6 +32,7 @@ export function UserForm({ mode, roleOptions, initial, submitting, serverError, 
   return (
     <form noValidate onSubmit={form.handleSubmit(onSubmit)} className="max-w-md">
       <FormError message={serverError} />
+      <p className="mb-3 text-sm text-slate-600">All fields are required.</p>
       <Field label="Email" htmlFor="email" error={errors.email?.message ?? emailError ?? undefined}>
         <input
           id="email"
@@ -45,19 +47,22 @@ export function UserForm({ mode, roleOptions, initial, submitting, serverError, 
         <input id="fullName" className={inputClass} autoComplete="off" {...form.register('fullName')} />
       </Field>
       <fieldset className="mb-4">
-        <legend className="text-sm font-medium">Roles</legend>
+        <legend className="text-sm font-medium">Roles <span className="font-normal text-slate-600">(at least one)</span></legend>
         {roleOptions.length === 0 && <p className="text-sm text-slate-600">No roles available.</p>}
         {roleOptions.map((role) => (
           <label key={role.code} className="mt-1 flex items-center gap-2 text-sm">
             <input type="checkbox" value={role.code} {...form.register('roleCodes')} />
-            {role.name} <span className="text-slate-500">({role.code})</span>
+            {role.name}
           </label>
         ))}
         {errors.roleCodes?.message && <p role="alert" className="mt-1 text-sm text-red-700">{errors.roleCodes.message}</p>}
       </fieldset>
-      <button type="submit" className={primaryButton} disabled={submitting}>
-        {mode === 'create' ? 'Create user' : 'Save changes'}
-      </button>
+      <div className="flex items-center gap-4">
+        <button type="submit" className={primaryButton} disabled={submitting}>
+          {mode === 'create' ? (submitting ? 'Creating…' : 'Create user') : submitting ? 'Saving…' : 'Save changes'}
+        </button>
+        <Link className="text-sm text-blue-700 underline" to="/users">Cancel</Link>
+      </div>
     </form>
   )
 }
