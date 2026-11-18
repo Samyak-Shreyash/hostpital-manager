@@ -34,7 +34,12 @@ public class AuditViewService {
     }
 
     public record AuditEventView(UUID id, Instant occurredAt, UUID actorId, String action, String entityType,
-            UUID entityId, String outcome, List<String> changedFields, String correlationId) {
+            UUID entityId, String outcome, List<String> changedFields, String correlationId,
+            List<ValueChangeView> changedValues) {
+    }
+
+    /** Old/new value of an allowlisted field (ADR-0016); either may be null. */
+    public record ValueChangeView(String field, String oldValue, String newValue) {
     }
 
     private final AuditEventQueries queries;
@@ -74,7 +79,8 @@ public class AuditViewService {
 
     private static AuditEventView view(Row r) {
         return new AuditEventView(r.id(), r.occurredAt(), r.actorId(), r.action(), r.entityType(), r.entityId(),
-                r.outcome(), r.changedFields(), r.correlationId());
+                r.outcome(), r.changedFields(), r.correlationId(), r.changedValues().stream()
+                        .map(v -> new ValueChangeView(v.field(), v.oldValue(), v.newValue())).toList());
     }
 
     private static UUID uuid(String value, String name, List<String> used) {

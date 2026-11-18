@@ -202,13 +202,14 @@ class AuditRecorderIT extends PostgresIT {
                 assertThat((String[]) fields.getArray()).containsExactly("address.city", "phone");
             }
         }
-        // The table has no free-text column a value could be smuggled into.
+        // The table has no free-text column a value could be smuggled into. changed_values (ADR-0016) holds
+        // allowlisted code values only, enforced by AuditValueChange and ck_audit_event_changed_values.
         assertThat(jdbc.sql("""
                         SELECT column_name FROM information_schema.columns
                         WHERE table_schema = 'hms' AND table_name = 'audit_event' ORDER BY ordinal_position""")
                 .query(String.class).list())
                 .containsExactly("id", "organization_id", "occurred_at", "actor_id", "action", "entity_type",
-                        "entity_id", "outcome", "correlation_id", "changed_fields", "result_count");
+                        "entity_id", "outcome", "correlation_id", "changed_fields", "result_count", "changed_values");
     }
 
     @Test

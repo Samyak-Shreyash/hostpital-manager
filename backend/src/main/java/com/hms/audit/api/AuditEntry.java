@@ -20,6 +20,8 @@ import java.util.regex.Pattern;
  * @param changedFields  camelCase field names, optionally dotted ({@code address.city}); at most 50,
  *                       stored de-duplicated and sorted
  * @param resultCount    number of results for search events, otherwise {@code null}; a count is not PHI
+ * @param valueChanges   old/new values, only for fields allowlisted in {@link AuditValueChange#ALLOWED} for this
+ *                       entity type and named in {@code changedFields} (ADR-0016); usually empty
  */
 public record AuditEntry(
         UUID organizationId,
@@ -29,7 +31,8 @@ public record AuditEntry(
         UUID entityId,
         AuditOutcome outcome,
         List<String> changedFields,
-        Integer resultCount) {
+        Integer resultCount,
+        List<AuditValueChange> valueChanges) {
 
     public static final int MAX_CHANGED_FIELDS = 50;
 
@@ -40,7 +43,20 @@ public record AuditEntry(
     /** Event without a result count (everything except searches). */
     public AuditEntry(UUID organizationId, UUID actorId, String action, String entityType, UUID entityId,
             AuditOutcome outcome, List<String> changedFields) {
-        this(organizationId, actorId, action, entityType, entityId, outcome, changedFields, null);
+        this(organizationId, actorId, action, entityType, entityId, outcome, changedFields, null, List.of());
+    }
+
+    /** Event with a result count (searches) and no values. */
+    public AuditEntry(UUID organizationId, UUID actorId, String action, String entityType, UUID entityId,
+            AuditOutcome outcome, List<String> changedFields, Integer resultCount) {
+        this(organizationId, actorId, action, entityType, entityId, outcome, changedFields, resultCount, List.of());
+    }
+
+    /** Event with old/new values for allowlisted fields (ADR-0016). */
+    public static AuditEntry withValues(UUID organizationId, UUID actorId, String action, String entityType,
+            UUID entityId, AuditOutcome outcome, List<String> changedFields, List<AuditValueChange> valueChanges) {
+        return new AuditEntry(organizationId, actorId, action, entityType, entityId, outcome, changedFields, null,
+                valueChanges);
     }
 
     public AuditEntry {
@@ -63,6 +79,12 @@ public record AuditEntry(
             throw new IllegalArgumentException("at most " + MAX_CHANGED_FIELDS + " changed fields");
         }
         changedFields = List.copyOf(fields);
+        valueChanges = valueChanges == null ? List.of() : List.copyOf(valueChanges);
+        for (AuditValueChange change : valueChanges) {
+            if (!change.allowedFor(entityType) || !fields.contains(change.field())) {
+                throw new IllegalArgumentException("values may only be audited for allowlisted, changed fields");
+            }
+        }
     }
 
     /** An event without field-level change metadata (views, auth events, state transitions). */
