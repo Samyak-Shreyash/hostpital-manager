@@ -45,7 +45,7 @@ export function AuditPage() {
               <tbody>
                 {events.data.items.map((e) => (
                   <tr key={e.id} className="border-b align-top">
-                    <td className="p-2 whitespace-nowrap">{new Date(e.occurredAt).toLocaleString()}</td>
+                    <td className="p-2 whitespace-nowrap">{new Date(e.occurredAt).toLocaleString('en-IN')}</td>
                     <td className="p-2">{e.action}</td>
                     <td className="p-2">{e.outcome}</td>
                     <td className="p-2 font-mono text-xs">{e.actorId ?? 'System'}</td>

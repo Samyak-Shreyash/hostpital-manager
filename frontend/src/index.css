@@ -33,3 +33,8 @@
     *, ::before, ::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
   }
 }
+
+/* Reserve the scrollbar so the layout does not shift when a page grows past one screen. */
+html {
+  scrollbar-gutter: stable;
+}
