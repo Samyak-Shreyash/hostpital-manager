@@ -1,0 +1,10 @@
+# gitleaks config: default rules plus an allowlist of known public/synthetic values. Justify each entry.
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Public dev/test-profile ABHA HMAC key (ADR-0009: never protects real data) and the synthetic integration-test login password"
+regexes = [
+  '''^nj2jm\+IPrrh3q3aMgaEh3hJ0KX0eblMZXjAl1A0lo3Y=$''',
+  '''^Synthetic-Pass-123$''',
+]
