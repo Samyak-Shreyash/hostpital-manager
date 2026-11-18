@@ -72,7 +72,7 @@ public class UserManagementService {
 
     @Transactional(readOnly = true)
     public PageResult<UserView> list(AuthenticatedPrincipal actor, String status, String roleCode, String query,
-            int page, int size) {
+            List<UUID> userIds, String sort, int page, int size) {
         if (page < 0 || size < 1 || size > MAX_PAGE_SIZE) {
             throw new BusinessRuleException("VALIDATION_ERROR",
                     "page must be 0 or more and size 1 to " + MAX_PAGE_SIZE + ".");
@@ -84,12 +84,23 @@ public class UserManagementService {
         UUID org = actor.organizationId();
         String like = blankToNull(query) == null ? null : likePattern(query.trim());
         String role = blankToNull(roleCode);
-        List<UserRow> rows = userAdmin.list(org, normalisedStatus, role, like, size, (long) page * size);
+        if (userIds != null && userIds.size() > MAX_PAGE_SIZE) {
+            throw new BusinessRuleException("VALIDATION_ERROR", "ids accepts at most " + MAX_PAGE_SIZE + " ids.");
+        }
+        String sortText = blankToNull(sort) == null ? "name" : sort.trim();
+        boolean descending = sortText.startsWith("-");
+        String sortKey = descending ? sortText.substring(1) : sortText;
+        if (!UserAdminRepository.SORT_COLUMNS.containsKey(sortKey)) {
+            throw new BusinessRuleException("VALIDATION_ERROR",
+                    "sort must be one of name, email, status, createdAt, optionally prefixed with '-'.");
+        }
+        UserAdminRepository.Filter filter = new UserAdminRepository.Filter(normalisedStatus, role, like, userIds);
+        List<UserRow> rows = userAdmin.list(org, filter, sortKey, descending, size, (long) page * size);
         Map<UUID, List<String>> roles = rbac.findRoleCodesByUsers(org, rows.stream().map(UserRow::id).toList());
         List<UserView> items = rows.stream().map(r -> new UserView(r.id(), r.email(), r.fullName(), r.status(),
                 r.mustChangePassword(), roles.getOrDefault(r.id(), List.of()), r.version(), r.createdAt(),
                 r.updatedAt())).toList();
-        return new PageResult<>(items, page, size, userAdmin.count(org, normalisedStatus, role, like));
+        return new PageResult<>(items, page, size, userAdmin.count(org, filter));
     }
 
     /** Detail view; audited because it exposes an account's identity and access. */

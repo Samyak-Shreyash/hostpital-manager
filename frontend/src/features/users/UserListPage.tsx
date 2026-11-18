@@ -2,7 +2,7 @@ import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
 import { Link } from 'react-router'
 import { listRoles, listUsers } from '../../api/users'
-import { inputClass, primaryButton } from '../../components/ui'
+import { inputClass, primaryButton, secondaryButton } from '../../components/ui'
 import { useCan } from '../auth/useSession'
 import { errorMessage } from '../auth/messages'
 
@@ -61,16 +61,20 @@ export function UserListPage() {
                   <td className="p-2"><Link className="text-blue-700 underline" to={`/users/${encodeURIComponent(u.id)}`}>{u.fullName}</Link></td>
                   <td className="p-2">{u.email}</td>
                   <td className="p-2">{roleNames(u.roleCodes)}</td>
-                  <td className="p-2">{u.status}</td>
+                  <td className="p-2">
+                    <span className={`rounded px-2 py-0.5 text-xs font-medium ${u.status === 'ACTIVE' ? 'bg-green-100 text-green-800' : 'bg-slate-200 text-slate-700'}`}>
+                      {u.status === 'ACTIVE' ? 'Active' : 'Inactive'}
+                    </span>
+                  </td>
                 </tr>
               ))}
               {users.data.items.length === 0 && <tr><td className="p-2" colSpan={4}>No users found.</td></tr>}
             </tbody>
           </table>
           <div className="mt-3 flex items-center gap-3 text-sm">
-            <button type="button" className="underline disabled:opacity-40" disabled={page === 0} onClick={() => setPage(page - 1)}>Previous</button>
+            <button type="button" className={secondaryButton} disabled={page === 0} onClick={() => setPage(page - 1)}>Previous</button>
             <span>Page {page + 1} of {totalPages}</span>
-            <button type="button" className="underline disabled:opacity-40" disabled={page + 1 >= totalPages} onClick={() => setPage(page + 1)}>Next</button>
+            <button type="button" className={secondaryButton} disabled={page + 1 >= totalPages} onClick={() => setPage(page + 1)}>Next</button>
           </div>
         </>
       )}
