@@ -54,6 +54,18 @@ class UserController {
         return ResponseEntity.status(HttpStatus.CREATED).cacheControl(CacheControl.noStore()).body(body);
     }
 
+    /** All or nothing; the temporary passwords are in this response only (Cache-Control: no-store). */
+    @PostMapping("/import")
+    @PreAuthorize("hasAuthority('user:create')")
+    ResponseEntity<java.util.Map<String, List<UserResponse>>> importUsers(
+            @AuthenticationPrincipal AuthenticatedPrincipal actor, @Valid @RequestBody ImportUsersRequest request) {
+        List<UserResponse> created = users.importUsers(actor, request.users().stream()
+                        .map(u -> new UserManagementService.NewUser(u.email(), u.fullName(), u.roleCodes())).toList())
+                .stream().map(UserResponse::of).toList();
+        return ResponseEntity.status(HttpStatus.CREATED).cacheControl(CacheControl.noStore())
+                .body(java.util.Map.of("items", created));
+    }
+
     @GetMapping("/{id}")
     @PreAuthorize("hasAuthority('user:read')")
     UserResponse get(@AuthenticationPrincipal AuthenticatedPrincipal actor, @PathVariable UUID id) {

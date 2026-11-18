@@ -41,9 +41,23 @@ describe('AuditFilterForm', () => {
     const onApply = vi.fn()
     render(<AuditFilterForm onApply={onApply} />)
     fireEvent.change(screen.getByLabelText('Entity type'), { target: { value: ' PATIENT ' } })
-    fireEvent.change(screen.getByLabelText('Actor id'), { target: { value: ACTOR } })
+    fireEvent.change(screen.getByLabelText('Actor (email or id)'), { target: { value: ACTOR } })
     fireEvent.click(screen.getByRole('button', { name: 'Apply filters' }))
     await waitFor(() => expect(onApply).toHaveBeenCalledWith({ entityType: 'PATIENT', actorId: ACTOR }))
+  })
+
+  it('resolves an actor email to the user id, and reports an unknown email', async () => {
+    const onApply = vi.fn()
+    const resolveEmail = vi.fn(async (email: string) => (email === 'nina@demo.example' ? ACTOR : null))
+    render(<AuditFilterForm onApply={onApply} resolveEmail={resolveEmail} />)
+    const actor = screen.getByLabelText('Actor (email or id)')
+    fireEvent.change(actor, { target: { value: 'nobody@demo.example' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Apply filters' }))
+    expect(await screen.findByText('No user has this email')).toBeInTheDocument()
+    expect(onApply).not.toHaveBeenCalled()
+    fireEvent.change(actor, { target: { value: 'nina@demo.example' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Apply filters' }))
+    await waitFor(() => expect(onApply).toHaveBeenCalledWith({ actorId: ACTOR }))
   })
 })
 
@@ -63,7 +77,7 @@ describe('AuditPage', () => {
   it('is hidden from users without audit:read', async () => {
     mockApi({ 'GET /api/v1/auth/me': json(200, session(['user:read'])) })
     renderApp('/audit')
-    expect(await screen.findByText('Access denied')).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: /is not available to you/ })).toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'Audit' })).not.toBeInTheDocument()
   })
 

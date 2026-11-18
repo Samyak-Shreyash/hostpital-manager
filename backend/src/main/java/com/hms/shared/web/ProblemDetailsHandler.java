@@ -63,7 +63,9 @@ public class ProblemDetailsHandler extends ResponseEntityExceptionHandler {
 
     @ExceptionHandler(BusinessRuleException.class)
     ResponseEntity<ProblemDetail> businessRule(BusinessRuleException ex) {
-        return problem(HttpStatus.UNPROCESSABLE_CONTENT, ex.code(), ex.getMessage());
+        ResponseEntity<ProblemDetail> response = problem(HttpStatus.UNPROCESSABLE_CONTENT, ex.code(), ex.getMessage());
+        ex.properties().forEach(response.getBody()::setProperty);
+        return response;
     }
 
     @ExceptionHandler(ProblemException.class)

@@ -23,7 +23,7 @@ export function RequireAuth({ allowPasswordChange = false }: { allowPasswordChan
 }
 
 /** Missing permission renders the forbidden page; it must sit inside RequireAuth. */
-export function RequirePermission({ permission }: { permission: string }) {
+export function RequirePermission({ permission, screen }: { permission: string; screen?: string }) {
   const { data } = useSession()
-  return hasPermission(data?.permissions, permission) ? <Outlet /> : <Forbidden />
+  return hasPermission(data?.permissions, permission) ? <Outlet /> : <Forbidden screen={screen} permission={permission} />
 }

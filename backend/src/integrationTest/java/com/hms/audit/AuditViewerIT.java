@@ -1,9 +1,11 @@
 package com.hms.audit;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.is;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -22,6 +24,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
@@ -121,6 +124,32 @@ class AuditViewerIT extends PostgresIT {
                         .param("from", base.minusSeconds(25).toString()).param("to", base.minusSeconds(20).toString())))
                 .andExpect(jsonPath("$.totalItems", is(1)))
                 .andExpect(jsonPath("$.items[0].action", is("DEMO_UPDATED")));
+    }
+
+    @Test
+    void allowlistedValueChangesAreRecordedAndReturned() throws Exception {
+        UUID nurse = fx.user(org, fx.uniqueEmail("nurse"), "NURSE");
+        mockMvc.perform(admin.apply(post("/api/v1/users/" + nurse + "/deactivate")))
+                .andExpect(status().isOk());
+        mockMvc.perform(admin.apply(get(URL).param("action", "USER_DEACTIVATED").param("entityId", nurse.toString())))
+                .andExpect(jsonPath("$.items[0].changedValues", hasSize(1)))
+                .andExpect(jsonPath("$.items[0].changedValues[0].field", is("status")))
+                .andExpect(jsonPath("$.items[0].changedValues[0].oldValue", is("ACTIVE")))
+                .andExpect(jsonPath("$.items[0].changedValues[0].newValue", is("INACTIVE")));
+        // Events without values return an empty list.
+        mockMvc.perform(admin.apply(get(URL).param("action", "AUDIT_VIEWED")))
+                .andExpect(jsonPath("$.items[0].changedValues", hasSize(0)));
+    }
+
+    @Test
+    void theDatabaseRejectsFreeTextInChangedValues() {
+        assertThatThrownBy(() -> jdbc.sql("""
+                INSERT INTO hms.audit_event (id, organization_id, occurred_at, action, entity_type, outcome,
+                    changed_values)
+                VALUES (?, ?, now(), 'USER_UPDATED', 'APP_USER', 'SUCCESS',
+                    '[{"field":"roles","old":null,"new":"Fever since 3 days!"}]')
+                """).params(UUID.randomUUID(), org).update())
+                .isInstanceOf(DataIntegrityViolationException.class);
     }
 
     @Test

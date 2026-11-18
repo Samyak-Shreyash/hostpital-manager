@@ -19,19 +19,19 @@ describe('route guards', () => {
   it('shows the forbidden page when the permission is missing', async () => {
     mockApi({ 'GET /api/v1/auth/me': json(200, session(['patient:read'])) })
     renderApp('/users')
-    expect(await screen.findByRole('heading', { name: 'Access denied' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: /is not available to you/ })).toBeInTheDocument()
   })
 
   it('guards by permission, not role: an ADMIN role without the permission is denied', async () => {
     mockApi({ 'GET /api/v1/auth/me': json(200, session([])) })
     renderApp('/roles')
-    expect(await screen.findByRole('heading', { name: 'Access denied' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: /is not available to you/ })).toBeInTheDocument()
   })
 
   it('requires user:create for the create screen even with user:read', async () => {
     mockApi({ 'GET /api/v1/auth/me': json(200, session(['user:read'])) })
     renderApp('/users/new')
-    expect(await screen.findByRole('heading', { name: 'Access denied' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: /is not available to you/ })).toBeInTheDocument()
   })
 
   it('renders the page when the permission is held and hides nav links it does not', async () => {
