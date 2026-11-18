@@ -106,6 +106,13 @@ configurations {
     architectureTestImplementation.extendsFrom implementation
 }
 
+// Full assertion messages in the console, so a CI failure shows its values (e.g. the search timings), not just a line number.
+tasks.withType(Test).configureEach {
+    testLogging {
+        events 'failed'
+        exceptionFormat = 'full'
+    }
+}
 
 tasks.named('check') {
     dependsOn testing.suites.integrationTest, testing.suites.architectureTest, tasks.named('seedClasses')
