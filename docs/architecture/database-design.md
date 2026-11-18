@@ -90,7 +90,15 @@ Both are *trusted* extensions on PG13+, so `hms_owner` (database owner) can crea
 CREATE EXTENSION IF NOT EXISTS btree_gist WITH SCHEMA hms;
 CREATE EXTENSION IF NOT EXISTS pg_trgm    WITH SCHEMA hms;
 ```
-Installed in V1 (not when first used) so the privilege question is settled once and later migrations are plain DDL. `pgcrypto` / `uuid-ossp` are **not** installed: UUIDs come from the app (ADR-0004) and `gen_random_uuid()` is core since PG13 if ever needed.
+Installed in V1 (not when first used) so the privilege question is settled once and later migrations are plain DDL.
+
+**pg_trgm and row-level security (2026-11-14).** Postgres applies a query operator ahead of the RLS policy, and so can use an index for it, only when the operator's function is `LEAKPROOF`. pg_trgm's operators are not, so under `FORCE ROW LEVEL SECURITY` a trigram name search scanned the whole patient table (about 150 ms per query at 100k patients, against 0.1 ms with the index). Only a superuser can mark a function `LEAKPROOF`, and Flyway runs as `hms_owner`, so the database init step (`infra/docker/db-init/01-roles.sh`, test copy `init-roles.sql`) installs pg_trgm before Flyway and runs:
+```sql
+CREATE SCHEMA hms AUTHORIZATION hms_owner;
+CREATE EXTENSION pg_trgm WITH SCHEMA hms;
+ALTER FUNCTION hms.word_similarity_commutator_op(text, text) LEAKPROOF;
+```
+V1's `CREATE EXTENSION IF NOT EXISTS` then skips it. Only that function (behind `full_name %> :name`, the name-search operator) is marked: it compares two strings and cannot raise an error that depends on row data. `PatientSearchIndexIT` fails if a database lacks the setting. **An existing database** (a dev volume created before this change, or staging/prod set up by hand) needs the `ALTER FUNCTION` line run once by a superuser. `pgcrypto` / `uuid-ossp` are **not** installed: UUIDs come from the app (ADR-0004) and `gen_random_uuid()` is core since PG13 if ever needed.
 
 ## 6. Document numbering — `document_sequence`
 One generic gapless counter table for business keys that must be sequential: invoice number (BR-B2, gapless per org per financial year), credit note number, receipt number, UHID (BR-P2, unique and never reused; gapless is harmless there).
@@ -167,7 +175,7 @@ All test data synthetic (random UUIDs, no names).
 | D2 | Financial year and business date use the **organization's time zone** (default `Asia/Kolkata`), as already specified upstream: PRD section 5 "Time" and assumption A3, `PATCH /organization` timezone in api-design.md section 4. Until the `organization` table exists (M1), callers pass `Asia/Kolkata`. *Corrected 2026-11-09: the first draft said "constant", which contradicted the PRD.* |
 | D3 | The shared `document_sequence` table replaces billing's `InvoiceNumberSequence` entity (domain-model.md updated). |
 | D4 | The immutability trigger also binds `hms_owner`. An emergency correction is a reviewed migration that disables the trigger for one statement and records why. |
-| D5 | `btree_gist` and `pg_trgm` are installed in V1, before first use. |
+| D5 | `btree_gist` and `pg_trgm` are installed in V1, before first use; on new databases the superuser init step installs pg_trgm first and marks its name-search operator `LEAKPROOF` (section 5). |
 
 ## 11. Audit events — `audit_event` (`V2__audit_event.sql`, `[E1-1]`)
 ADR-0007, PRD AUD-1/2/4, invariant I8. Written only through `audit.api.AuditRecorder`.
