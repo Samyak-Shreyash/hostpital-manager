@@ -3,6 +3,7 @@ package com.hms.identity.application;
 import com.hms.audit.api.AuditEntry;
 import com.hms.audit.api.AuditOutcome;
 import com.hms.audit.api.AuditRecorder;
+import com.hms.audit.api.AuditValueChange;
 import com.hms.identity.api.AuthenticatedPrincipal;
 import com.hms.identity.api.Permissions;
 import com.hms.identity.infrastructure.RbacRepository;
@@ -101,15 +102,19 @@ public class RoleManagementService {
             changed.add("name");
         }
         boolean permissionsChanged = false;
+        List<AuditValueChange> values = new ArrayList<>();
         if (permissionCodes != null) {
             int adminsBefore = rbac.countActiveAdministrators(org);
             Set<String> wanted = requireKnownPermissions(permissionCodes);
+            List<String> before = rbac.findPermissionCodesByRoles(org, List.of(roleId)).getOrDefault(roleId, List.of());
             Set<String> added = new TreeSet<>(wanted);
-            added.removeAll(rbac.findPermissionCodesByRoles(org, List.of(roleId)).getOrDefault(roleId, List.of()));
+            added.removeAll(before);
             requireCallerHolds(actor, added);
             permissionsChanged = replacePermissions(org, roleId, wanted);
             if (permissionsChanged) {
                 changed.add("permissions");
+                values.add(new AuditValueChange("permissions", AuditValueChange.codes(before),
+                        AuditValueChange.codes(wanted)));
                 if (adminsBefore > 0 && rbac.countActiveAdministrators(org) == 0) {
                     throw new ConflictException("LAST_ADMINISTRATOR",
                             "This would leave the organization without an active system administrator.");
@@ -124,8 +129,8 @@ public class RoleManagementService {
                 userAdmin.deleteSessions(holder, actor.userId().equals(holder) ? currentSessionId : null);
             }
         }
-        audit.record(new AuditEntry(org, actor.userId(), "ROLE_UPDATED", ENTITY, roleId, AuditOutcome.SUCCESS,
-                changed));
+        audit.record(AuditEntry.withValues(org, actor.userId(), "ROLE_UPDATED", ENTITY, roleId,
+                AuditOutcome.SUCCESS, changed, values));
         RoleRow updated = rbac.findRole(org, roleId).orElseThrow();
         return view(updated, rbac.findPermissionCodesByRoles(org, List.of(roleId)).getOrDefault(roleId, List.of()));
     }

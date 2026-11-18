@@ -284,6 +284,6 @@ describe('patient detail', () => {
   it('is forbidden without patient:read', async () => {
     mockApi({ 'GET /api/v1/auth/me': json(200, session(['patient:search'])) })
     renderApp('/patients/p-1')
-    expect(await screen.findByText('Access denied')).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: /is not available to you/ })).toBeInTheDocument()
   })
 })

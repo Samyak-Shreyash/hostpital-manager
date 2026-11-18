@@ -45,6 +45,34 @@ class AuditEntryTest {
     }
 
     @Test
+    void valuesAreKeptForAllowlistedChangedFields() {
+        AuditEntry entry = AuditEntry.withValues(ORG, null, "USER_DEACTIVATED", "APP_USER", null,
+                AuditOutcome.SUCCESS, List.of("status"), List.of(new AuditValueChange("status", "ACTIVE", "INACTIVE")));
+        assertThat(entry.valueChanges()).containsExactly(new AuditValueChange("status", "ACTIVE", "INACTIVE"));
+        assertThat(entry(List.of("phone")).valueChanges()).isEmpty();
+    }
+
+    @Test
+    void valuesForFieldsOffTheAllowlistOrNotChangedAreRejected() {
+        // A patient field is never allowlisted, whatever the value.
+        assertThatThrownBy(() -> AuditEntry.withValues(ORG, null, "PATIENT_UPDATED", "PATIENT", null,
+                AuditOutcome.SUCCESS, List.of("phone"), List.of(new AuditValueChange("phone", null, "X"))))
+                .isInstanceOf(IllegalArgumentException.class);
+        // Allowlisted, but not named in changedFields.
+        assertThatThrownBy(() -> AuditEntry.withValues(ORG, null, "USER_UPDATED", "APP_USER", null,
+                AuditOutcome.SUCCESS, List.of("fullName"), List.of(new AuditValueChange("roles", "A", "B"))))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"Synthetic Name", "test.user@example.invalid", "a\"b", "x\\y","Fever since three days"})
+    void nonCodeValuesAreRejectedWithoutEchoingThem(String value) {
+        assertThatThrownBy(() -> new AuditValueChange("roles", null, value))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("audited values must be codes only");
+    }
+
+    @Test
     void atMostFiftyChangedFields() {
         assertThat(entry(fields(50)).changedFields()).hasSize(50);
         assertThatThrownBy(() -> entry(fields(51))).isInstanceOf(IllegalArgumentException.class);
