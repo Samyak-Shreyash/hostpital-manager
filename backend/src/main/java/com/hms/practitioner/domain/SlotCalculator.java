@@ -74,8 +74,10 @@ public final class SlotCalculator {
     }
 
     /**
-     * Whether {@code [start, end)} lies inside one window and touches no leave. Checks the local dates around the
-     * interval, so a zone far from UTC cannot push the matching window onto a neighbouring date.
+     * Whether {@code [start, end)} lies inside one window, on its slot grid, and touches no leave. On the grid means
+     * start and end are each a whole number of slots (in elapsed time, as {@link #freeSlots} steps them) from the
+     * window start. Checks the local dates around the interval, so a zone far from UTC cannot push the matching
+     * window onto a neighbouring date.
      */
     public static boolean isAvailable(List<Window> windows, List<Leave> leave, Instant start, Instant end,
             ZoneId zone) {
@@ -104,12 +106,17 @@ public final class SlotCalculator {
                 }
                 Instant ws = date.atTime(window.start()).atZone(zone).toInstant();
                 Instant we = date.atTime(window.end()).atZone(zone).toInstant();
-                if (!start.isBefore(ws) && !end.isAfter(we)) {
+                if (!start.isBefore(ws) && !end.isAfter(we) && onGrid(ws, start, window.slotMinutes())
+                        && onGrid(ws, end, window.slotMinutes())) {
                     inWindow = true;
                 }
             }
         }
         return inWindow;
+    }
+
+    private static boolean onGrid(Instant windowStart, Instant at, int slotMinutes) {
+        return Duration.between(windowStart, at).toNanos() % Duration.ofMinutes(slotMinutes).toNanos() == 0;
     }
 
     /** Partial leave blocks on {@code date} as instants; {@code null} when the whole day is off. */

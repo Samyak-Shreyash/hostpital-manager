@@ -5,6 +5,7 @@ import com.hms.audit.api.AuditOutcome;
 import com.hms.audit.api.AuditRecorder;
 import com.hms.organization.api.OrganizationDirectory;
 import com.hms.organization.api.OrganizationSummary;
+import com.hms.practitioner.api.BookedTimes;
 import com.hms.practitioner.api.PractitionerAvailability;
 import com.hms.practitioner.domain.SlotCalculator;
 import com.hms.practitioner.domain.SlotCalculator.Leave;
@@ -43,8 +44,8 @@ import org.springframework.transaction.annotation.Transactional;
  * returned as UTC instants. The weekly template is replaced as a set under the practitioner row lock with the
  * practitioner's {@code version}; overlapping windows are refused here (clear 422) and by the V20 exclusion
  * constraint. Leave (owner decision 2026-11-13: a date plus an optional time range) is never deleted, only
- * cancelled. Bookings do not exist yet ([E5-*]): when they do, a clashing booking is flagged by the appointment
- * module, never cancelled by a leave entry.
+ * cancelled; a booking that clashes with leave is never cancelled by it. Free slots leave out booked times, read
+ * through the {@link BookedTimes} port the appointment module implements (owner decision 2026-11-18, Q9).
  */
 @Service
 public class AvailabilityService implements PractitionerAvailability {
@@ -60,15 +61,18 @@ public class AvailabilityService implements PractitionerAvailability {
     private final AvailabilityRepository repository;
     private final OrganizationDirectory organizations;
     private final AuditRecorder audit;
+    private final BookedTimes bookedTimes;
     private final UuidV7Generator ids;
     private final Clock clock;
 
     public AvailabilityService(PractitionerRepository practitioners, AvailabilityRepository repository,
-            OrganizationDirectory organizations, AuditRecorder audit, UuidV7Generator ids, Clock clock) {
+            OrganizationDirectory organizations, AuditRecorder audit, BookedTimes bookedTimes, UuidV7Generator ids,
+            Clock clock) {
         this.practitioners = practitioners;
         this.repository = repository;
         this.organizations = organizations;
         this.audit = audit;
+        this.bookedTimes = bookedTimes;
         this.ids = ids;
         this.clock = clock;
     }
@@ -238,9 +242,16 @@ public class AvailabilityService implements PractitionerAvailability {
         if (!active(organizationId, practitionerId)) {
             return List.of();
         }
-        return SlotCalculator.freeSlots(windowsOf(organizationId, practitionerId),
+        List<TimeSlot> slots = SlotCalculator.freeSlots(windowsOf(organizationId, practitionerId),
                         leaveOf(organizationId, practitionerId, from, to), from, to, zone(organizationId))
                 .stream().map(s -> new TimeSlot(s.start(), s.end())).toList();
+        if (slots.isEmpty()) {
+            return slots;
+        }
+        List<TimeSlot> booked = bookedTimes.booked(organizationId, practitionerId, slots.getFirst().startAt(),
+                slots.getLast().endAt());
+        return slots.stream().filter(s -> booked.stream()
+                .noneMatch(b -> s.startAt().isBefore(b.endAt()) && b.startAt().isBefore(s.endAt()))).toList();
     }
 
     @Override
@@ -256,6 +267,12 @@ public class AvailabilityService implements PractitionerAvailability {
         LocalDate last = end.atZone(zone).toLocalDate().plusDays(1);
         return SlotCalculator.isAvailable(windowsOf(organizationId, practitionerId),
                 leaveOf(organizationId, practitionerId, first, last), start, end, zone);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public boolean isActive(UUID organizationId, UUID practitionerId) {
+        return active(organizationId, practitionerId);
     }
 
     // --- helpers ------------------------------------------------------------------------------------------------

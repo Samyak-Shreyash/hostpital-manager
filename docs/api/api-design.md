@@ -199,6 +199,12 @@ POST /appointments/{id}/check-in → 200 { "status":"CHECKED_IN","tokenNo":7,"to
 ```
 Rules: start in future (unless `appointment:backdate`); within availability unless `appointment:override`; duration multiple of slot; cancel needs `reason`; transitions per state machine else `409 INVALID_STATE_TRANSITION`.
 
+Implemented `[E5-1]` (`POST /appointments`, `GET /appointments/{id}`):
+- Body `patientId`, `doctorId`, `startAt` (whole minute), `durationMinutes` (1-480), optional `reason` (≤500, never audited or logged), optional `outsideAvailability` (default false). Response adds `patientId`, `doctorId`, `durationMinutes`, `type` (`SCHEDULED`), `reason`, `outsideAvailability`, `createdAt`, `updatedAt`.
+- Errors: `422 VALIDATION_ERROR` (missing/invalid fields); `422 START_IN_PAST` (past start without `appointment:backdate`); `422 DOCTOR_NOT_AVAILABLE` (unknown, other-org or inactive doctor); `422 PATIENT_NOT_AVAILABLE` (unknown or other-org patient); `422 OUTSIDE_AVAILABILITY` (not inside one weekly window, off its slot grid, or on leave); `403` for `outsideAvailability:true` without `appointment:override`; `409 SLOT_CONFLICT` on overlap with a SCHEDULED/CHECKED_IN/IN_CONSULTATION/COMPLETED appointment of the doctor.
+- Audit: `APPOINTMENT_BOOKED` (field names), `APPOINTMENT_AVAILABILITY_OVERRIDDEN` when overridden, `APPOINTMENT_VIEWED` on detail.
+- `GET /doctors/{id}/slots` now leaves out booked times (Q9).
+
 ## 8. Encounters & clinical
 | Method & path | Purpose | Permission |
 |---|---|---|
