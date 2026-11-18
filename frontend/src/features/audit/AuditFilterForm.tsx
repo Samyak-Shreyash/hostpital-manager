@@ -62,10 +62,10 @@ export function AuditFilterForm({ onApply }: Props) {
         <input id="actorId" className={inputClass} autoComplete="off" {...form.register('actorId')} />
       </Field>
       <Field label="Action" htmlFor="action" error={errors.action?.message}>
-        <input id="action" className={inputClass} autoComplete="off" placeholder="PATIENT_VIEWED" {...form.register('action')} />
+        <input id="action" className={inputClass} autoComplete="off" placeholder="e.g. PATIENT_VIEWED" {...form.register('action')} />
       </Field>
       <Field label="Entity type" htmlFor="entityType" error={errors.entityType?.message}>
-        <input id="entityType" className={inputClass} autoComplete="off" placeholder="PATIENT" {...form.register('entityType')} />
+        <input id="entityType" className={inputClass} autoComplete="off" placeholder="e.g. PATIENT" {...form.register('entityType')} />
       </Field>
       <Field label="Entity id" htmlFor="entityId" error={errors.entityId?.message}>
         <input id="entityId" className={inputClass} autoComplete="off" {...form.register('entityId')} />

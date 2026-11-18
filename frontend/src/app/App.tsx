@@ -1,5 +1,5 @@
 import { MutationCache, QueryCache, QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { BrowserRouter, Route, Routes } from 'react-router'
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router'
 import { ApiError } from '../api/client'
 import { AppLayout } from '../components/AppLayout'
 import { NotFound } from '../components/NotFound'
@@ -86,6 +86,8 @@ export function AppRoutes() {
           </Route>
           <Route element={<RequirePermission permission="catalog:read" />}>
             <Route path="catalog" element={<CatalogPage />} />
+            <Route path="departments" element={<Navigate to="/catalog" replace />} />
+            <Route path="specialties" element={<Navigate to="/catalog" replace />} />
           </Route>
           <Route element={<RequirePermission permission="audit:read" />}>
             <Route path="audit" element={<AuditPage />} />

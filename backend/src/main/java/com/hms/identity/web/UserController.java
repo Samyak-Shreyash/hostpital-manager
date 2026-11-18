@@ -6,6 +6,7 @@ import com.hms.identity.application.UserManagementService;
 import com.hms.identity.application.UserView;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
+import java.util.List;
 import java.util.UUID;
 import org.springframework.http.CacheControl;
 import org.springframework.http.HttpStatus;
@@ -36,9 +37,10 @@ class UserController {
     @PreAuthorize("hasAuthority('user:read')")
     PageResult<UserResponse> list(@AuthenticationPrincipal AuthenticatedPrincipal actor,
             @RequestParam(required = false) String status, @RequestParam(required = false) String role,
-            @RequestParam(required = false) String q, @RequestParam(defaultValue = "0") int page,
+            @RequestParam(required = false) String q, @RequestParam(required = false) List<UUID> ids,
+            @RequestParam(required = false) String sort, @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        PageResult<UserView> result = users.list(actor, status, role, q, page, size);
+        PageResult<UserView> result = users.list(actor, status, role, q, ids, sort, page, size);
         return new PageResult<>(result.items().stream().map(UserResponse::of).toList(), result.page(),
                 result.size(), result.totalItems());
     }
