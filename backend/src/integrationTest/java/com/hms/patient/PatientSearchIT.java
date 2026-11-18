@@ -185,7 +185,12 @@ class PatientSearchIT extends PostgresIT {
                        'F', date '1950-01-01' + (i % 25000), '+910' || lpad(i::text, 9, '0'), ?, now(), now()
                 FROM generate_series(1, 100000) AS i
                 """).params(org, UUID.randomUUID()).update());
-        jdbc.sql("ANALYZE hms.patient").update();
+        // ANALYZE needs the table owner: as hms_app Postgres skips it with only a warning, leaving the planner with
+        // stale statistics (production relies on autovacuum for this).
+        try (var owner = java.sql.DriverManager.getConnection(postgres.getJdbcUrl(), OWNER, OWNER_PASSWORD);
+                var statement = owner.createStatement()) {
+            statement.execute("ANALYZE hms.patient");
+        }
         seed(org, "HMS-900001", "Test Priya Sharma", "+910000900001", "1988-04-12");
         List<String> queries = List.of("?q=Priya Sharma", "?q=Priya Sharmma", "?q=sharma", "?uhid=HMS-050000",
                 "?phone=0000050000", "?dob=1988-04-12&q=Priya", "?q=a3f9c1");
