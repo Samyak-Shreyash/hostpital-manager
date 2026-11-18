@@ -1,6 +1,10 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
+import { Link } from 'react-router'
 import { listAuditEvents, type AuditFilters } from '../../api/audit'
+import { listUsers } from '../../api/users'
+import { secondaryButton } from '../../components/ui'
+import { useCan } from '../auth/useSession'
 import { errorMessage } from '../auth/messages'
 import { AuditFilterForm } from './AuditFilterForm'
 
@@ -15,6 +19,19 @@ export function AuditPage() {
     queryFn: () => listAuditEvents(query),
     placeholderData: keepPreviousData,
   })
+  // Audit rows hold ids only; with user:read the names are looked up in one call per page.
+  const canReadUsers = useCan('user:read')
+  const actorIds = [...new Set((events.data?.items ?? []).flatMap((e) => (e.actorId ? [e.actorId] : [])))].sort()
+  const actors = useQuery({
+    queryKey: ['users', { ids: actorIds }],
+    queryFn: () => listUsers({ ids: actorIds, size: 100 }),
+    enabled: canReadUsers && actorIds.length > 0,
+  })
+  const actorNames = new Map((actors.data?.items ?? []).map((u) => [u.id, u]))
+  const resolveEmail = async (email: string) => {
+    const found = await listUsers({ q: email, size: 100 })
+    return found.items.find((u) => u.email.toLowerCase() === email.trim().toLowerCase())?.id ?? null
+  }
   const totalPages = events.data ? Math.max(1, Math.ceil(events.data.totalItems / events.data.size)) : 1
 
   return (
@@ -24,6 +41,7 @@ export function AuditPage() {
         Newest first. Viewing this log is itself recorded. Times are shown in your local time zone.
       </p>
       <AuditFilterForm
+        resolveEmail={canReadUsers ? resolveEmail : undefined}
         onApply={(applied) => {
           setFilters(applied)
           setPage(0)
@@ -48,12 +66,29 @@ export function AuditPage() {
                     <td className="p-2 whitespace-nowrap">{new Date(e.occurredAt).toLocaleString('en-IN')}</td>
                     <td className="p-2">{e.action}</td>
                     <td className="p-2">{e.outcome}</td>
-                    <td className="p-2 font-mono text-xs">{e.actorId ?? 'System'}</td>
+                    <td className="p-2">
+                      {!e.actorId ? 'System' : actorNames.has(e.actorId) ? (
+                        <Link className="text-blue-700 underline" to={`/users/${encodeURIComponent(e.actorId)}`} title={e.actorId}>
+                          {actorNames.get(e.actorId)?.fullName}
+                          <span className="block text-xs text-slate-600">{actorNames.get(e.actorId)?.email}</span>
+                        </Link>
+                      ) : (
+                        <span className="font-mono text-xs">{e.actorId}</span>
+                      )}
+                    </td>
                     <td className="p-2">
                       {e.entityType}
                       {e.entityId && <span className="block font-mono text-xs">{e.entityId}</span>}
                     </td>
-                    <td className="p-2">{e.changedFields.join(', ')}</td>
+                    <td className="p-2">
+                      {e.changedFields.join(', ')}
+                      {(e.changedValues ?? []).map((v) => (
+                        <span key={v.field} className="mt-1 block text-xs">
+                          <span className="font-medium">{v.field}:</span>{' '}
+                          <span className="text-slate-600">{v.oldValue ?? '—'}</span> → <span>{v.newValue ?? '—'}</span>
+                        </span>
+                      ))}
+                    </td>
                     <td className="p-2 font-mono text-xs">{e.correlationId ?? ''}</td>
                   </tr>
                 ))}
@@ -62,9 +97,9 @@ export function AuditPage() {
             </table>
           </div>
           <div className="mt-3 flex items-center gap-3 text-sm">
-            <button type="button" className="underline disabled:opacity-40" disabled={page === 0} onClick={() => setPage(page - 1)}>Previous</button>
+            <button type="button" className={secondaryButton} disabled={page === 0} onClick={() => setPage(page - 1)}>Previous</button>
             <span>Page {page + 1} of {totalPages}</span>
-            <button type="button" className="underline disabled:opacity-40" disabled={page + 1 >= totalPages} onClick={() => setPage(page + 1)}>Next</button>
+            <button type="button" className={secondaryButton} disabled={page + 1 >= totalPages} onClick={() => setPage(page + 1)}>Next</button>
           </div>
         </>
       )}

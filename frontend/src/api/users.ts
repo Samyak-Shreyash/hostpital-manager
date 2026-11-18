@@ -5,6 +5,10 @@ export interface UserFilters {
   status?: string
   role?: string
   q?: string
+  /** Only these users (at most 100); used to show names for ids, e.g. audit actors. */
+  ids?: string[]
+  /** name | email | status | createdAt, '-' prefix for descending. */
+  sort?: string
   page?: number
   size?: number
 }
@@ -12,11 +16,16 @@ export interface UserFilters {
 export function listUsers(filters: UserFilters) {
   const params = new URLSearchParams()
   for (const [key, value] of Object.entries(filters)) {
-    if (value !== undefined && value !== '') params.set(key, String(value))
+    if (Array.isArray(value)) value.forEach((v) => params.append(key, v))
+    else if (value !== undefined && value !== '') params.set(key, String(value))
   }
   const query = params.toString()
   return api.get<Page<UserSummary>>(`/users${query ? `?${query}` : ''}`)
 }
+
+/** All or nothing; the temporary passwords are in this response only. */
+export const importUsers = (users: { email: string; fullName: string; roleCodes: string[] }[]) =>
+  api.post<{ items: UserWithTemporaryPassword[] }>('/users/import', { users })
 
 export const getUser = (id: string) => api.get<UserSummary>(`/users/${encodeURIComponent(id)}`)
 export const createUser = (body: { email: string; fullName: string; roleCodes: string[] }) =>

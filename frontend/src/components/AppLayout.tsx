@@ -11,7 +11,7 @@ const linkClass = ({ isActive }: { isActive: boolean }) =>
 
 /** Browser tab titles per section, so tabs and history entries are distinguishable. */
 const TITLES: [string, string][] = [
-  ['/users/new', 'New user'], ['/users', 'Users'], ['/roles', 'Roles'], ['/patients', 'Patients'],
+  ['/users/new', 'New user'], ['/users/import', 'Import users'], ['/users', 'Users'], ['/roles', 'Roles'], ['/patients', 'Patients'],
   ['/doctors', 'Doctors'], ['/staff', 'Staff'], ['/catalog', 'Departments & specialties'], ['/audit', 'Audit'], ['/', 'Home'],
 ]
 

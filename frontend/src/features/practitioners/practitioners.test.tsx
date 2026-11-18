@@ -195,7 +195,7 @@ describe('doctor screens', () => {
   it('forbids the doctor screens without practitioner:read', async () => {
     mockApi({ 'GET /api/v1/auth/me': json(200, session(['patient:search'])) })
     renderApp('/doctors')
-    expect(await screen.findByText(/permission/i)).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: /is not available to you/ })).toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'Doctors' })).not.toBeInTheDocument()
   })
 })
@@ -247,6 +247,6 @@ describe('staff screens', () => {
   it('forbids the staff screens without staff:read', async () => {
     mockApi({ 'GET /api/v1/auth/me': json(200, session(['practitioner:read'])) })
     renderApp('/staff/new')
-    expect(await screen.findByText(/permission/i)).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: /is not available to you/ })).toBeInTheDocument()
   })
 })
