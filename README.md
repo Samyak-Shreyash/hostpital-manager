@@ -2,7 +2,7 @@
 
 A modern, modular Hospital Management System for small and medium multi-specialty clinics and nursing homes in India — designed to grow from a single clinic into a single hospital, and later a multi-tenant SaaS platform.
 
-> **Status: M0 skeleton.** The application builds and starts, but has no features yet.
+> **Status: version `0.0.1-SNAPSHOT` (pre-release), M2 in progress.** M0 (walking skeleton) and M1 (secure core: sessions, permission-based roles, audit, organization isolation, user and role admin) are done. M2 adds patients (search, duplicate check, allergies and history), doctors, staff, availability, the department/specialty/service catalog and synthetic seed data. Database migrations run up to V22. Not yet available: appointments, consultations, billing, IPD and reporting (M3 onwards). Multi-factor sign-in (TOTP) is deferred.
 
 ## Release 1 scope
 | Area | Capabilities |
