@@ -78,13 +78,18 @@ jobs:
               -e 's/^HMS_PROXY_PORT=.*/HMS_PROXY_PORT=8080/'               -e 's/^HMS_GRAFANA_ADMIN_USERNAME=.*/HMS_GRAFANA_ADMIN_USERNAME=admin/'               -e "s/^HMS_GRAFANA_ADMIN_PASSWORD=.*/HMS_GRAFANA_ADMIN_PASSWORD=$(openssl rand -hex 16)/"               -e 's/^HMS_GRAFANA_PORT=.*/HMS_GRAFANA_PORT=3000/' \
               .env.example > .env
           if grep -E '^[A-Z_]+=$' .env; then echo "unset variables above: add them to this step"; exit 1; fi
+      # The DB volume is external (survives `down -v`, see README), so a fresh runner must create it, as up.sh does.
+      - name: Create database volume
+        run: docker volume create "$(grep -E '^HMS_DB_VOLUME=' .env | cut -d= -f2-)"
       - name: Start stack and wait for healthchecks
         run: docker compose -f infra/compose/compose.yml --env-file .env --profile monitoring up -d --build --wait --wait-timeout 300
       - name: Smoke test through the proxy
         run: |
           curl -fsS -o /dev/null http://localhost:8080/
           # Reached Spring Security through the proxy: unauthenticated -> 401 Problem+JSON ([E0-5])
-          curl -s -D - -o body.json http://localhost:8080/api/v1/ping | grep -q '^HTTP/1.1 401'
+          # Headers to a file, not a pipe: `grep -q` quits at the status line and can kill curl before body.json is written.
+          curl -s -D headers.txt -o body.json http://localhost:8080/api/v1/ping
+          grep -q '^HTTP/1.1 401' headers.txt
           grep -q '"code":"UNAUTHENTICATED"' body.json
       - name: Prometheus scrapes the API ([E0-7])
         run: |
