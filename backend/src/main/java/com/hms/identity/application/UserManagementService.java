@@ -3,6 +3,7 @@ package com.hms.identity.application;
 import com.hms.audit.api.AuditEntry;
 import com.hms.audit.api.AuditOutcome;
 import com.hms.audit.api.AuditRecorder;
+import com.hms.audit.api.AuditValueChange;
 import com.hms.identity.api.AuthenticatedPrincipal;
 import com.hms.identity.api.Permissions;
 import com.hms.identity.domain.DefaultRoleTemplates;
@@ -72,7 +73,7 @@ public class UserManagementService {
 
     @Transactional(readOnly = true)
     public PageResult<UserView> list(AuthenticatedPrincipal actor, String status, String roleCode, String query,
-            int page, int size) {
+            List<UUID> userIds, String sort, int page, int size) {
         if (page < 0 || size < 1 || size > MAX_PAGE_SIZE) {
             throw new BusinessRuleException("VALIDATION_ERROR",
                     "page must be 0 or more and size 1 to " + MAX_PAGE_SIZE + ".");
@@ -84,12 +85,23 @@ public class UserManagementService {
         UUID org = actor.organizationId();
         String like = blankToNull(query) == null ? null : likePattern(query.trim());
         String role = blankToNull(roleCode);
-        List<UserRow> rows = userAdmin.list(org, normalisedStatus, role, like, size, (long) page * size);
+        if (userIds != null && userIds.size() > MAX_PAGE_SIZE) {
+            throw new BusinessRuleException("VALIDATION_ERROR", "ids accepts at most " + MAX_PAGE_SIZE + " ids.");
+        }
+        String sortText = blankToNull(sort) == null ? "name" : sort.trim();
+        boolean descending = sortText.startsWith("-");
+        String sortKey = descending ? sortText.substring(1) : sortText;
+        if (!UserAdminRepository.SORT_COLUMNS.containsKey(sortKey)) {
+            throw new BusinessRuleException("VALIDATION_ERROR",
+                    "sort must be one of name, email, status, createdAt, optionally prefixed with '-'.");
+        }
+        UserAdminRepository.Filter filter = new UserAdminRepository.Filter(normalisedStatus, role, like, userIds);
+        List<UserRow> rows = userAdmin.list(org, filter, sortKey, descending, size, (long) page * size);
         Map<UUID, List<String>> roles = rbac.findRoleCodesByUsers(org, rows.stream().map(UserRow::id).toList());
         List<UserView> items = rows.stream().map(r -> new UserView(r.id(), r.email(), r.fullName(), r.status(),
                 r.mustChangePassword(), roles.getOrDefault(r.id(), List.of()), r.version(), r.createdAt(),
                 r.updatedAt())).toList();
-        return new PageResult<>(items, page, size, userAdmin.count(org, normalisedStatus, role, like));
+        return new PageResult<>(items, page, size, userAdmin.count(org, filter));
     }
 
     /** Detail view; audited because it exposes an account's identity and access. */
@@ -109,6 +121,60 @@ public class UserManagementService {
         UserView view = insertUser(actor.organizationId(), actor.userId(), email, fullName, roleCodes,
                 temporaryPassword);
         return new UserWithTemporaryPassword(view, temporaryPassword);
+    }
+
+    /** One row of a bulk import. */
+    public record NewUser(String email, String fullName, List<String> roleCodes) {
+    }
+
+    /** Most rows one import may hold; larger files are split by the administrator. */
+    public static final int MAX_IMPORT_ROWS = 200;
+
+    /**
+     * Bulk create (UI issue U4). All or nothing: every row is checked first (duplicate email in the file or in the
+     * system, unknown or non-assignable roles) and if any row fails nothing is created and the response lists each
+     * failing row (1-based) with its error code. Rows are then created exactly as {@link #create} does, each audited
+     * as {@code USER_CREATED}; the temporary passwords are returned once.
+     */
+    @Transactional
+    public List<UserWithTemporaryPassword> importUsers(AuthenticatedPrincipal actor, List<NewUser> rows) {
+        if (rows.isEmpty() || rows.size() > MAX_IMPORT_ROWS) {
+            throw new BusinessRuleException("VALIDATION_ERROR", "Import 1 to " + MAX_IMPORT_ROWS + " users at a time.");
+        }
+        UUID org = actor.organizationId();
+        List<Map<String, Object>> errors = new ArrayList<>();
+        Set<String> seen = new java.util.HashSet<>();
+        for (int i = 0; i < rows.size(); i++) {
+            NewUser row = rows.get(i);
+            String email = row.email().trim().toLowerCase(Locale.ROOT);
+            String code = null;
+            String message = null;
+            if (!seen.add(email)) {
+                code = "DUPLICATE_IN_FILE";
+                message = "This email appears more than once in the file.";
+            } else if (users.existsByEmail(email)) {
+                code = "DUPLICATE_EMAIL";
+                message = "A user with this email already exists.";
+            } else {
+                try {
+                    requireAssignable(actor, org, row.roleCodes());
+                } catch (BusinessRuleException e) {
+                    code = e.code();
+                    message = e.getMessage();
+                } catch (com.hms.shared.web.ProblemException e) {
+                    code = e.code();
+                    message = e.getMessage();
+                }
+            }
+            if (code != null) {
+                errors.add(Map.of("row", i + 1, "code", code, "message", message));
+            }
+        }
+        if (!errors.isEmpty()) {
+            throw new BusinessRuleException("IMPORT_REJECTED",
+                    errors.size() + " row(s) cannot be imported; nothing was created.", Map.of("rows", errors));
+        }
+        return rows.stream().map(r -> create(actor, r.email(), r.fullName(), r.roleCodes())).toList();
     }
 
     /**
@@ -167,14 +233,18 @@ public class UserManagementService {
             changed.add("fullName");
         }
         boolean rolesChanged = false;
+        List<AuditValueChange> values = new ArrayList<>();
         if (roleCodes != null) {
+            List<String> rolesBefore = List.copyOf(rbac.findRoleCodes(org, user.getId()));
             Set<String> added = new LinkedHashSet<>(roleCodes);
-            added.removeAll(rbac.findRoleCodes(org, user.getId()));
+            added.removeAll(rolesBefore);
             requireAssignable(actor, org, List.copyOf(added));
             int adminsBefore = rbac.countActiveAdministrators(org);
             rolesChanged = replaceRoles(org, user.getId(), roleCodes);
             if (rolesChanged) {
                 changed.add("roles");
+                values.add(new AuditValueChange("roles", AuditValueChange.codes(rolesBefore),
+                        AuditValueChange.codes(roleCodes)));
                 user.touch(now);
                 requireAdministratorRemains(org, adminsBefore);
             }
@@ -183,8 +253,8 @@ public class UserManagementService {
         if (rolesChanged) {
             userAdmin.deleteSessions(user.getId(), keepFor(actor, user.getId(), currentSessionId));
         }
-        audit.record(new AuditEntry(org, actor.userId(), "USER_UPDATED", ENTITY, user.getId(), AuditOutcome.SUCCESS,
-                changed));
+        audit.record(AuditEntry.withValues(org, actor.userId(), "USER_UPDATED", ENTITY, user.getId(),
+                AuditOutcome.SUCCESS, changed, values));
         return view(user);
     }
 
@@ -207,8 +277,9 @@ public class UserManagementService {
             requireAdministratorRemains(org, adminsBefore);
             userAdmin.deleteSessions(user.getId(), null);
         }
-        audit.record(new AuditEntry(org, actor.userId(), active ? "USER_ACTIVATED" : "USER_DEACTIVATED", ENTITY,
-                user.getId(), AuditOutcome.SUCCESS, List.of("status")));
+        audit.record(AuditEntry.withValues(org, actor.userId(), active ? "USER_ACTIVATED" : "USER_DEACTIVATED",
+                ENTITY, user.getId(), AuditOutcome.SUCCESS, List.of("status"),
+                List.of(new AuditValueChange("status", active ? "INACTIVE" : "ACTIVE", active ? "ACTIVE" : "INACTIVE"))));
         return view(user);
     }
 

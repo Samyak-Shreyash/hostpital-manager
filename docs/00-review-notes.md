@@ -25,6 +25,7 @@ Owner decisions for the unimplemented M2 issues. Already settled in merged code 
 | `[E3-7]` | Read audit | Fail-closed on detail reads (`GET /patients/{id}` and sub-resources): the audit write shares the transaction, so a failed audit write fails the read. A search writes one `PATIENT_SEARCH` event with the result count, not one per patient. |
 | `[E2-4]` | Seed data | Idempotent Gradle task behind `dev`/`staging` profiles, refused under `prod`. Default: 1 org, ~10 staff, 2k patients. `--large` gives 100k patients for the `[E3-2]` p95 check. Synthetic names from a fixed list. |
 | `[E4-2]` | Staff login | Every staff record links 1:1 to a user (consistent with Q6). Roles assigned via the existing `role:assign` path (`[E1-7]`). |
+| `[E4-2]`, `[E4-4]` | Linking staff/doctors to users (2026-11-16) | Built-in FACILITY_ADMIN gets `user:read` only (template + `V21` backfill), so the user picker works. User creation and `role:*` stay with SYSTEM_ADMIN (separation of duties). |
 | `[E4-3]` | Leave exceptions | A date plus an optional time range (full day or partial block). Existing bookings that clash are flagged, not auto-cancelled. |
 
 New permission implied: `patient:update-identity` (add to the catalogue in the `[E3-5]` migration).
@@ -57,6 +58,11 @@ Legal review flags (for `[E10-8]`, not decided here): ABHA retention and masking
 | Q8 | The staff screen/API neither shows nor assigns roles; roles are managed only via `PATCH /users/{id}` (owner decision 2026-11-14) | `[E4-2]` | `[E4-4]` | Revisit when building the staff UI (`[E4-4]`) |
 | Q9 | `[E4-3]` (#44) criterion "slots honour existing bookings" is deferred to the appointment module: subtract bookings from `PractitionerAvailability.freeSlots` and flag (never cancel) bookings that clash with leave; also decide whether `isAvailable` must align to slot boundaries | `[E4-3]` | `[E5-1]` | Free slots ignore bookings until `[E5-1]`; `isAvailable` checks window/leave containment only |
 | Q10 | `GET /doctors/{id}/slots` requires `appointment:read` (the front desk books from it), not `practitioner:read`. Reviewer recommends keeping; owner to confirm | `[E4-3]` | `[E5-1]` | Keep `appointment:read` |
+| Q11 | UI log B1 (`hms_ui_issues.md`): should `SYSTEM_ADMIN` see Departments & specialties? Recommendation: no grant (catalog is facility config owned by `FACILITY_ADMIN`; keeps platform/facility admin apart for multi-tenant). A read-only `catalog:read` grant would need a Flyway migration and roles-doc update | UI review 2026-11-17 | — | No permission change; the Forbidden page names the screen and the permission it needs (uncommitted, owner to confirm) |
+| Q12 | UI log G3: Home page shortcuts and counts. Counts need a summary/reporting endpoint | UI review 2026-11-17 | — | Home stays a welcome line; counts go to a reporting backlog issue (M5/M6); permission-filtered shortcut links are front-end only if wanted sooner |
+| Q13 | UI log A4: audit Action/Entity type suggestions are a hand-kept front-end list (`AuditFilterForm.tsx`) that drifts as codes are added. Serve them from an API? | UI review 2026-11-17 | — | Keep the hard-coded list; fields stay free text |
+| Q14 | UI log A1/L1/L4: actor names and email search on the audit page, user role filter, sorting and page size rely on `listUsers` params `ids`, `role`, `sort`, `size`; backend support not yet verified | UI review 2026-11-17 | — | Verify with integration tests before closing these items |
+| Q15 | UI log U2: the one-time password page stays at `/users/new`; a reload loses it (a leave warning is shown). A dedicated URL must not carry the password | UI review 2026-11-17 | — | Keep the leave warning only |
 
 ## 3. Legal / regulatory review required (no compliance claimed)
 

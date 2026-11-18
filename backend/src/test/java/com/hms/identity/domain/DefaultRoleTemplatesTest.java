@@ -56,6 +56,12 @@ class DefaultRoleTemplatesTest {
     }
 
     @Test
+    void facilityAdministratorReadsUsersButCannotManageThem() {
+        assertThat(roles.get("FACILITY_ADMIN")).filteredOn(code -> code.startsWith("user:") || code.startsWith("role:"))
+                .containsExactly(Permissions.USER_READ);
+    }
+
+    @Test
     void systemAdministratorHasNoClinicalAccess() {
         assertThat(roles.get("SYSTEM_ADMIN"))
                 .noneMatch(code -> code.startsWith("patient:") || code.startsWith("encounter:"))

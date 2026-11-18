@@ -5,6 +5,7 @@ import type { AuditFilters } from '../../api/audit'
 import { Field, inputClass, primaryButton, secondaryButton } from '../../components/ui'
 
 const CODE = /^[A-Z][A-Z0-9_]{1,63}$/
+const EMAIL = /^[^\s@]+@[^\s@]+$/
 const UUID = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/
 
 const optional = (pattern: RegExp, message: string) =>
@@ -17,7 +18,7 @@ const optionalDateTime = z
 /** Date-time inputs hold local time; they are sent to the API as UTC instants. */
 export const auditFilterSchema = z
   .object({
-    actorId: optional(UUID, 'Actor must be an id like 123e4567-e89b-12d3-a456-426614174000'),
+    actorId: z.string().trim().refine((v) => v === '' || UUID.test(v) || EMAIL.test(v), 'Enter the actor’s email or user id'),
     action: optional(CODE, 'Action must be UPPER_SNAKE_CASE, e.g. PATIENT_VIEWED'),
     entityType: optional(CODE, 'Entity type must be UPPER_SNAKE_CASE, e.g. PATIENT'),
     entityId: optional(UUID, 'Entity id must be an id like 123e4567-e89b-12d3-a456-426614174000'),
@@ -29,6 +30,16 @@ export const auditFilterSchema = z
     message: 'To must not be before From',
   })
 export type AuditFilterValues = z.infer<typeof auditFilterSchema>
+
+/** Common codes offered as suggestions; the fields stay free text so codes added later still work. */
+const ACTIONS = [
+  'LOGIN_SUCCEEDED', 'LOGIN_FAILED', 'LOGOUT', 'PASSWORD_CHANGED', 'USER_CREATED', 'USER_UPDATED', 'USER_VIEWED',
+  'USER_ACTIVATED', 'USER_DEACTIVATED', 'USER_PASSWORD_RESET', 'ROLE_CREATED', 'ROLE_UPDATED', 'ORGANIZATION_UPDATED',
+  'PATIENT_CREATED', 'PATIENT_UPDATED', 'PATIENT_VIEWED', 'PATIENT_SEARCH', 'PATIENT_IDENTITY_CHANGED',
+  'PATIENT_DUPLICATE_OVERRIDDEN', 'PATIENT_ALLERGY_ADDED', 'PATIENT_HISTORY_ADDED', 'PRACTITIONER_CREATED',
+  'PRACTITIONER_UPDATED', 'STAFF_CREATED', 'STAFF_UPDATED', 'SERVICE_CREATED', 'SERVICE_UPDATED', 'AUDIT_VIEWED',
+]
+const ENTITY_TYPES = ['APP_USER', 'ROLE', 'ORGANIZATION', 'PATIENT', 'PATIENT_ALLERGY', 'PATIENT_HISTORY', 'PRACTITIONER', 'STAFF', 'AVAILABILITY_EXCEPTION', 'SERVICE', 'SERVICE_PRICE', 'AUDIT_EVENT']
 
 const EMPTY: AuditFilterValues = { actorId: '', action: '', entityType: '', entityId: '', from: '', to: '' }
 
@@ -46,26 +57,41 @@ export function toAuditFilters(values: AuditFilterValues): AuditFilters {
 
 interface Props {
   onApply: (filters: AuditFilters) => void
+  /** Turns an actor email into a user id; null when no user of this organization has it. Absent = ids only. */
+  resolveEmail?: (email: string) => Promise<string | null>
 }
 
-export function AuditFilterForm({ onApply }: Props) {
+export function AuditFilterForm({ onApply, resolveEmail }: Props) {
   const form = useForm<AuditFilterValues>({ resolver: zodResolver(auditFilterSchema), defaultValues: EMPTY })
   const { errors } = form.formState
+  const apply = async (values: AuditFilterValues) => {
+    if (EMAIL.test(values.actorId)) {
+      const id = resolveEmail ? await resolveEmail(values.actorId) : null
+      if (!id) {
+        form.setError('actorId', { message: resolveEmail ? 'No user has this email' : 'Enter the actor’s user id' })
+        return
+      }
+      values = { ...values, actorId: id }
+    }
+    onApply(toAuditFilters(values))
+  }
   return (
     <form
       noValidate
       aria-label="Audit filters"
-      onSubmit={form.handleSubmit((values) => onApply(toAuditFilters(values)))}
+      onSubmit={form.handleSubmit(apply)}
       className="mb-4 grid gap-x-4 sm:grid-cols-2 lg:grid-cols-3"
     >
-      <Field label="Actor id" htmlFor="actorId" error={errors.actorId?.message}>
+      <Field label="Actor (email or id)" htmlFor="actorId" error={errors.actorId?.message}>
         <input id="actorId" className={inputClass} autoComplete="off" {...form.register('actorId')} />
       </Field>
       <Field label="Action" htmlFor="action" error={errors.action?.message}>
-        <input id="action" className={inputClass} autoComplete="off" placeholder="PATIENT_VIEWED" {...form.register('action')} />
+        <input id="action" className={inputClass} autoComplete="off" list="audit-actions" placeholder="Any action" {...form.register('action')} />
+        <datalist id="audit-actions">{ACTIONS.map((a) => <option key={a} value={a} />)}</datalist>
       </Field>
       <Field label="Entity type" htmlFor="entityType" error={errors.entityType?.message}>
-        <input id="entityType" className={inputClass} autoComplete="off" placeholder="PATIENT" {...form.register('entityType')} />
+        <input id="entityType" className={inputClass} autoComplete="off" list="audit-entity-types" placeholder="Any type" {...form.register('entityType')} />
+        <datalist id="audit-entity-types">{ENTITY_TYPES.map((t) => <option key={t} value={t} />)}</datalist>
       </Field>
       <Field label="Entity id" htmlFor="entityId" error={errors.entityId?.message}>
         <input id="entityId" className={inputClass} autoComplete="off" {...form.register('entityId')} />

@@ -26,10 +26,22 @@ public class UserAdminRepository {
                       ON r.organization_id = ur.organization_id AND r.id = ur.role_id
                     WHERE ur.organization_id = u.organization_id AND ur.user_id = u.id
                       AND r.code = CAST(:role AS text)))
+              AND (NOT CAST(:hasIds AS boolean) OR u.id IN (:ids))
               AND (CAST(:like AS text) IS NULL
                    OR lower(u.full_name) LIKE CAST(:like AS text) ESCAPE '\\'
                    OR u.email LIKE CAST(:like AS text) ESCAPE '\\')
             """;
+
+    /** Sort keys accepted by {@link #list}; the SQL comes from this map only, never from request text. */
+    public static final java.util.Map<String, String> SORT_COLUMNS = java.util.Map.of(
+            "name", "lower(u.full_name)", "email", "u.email", "status", "u.status", "createdAt", "u.created_at");
+
+    /** Optional filters; null (or an empty id list) means "not filtered". */
+    public record Filter(String status, String roleCode, String likePattern, List<UUID> ids) {
+    }
+
+    /** Placeholder for the IN list when there is no id filter (an empty IN list is invalid SQL). */
+    private static final List<UUID> NO_IDS = List.of(new UUID(0, 0));
 
     private final JdbcClient jdbc;
 
@@ -55,14 +67,18 @@ public class UserAdminRepository {
         jdbc.sql("SELECT pg_advisory_xact_lock(hashtext('hms.bootstrap'))").query().singleValue();
     }
 
-    /** Null filters are ignored. {@code likePattern} is already lower-cased, escaped and wrapped in %. */
-    public List<UserRow> list(UUID organizationId, String status, String roleCode, String likePattern,
+    /**
+     * Null filters are ignored. {@code likePattern} is already lower-cased, escaped and wrapped in %. {@code sortKey}
+     * must be a key of {@link #SORT_COLUMNS}; ties break on id so paging is stable.
+     */
+    public List<UserRow> list(UUID organizationId, Filter filter, String sortKey, boolean descending,
             int limit, long offset) {
-        return jdbc.sql("SELECT u.id, u.email, u.full_name, u.status, u.must_change_password, u.version, "
-                        + "u.created_at, u.updated_at " + FILTERED + " ORDER BY lower(u.full_name), u.id "
-                        + "LIMIT :limit OFFSET :offset")
-                .param("org", organizationId).param("status", status).param("role", roleCode)
-                .param("like", likePattern).param("limit", limit).param("offset", offset)
+        String column = java.util.Objects.requireNonNull(SORT_COLUMNS.get(sortKey), "sortKey");
+        String direction = descending ? " DESC" : " ASC";
+        return bind(jdbc.sql("SELECT u.id, u.email, u.full_name, u.status, u.must_change_password, u.version, "
+                        + "u.created_at, u.updated_at " + FILTERED + " ORDER BY " + column + direction
+                        + ", u.id" + direction + " LIMIT :limit OFFSET :offset"), organizationId, filter)
+                .param("limit", limit).param("offset", offset)
                 .query((rs, n) -> new UserRow(rs.getObject("id", UUID.class), rs.getString("email"),
                         rs.getString("full_name"), rs.getString("status"), rs.getBoolean("must_change_password"),
                         rs.getLong("version"), rs.getTimestamp("created_at").toInstant(),
@@ -70,11 +86,14 @@ public class UserAdminRepository {
                 .list();
     }
 
-    public long count(UUID organizationId, String status, String roleCode, String likePattern) {
-        return jdbc.sql("SELECT count(*) " + FILTERED)
-                .param("org", organizationId).param("status", status).param("role", roleCode)
-                .param("like", likePattern)
-                .query(Long.class).single();
+    public long count(UUID organizationId, Filter filter) {
+        return bind(jdbc.sql("SELECT count(*) " + FILTERED), organizationId, filter).query(Long.class).single();
+    }
+
+    private static JdbcClient.StatementSpec bind(JdbcClient.StatementSpec spec, UUID organizationId, Filter f) {
+        boolean hasIds = f.ids() != null && !f.ids().isEmpty();
+        return spec.param("org", organizationId).param("status", f.status()).param("role", f.roleCode())
+                .param("like", f.likePattern()).param("hasIds", hasIds).param("ids", hasIds ? f.ids() : NO_IDS);
     }
 
     /**

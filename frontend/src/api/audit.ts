@@ -11,6 +11,8 @@ export interface AuditEvent {
   outcome: 'SUCCESS' | 'FAILURE' | 'DENIED'
   /** Field names only, never values. */
   changedFields: string[]
+  /** Old/new values for allowlisted code fields only (ADR-0016); usually empty. */
+  changedValues: { field: string; oldValue: string | null; newValue: string | null }[]
   correlationId: string | null
 }
 

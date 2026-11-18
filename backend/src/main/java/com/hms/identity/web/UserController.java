@@ -6,6 +6,7 @@ import com.hms.identity.application.UserManagementService;
 import com.hms.identity.application.UserView;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
+import java.util.List;
 import java.util.UUID;
 import org.springframework.http.CacheControl;
 import org.springframework.http.HttpStatus;
@@ -36,9 +37,10 @@ class UserController {
     @PreAuthorize("hasAuthority('user:read')")
     PageResult<UserResponse> list(@AuthenticationPrincipal AuthenticatedPrincipal actor,
             @RequestParam(required = false) String status, @RequestParam(required = false) String role,
-            @RequestParam(required = false) String q, @RequestParam(defaultValue = "0") int page,
+            @RequestParam(required = false) String q, @RequestParam(required = false) List<UUID> ids,
+            @RequestParam(required = false) String sort, @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        PageResult<UserView> result = users.list(actor, status, role, q, page, size);
+        PageResult<UserView> result = users.list(actor, status, role, q, ids, sort, page, size);
         return new PageResult<>(result.items().stream().map(UserResponse::of).toList(), result.page(),
                 result.size(), result.totalItems());
     }
@@ -50,6 +52,18 @@ class UserController {
         UserResponse body = UserResponse.of(
                 users.create(actor, request.email(), request.fullName(), request.roleCodes()));
         return ResponseEntity.status(HttpStatus.CREATED).cacheControl(CacheControl.noStore()).body(body);
+    }
+
+    /** All or nothing; the temporary passwords are in this response only (Cache-Control: no-store). */
+    @PostMapping("/import")
+    @PreAuthorize("hasAuthority('user:create')")
+    ResponseEntity<java.util.Map<String, List<UserResponse>>> importUsers(
+            @AuthenticationPrincipal AuthenticatedPrincipal actor, @Valid @RequestBody ImportUsersRequest request) {
+        List<UserResponse> created = users.importUsers(actor, request.users().stream()
+                        .map(u -> new UserManagementService.NewUser(u.email(), u.fullName(), u.roleCodes())).toList())
+                .stream().map(UserResponse::of).toList();
+        return ResponseEntity.status(HttpStatus.CREATED).cacheControl(CacheControl.noStore())
+                .body(java.util.Map.of("items", created));
     }
 
     @GetMapping("/{id}")

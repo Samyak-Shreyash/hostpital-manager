@@ -62,6 +62,28 @@ function RoleForm({ role, permissions, onDone }: { role: Role | null; permission
   )
 }
 
+/** Permissions grouped by resource ("patient:read" -> patient), each action a chip that never wraps mid-token. */
+function PermissionChips({ permissions }: { permissions: string[] }) {
+  const groups = new Map<string, string[]>()
+  for (const p of [...permissions].sort()) {
+    const [resource, action = p] = p.split(':')
+    groups.set(resource, [...(groups.get(resource) ?? []), action])
+  }
+  if (groups.size === 0) return <span className="text-slate-500">None</span>
+  return (
+    <dl className="space-y-1">
+      {[...groups].map(([resource, actions]) => (
+        <div key={resource} className="flex flex-wrap items-baseline gap-1">
+          <dt className="mr-1 font-medium">{resource}</dt>
+          {actions.map((a) => (
+            <dd key={a} className="whitespace-nowrap rounded bg-slate-100 px-1.5 py-0.5 font-mono text-xs">{a}</dd>
+          ))}
+        </div>
+      ))}
+    </dl>
+  )
+}
+
 export function RolesPage() {
   const canManage = useCan('role:manage')
   const roles = useQuery({ queryKey: ['roles'], queryFn: listRoles })
@@ -100,7 +122,7 @@ export function RolesPage() {
               <tr key={r.id} className="border-b align-top">
                 <td className="p-2 font-mono">{r.code}</td>
                 <td className="p-2">{r.name}</td>
-                <td className="p-2">{r.permissions.join(', ')}</td>
+                <td className="p-2"><PermissionChips permissions={r.permissions} /></td>
                 {canManage && (
                   <td className="p-2"><button type="button" className="text-blue-700 underline" onClick={() => setEditing(r)}>Edit</button></td>
                 )}

@@ -268,6 +268,73 @@ class UserManagementIT extends PostgresIT {
     }
 
     @Test
+    void listSortsByAllowedKeysAndFiltersByIdsWithinTheCallersOrganization() throws Exception {
+        UUID alpha = fx.user(org, fx.uniqueEmail("alpha"), "NURSE");
+        UUID zulu = fx.user(org, fx.uniqueEmail("zulu"), "NURSE");
+        jdbc.sql("UPDATE hms.app_user SET full_name = 'Aaa Alpha' WHERE id = ?").param(alpha).update();
+        jdbc.sql("UPDATE hms.app_user SET full_name = 'Zzz Zulu' WHERE id = ?").param(zulu).update();
+        UUID elsewhere = fx.user(fx.organization(), fx.uniqueEmail("elsewhere"), "NURSE");
+
+        mockMvc.perform(admin.apply(get(USERS).param("role", "NURSE").param("sort", "name")))
+                .andExpect(jsonPath("$.items[0].id").value(alpha.toString()));
+        mockMvc.perform(admin.apply(get(USERS).param("role", "NURSE").param("sort", "-name")))
+                .andExpect(jsonPath("$.items[0].id").value(zulu.toString()));
+        // Another organization's id is silently not matched, like any unknown id.
+        mockMvc.perform(admin.apply(get(USERS).param("ids", zulu.toString(), elsewhere.toString())))
+                .andExpect(jsonPath("$.totalItems").value(1))
+                .andExpect(jsonPath("$.items[0].id").value(zulu.toString()));
+        mockMvc.perform(admin.apply(get(USERS).param("sort", "password_hash")))
+                .andExpect(status().isUnprocessableContent());
+    }
+
+    @Test
+    void importCreatesEveryRowOnceWithTemporaryPasswords() throws Exception {
+        String a = fx.uniqueEmail("import-a");
+        String b = fx.uniqueEmail("import-b");
+        String body = "{\"users\":[" + createBody(a, "Import Alpha", "NURSE") + ","
+                + createBody(b, "Import Bravo", "DOCTOR") + "]}";
+        mockMvc.perform(admin.apply(post(USERS + "/import").contentType(MediaType.APPLICATION_JSON).content(body)))
+                .andExpect(status().isCreated())
+                .andExpect(header().string("Cache-Control", containsString("no-store")))
+                .andExpect(jsonPath("$.items.length()").value(2))
+                .andExpect(jsonPath("$.items[0].email").value(a))
+                .andExpect(jsonPath("$.items[0].temporaryPassword").isString())
+                .andExpect(jsonPath("$.items[1].roleCodes[0]").value("DOCTOR"));
+        assertThat(jdbc.sql("SELECT count(*) FROM hms.audit_event WHERE organization_id = ? AND action = 'USER_CREATED'")
+                .param(org).query(Long.class).single()).isGreaterThanOrEqualTo(2);
+    }
+
+    @Test
+    void importIsAllOrNothingAndReportsEachFailingRow() throws Exception {
+        String a = fx.uniqueEmail("import-dup");
+        String existing = fx.uniqueEmail("import-existing");
+        fx.user(org, existing, "NURSE");
+        String body = "{\"users\":[" + createBody(a, "Import Ok", "NURSE") + ","
+                + createBody(a.toUpperCase(java.util.Locale.ROOT), "Import Twice", "NURSE") + ","
+                + createBody(existing, "Import Existing", "NURSE") + ","
+                + createBody(fx.uniqueEmail("import-role"), "Import Role", "NO_SUCH_ROLE") + "]}";
+        mockMvc.perform(admin.apply(post(USERS + "/import").contentType(MediaType.APPLICATION_JSON).content(body)))
+                .andExpect(status().isUnprocessableContent())
+                .andExpect(jsonPath("$.code").value("IMPORT_REJECTED"))
+                .andExpect(jsonPath("$.rows.length()").value(3))
+                .andExpect(jsonPath("$.rows[0].row").value(2))
+                .andExpect(jsonPath("$.rows[0].code").value("DUPLICATE_IN_FILE"))
+                .andExpect(jsonPath("$.rows[1].code").value("DUPLICATE_EMAIL"))
+                .andExpect(jsonPath("$.rows[2].code").value("UNKNOWN_ROLE"));
+        // Row 1 was valid but nothing was created.
+        assertThat(jdbc.sql("SELECT count(*) FROM hms.app_user WHERE email = ?").param(a).query(Long.class).single())
+                .isZero();
+
+        AdminApiFixture.Session nurse = fx.loggedIn(org, "import-nurse", "NURSE");
+        mockMvc.perform(nurse.apply(post(USERS + "/import").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"users\":[" + createBody(fx.uniqueEmail("x"), "X", "NURSE") + "]}")))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(admin.apply(post(USERS + "/import").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"users\":[]}")))
+                .andExpect(status().isUnprocessableContent());
+    }
+
+    @Test
     void getReturnsTheUserIsAuditedAndAnotherOrganizationsUserIs404() throws Exception {
         UUID doctor = fx.user(org, fx.uniqueEmail("doc"), "DOCTOR");
         mockMvc.perform(admin.apply(get(USERS + "/" + doctor)))

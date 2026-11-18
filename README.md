@@ -2,7 +2,7 @@
 
 A modern, modular Hospital Management System for small and medium multi-specialty clinics and nursing homes in India — designed to grow from a single clinic into a single hospital, and later a multi-tenant SaaS platform.
 
-> **Status: M0 skeleton.** The application builds and starts, but has no features yet.
+> **Status: version `0.0.1-SNAPSHOT` (pre-release), M2 in progress.** M0 (walking skeleton) and M1 (secure core: sessions, permission-based roles, audit, organization isolation, user and role admin) are done. M2 adds patients (search, duplicate check, allergies and history), doctors, staff, availability, the department/specialty/service catalog and synthetic seed data. Database migrations run up to V22. Not yet available: appointments, consultations, billing, IPD and reporting (M3 onwards). Multi-factor sign-in (TOTP) is deferred.
 
 ## Release 1 scope
 | Area | Capabilities |
@@ -73,9 +73,11 @@ Prerequisites: JDK 21, Node.js 22+ (see `frontend/.nvmrc`), Docker (needed for P
 ```bash
 # Whole stack in Docker (Postgres + API + proxy serving the SPA), from the repo root:
 cp .env.example .env                              # then fill in every value (compose refuses to start with blanks)
-# DB roles (ADR-0015) are created on first start of an empty volume; a volume from before [E0-6] needs one `... down -v`.
-docker compose -f infra/compose/compose.yml --env-file .env up -d --build --wait
-# -> http://localhost:8080 (SPA; /api/* goes to the backend). Stop: ... down  (add -v to wipe the database)
+# DB roles (ADR-0015) are created on first start of an empty volume; re-init needs `docker volume rm hms-db-data`.
+infra/compose/up.sh                               # reuses the DB volume if present, else creates it (fresh DB)
+# -> http://localhost:8080 (SPA; /api/* goes to the backend). Stop: docker compose -f infra/compose/compose.yml down
+# The DB volume (HMS_DB_VOLUME, default hms-db-data) is external, so even `down -v` keeps it; wipe: docker volume rm hms-db-data
+# Backups: the db-backup service dumps to ./backups at start and every 6h, keeping 14; restore: infra/backup/restore.sh <dump>
 # Monitoring ([E0-7]): add `--profile monitoring` to up/down. Prometheus scrapes the API service at /actuator/prometheus
 # inside the network (the proxy never routes /actuator); Grafana with the "HMS overview" dashboard on
 # http://localhost:${HMS_GRAFANA_PORT}.
@@ -120,7 +122,7 @@ npm run dev                                       # -> http://localhost:5173
 | Proxy + SPA Docker image (repo root) | `docker build -f infra/docker/proxy.Dockerfile -t hms-proxy:$(git rev-parse HEAD) .` |
 | Backend Docker image (repo root) | `docker build -f infra/docker/backend.Dockerfile -t hms-backend:$(git rev-parse HEAD) backend` |
 
-CI (`.github/workflows/ci.yml`) runs on every PR and push to `main`: `backend` (Gradle build incl. integration and architecture tests), `frontend` (lint, test, build), `image` (Trivy dependency scan, backend image tagged with the commit SHA, Trivy image scan) and `compose` (dev stack incl. monitoring profile comes up healthy, Prometheus scrapes the API). Scans fail on fixable HIGH/CRITICAL findings. All four are required status checks on `main` (admins included), so a red PR cannot merge.
+CI (`.github/workflows/ci.yml`) runs on every PR and push to `main`: `backend` (Gradle build incl. integration and architecture tests), `frontend` (lint, test, build), `secret-scan` (gitleaks over full history), `image` (Trivy dependency scan, backend image tagged with the commit SHA, Trivy image scan) and `compose` (dev stack incl. monitoring profile comes up healthy, Prometheus scrapes the API). Scans fail on fixable HIGH/CRITICAL findings. All five are required status checks on `main` (admins included), so a red PR cannot merge.
 
 Configuration is read from environment variables; all variables are documented in `.env.example`. Copy it to `.env` for local use (git-ignored). Repository layout and build decisions: ADR-0013.
 

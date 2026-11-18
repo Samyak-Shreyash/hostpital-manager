@@ -189,6 +189,11 @@ class PatientSearchIT extends PostgresIT {
         seed(org, "HMS-900001", "Test Priya Sharma", "+910000900001", "1988-04-12");
         List<String> queries = List.of("?q=Priya Sharma", "?q=Priya Sharmma", "?q=sharma", "?uhid=HMS-050000",
                 "?phone=0000050000", "?dob=1988-04-12&q=Priya", "?q=a3f9c1");
+        // One unmeasured round first: JIT, connection pool and Postgres buffer cache are cold on a fresh CI runner,
+        // and with 35 samples two cold outliers alone would decide the p95.
+        for (String q : queries) {
+            mockMvc.perform(reception.apply(get(URL + q))).andExpect(status().isOk());
+        }
         List<Long> millis = new ArrayList<>();
         for (int round = 0; round < 5; round++) {
             for (String q : queries) {

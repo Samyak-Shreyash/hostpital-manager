@@ -1,6 +1,6 @@
 -- Owner decisions 2026-11-14 (docs/00-review-notes.md): role-template changes and staff permissions. Runs as hms_owner.
 --  * New permissions staff:read|create|update (staff endpoints, independent of practitioner:*), granted to the
---    built-in FACILITY_ADMIN role.
+--    built-in FACILITY_ADMIN role, plus user:read (owner 2026-11-16) so staff/doctors can be linked to user accounts.
 --  * Built-in DOCTOR and NURSE roles get patient:update-clinical (allergies / medical history).
 --  * Built-in RECEPTIONIST roles lose patient:update-clinical and patient:update-identity.
 -- Built-in roles are identified by their template code (unique per organization), as V11 does. Custom roles are
@@ -17,7 +17,7 @@ BEGIN
 
         INSERT INTO hms.role_permission (organization_id, role_id, permission_code)
         SELECT r.organization_id, r.id, p.code
-        FROM hms.role r CROSS JOIN (VALUES ('staff:read'), ('staff:create'), ('staff:update')) AS p (code)
+        FROM hms.role r CROSS JOIN (VALUES ('staff:read'), ('staff:create'), ('staff:update'), ('user:read')) AS p (code)
         WHERE r.organization_id = org AND r.code = 'FACILITY_ADMIN'
         ON CONFLICT DO NOTHING;
 

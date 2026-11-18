@@ -1,7 +1,7 @@
 # Dev stack ([E0-3]): Postgres, API, reverse proxy. All values come from the repo-root .env (no defaults here).
 # From the repo root:
 #   cp .env.example .env    # then fill in every value
-#   docker compose -f infra/compose/compose.yml --env-file .env up -d --build --wait
+#   infra/compose/up.sh     # reuses the existing database volume, creates it only on first run
 # App: http://localhost:${HMS_PROXY_PORT}  (only the proxy and Postgres publish ports, both on localhost)
 # Monitoring ([E0-7], opt-in): add `--profile monitoring` -> Grafana on http://localhost:${HMS_GRAFANA_PORT}
 name: hms
@@ -27,6 +27,32 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+
+  # Logical backups of the dev database: one dump at start-up, then every HMS_BACKUP_INTERVAL_HOURS,
+  # keeping the newest HMS_BACKUP_KEEP. Restore: infra/backup/restore.sh <dump>.
+  db-backup:
+    image: postgres:17-alpine
+    environment:
+      PGHOST: db
+      PGDATABASE: ${HMS_DB_NAME}
+      PGUSER: ${HMS_DB_ADMIN_USERNAME}
+      PGPASSWORD: ${HMS_DB_ADMIN_PASSWORD}
+      INTERVAL_HOURS: ${HMS_BACKUP_INTERVAL_HOURS:-6}
+      KEEP: ${HMS_BACKUP_KEEP:-14}
+    volumes:
+      - ${HMS_BACKUP_DIR:-../../backups}:/backups
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        while true; do
+          f=/backups/hms-$$(date -u +%Y%m%dT%H%M%SZ).dump
+          if pg_dump -Fc -f "$$f.part"; then mv "$$f.part" "$$f"; echo "backup: $$f"; else rm -f "$$f.part"; echo "backup FAILED" >&2; fi
+          ls -1t /backups/hms-*.dump 2>/dev/null | tail -n +$$((KEEP + 1)) | xargs -r rm -f
+          sleep $$((INTERVAL_HOURS * 3600))
+        done
+    depends_on:
+      db:
+        condition: service_healthy
 
   api:
     build:
@@ -95,6 +121,9 @@ services:
 
 volumes:
   bootstrap-secret:
+  # External so `down -v` never deletes the database; infra/compose/up.sh creates it only if missing.
   db-data:
+    external: true
+    name: ${HMS_DB_VOLUME:-hms-db-data}
   prometheus-data:
   grafana-data:

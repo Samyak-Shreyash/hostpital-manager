@@ -1,5 +1,5 @@
 import { MutationCache, QueryCache, QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { BrowserRouter, Route, Routes } from 'react-router'
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router'
 import { ApiError } from '../api/client'
 import { AppLayout } from '../components/AppLayout'
 import { NotFound } from '../components/NotFound'
@@ -9,6 +9,7 @@ import { LoginPage } from '../features/auth/LoginPage'
 import { SESSION_KEY } from '../features/auth/useSession'
 import { HomePage } from '../features/HomePage'
 import { AuditPage } from '../features/audit/AuditPage'
+import { CatalogPage } from '../features/catalog/CatalogPage'
 import { PatientDetailPage } from '../features/patients/PatientDetailPage'
 import { PatientRegisterPage } from '../features/patients/PatientRegisterPage'
 import { PatientSearchPage } from '../features/patients/PatientSearchPage'
@@ -20,6 +21,7 @@ import { StaffListPage } from '../features/practitioners/StaffListPage'
 import { RolesPage } from '../features/roles/RolesPage'
 import { UserCreatePage } from '../features/users/UserCreatePage'
 import { UserEditPage } from '../features/users/UserEditPage'
+import { UserImportPage } from '../features/users/UserImportPage'
 import { UserListPage } from '../features/users/UserListPage'
 
 export function createQueryClient(): QueryClient {
@@ -50,40 +52,46 @@ export function AppRoutes() {
       <Route element={<RequireAuth />}>
         <Route element={<AppLayout />}>
           <Route index element={<HomePage />} />
-          <Route element={<RequirePermission permission="user:read" />}>
+          <Route element={<RequirePermission permission="user:read" screen="Users" />}>
             <Route path="users" element={<UserListPage />} />
             <Route path="users/:id" element={<UserEditPage />} />
           </Route>
-          <Route element={<RequirePermission permission="user:create" />}>
+          <Route element={<RequirePermission permission="user:create" screen="New user" />}>
             <Route path="users/new" element={<UserCreatePage />} />
+            <Route path="users/import" element={<UserImportPage />} />
           </Route>
-          <Route element={<RequirePermission permission="role:read" />}>
+          <Route element={<RequirePermission permission="role:read" screen="Roles" />}>
             <Route path="roles" element={<RolesPage />} />
           </Route>
-          <Route element={<RequirePermission permission="patient:search" />}>
+          <Route element={<RequirePermission permission="patient:search" screen="Patients" />}>
             <Route path="patients" element={<PatientSearchPage />} />
           </Route>
-          <Route element={<RequirePermission permission="patient:create" />}>
+          <Route element={<RequirePermission permission="patient:create" screen="Patient registration" />}>
             <Route path="patients/new" element={<PatientRegisterPage />} />
           </Route>
-          <Route element={<RequirePermission permission="patient:read" />}>
+          <Route element={<RequirePermission permission="patient:read" screen="Patient record" />}>
             <Route path="patients/:id" element={<PatientDetailPage />} />
           </Route>
-          <Route element={<RequirePermission permission="practitioner:read" />}>
+          <Route element={<RequirePermission permission="practitioner:read" screen="Doctors" />}>
             <Route path="doctors" element={<DoctorListPage />} />
             <Route path="doctors/:id" element={<DoctorDetailPage />} />
           </Route>
-          <Route element={<RequirePermission permission="practitioner:create" />}>
+          <Route element={<RequirePermission permission="practitioner:create" screen="Doctor registration" />}>
             <Route path="doctors/new" element={<DoctorRegisterPage />} />
           </Route>
-          <Route element={<RequirePermission permission="staff:read" />}>
+          <Route element={<RequirePermission permission="staff:read" screen="Staff" />}>
             <Route path="staff" element={<StaffListPage />} />
             <Route path="staff/:id" element={<StaffDetailPage />} />
           </Route>
-          <Route element={<RequirePermission permission="staff:create" />}>
+          <Route element={<RequirePermission permission="staff:create" screen="Staff registration" />}>
             <Route path="staff/new" element={<StaffRegisterPage />} />
           </Route>
-          <Route element={<RequirePermission permission="audit:read" />}>
+          <Route element={<RequirePermission permission="catalog:read" screen="Departments & specialties" />}>
+            <Route path="catalog" element={<CatalogPage />} />
+            <Route path="departments" element={<Navigate to="/catalog" replace />} />
+            <Route path="specialties" element={<Navigate to="/catalog" replace />} />
+          </Route>
+          <Route element={<RequirePermission permission="audit:read" screen="Audit log" />}>
             <Route path="audit" element={<AuditPage />} />
           </Route>
           <Route path="*" element={<NotFound />} />

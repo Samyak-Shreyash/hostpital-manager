@@ -52,6 +52,11 @@ public class AuditEventEntity implements Persistable<UUID> {
     @Column(name = "result_count")
     private Integer resultCount;
 
+    /** JSON array of {field, old, new}; see {@code AuditService#json}. */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "changed_values", nullable = false)
+    private String changedValues;
+
     @Transient
     private boolean isNew = true;
 
@@ -60,7 +65,7 @@ public class AuditEventEntity implements Persistable<UUID> {
 
     public AuditEventEntity(UUID id, UUID organizationId, Instant occurredAt, UUID actorId, String action,
             String entityType, UUID entityId, String outcome, String correlationId, String[] changedFields,
-            Integer resultCount) {
+            Integer resultCount, String changedValues) {
         this.id = id;
         this.organizationId = organizationId;
         this.occurredAt = occurredAt;
@@ -72,6 +77,7 @@ public class AuditEventEntity implements Persistable<UUID> {
         this.correlationId = correlationId;
         this.changedFields = changedFields;
         this.resultCount = resultCount;
+        this.changedValues = changedValues;
     }
 
     @Override
