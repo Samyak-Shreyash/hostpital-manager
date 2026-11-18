@@ -78,6 +78,9 @@ jobs:
               -e 's/^HMS_PROXY_PORT=.*/HMS_PROXY_PORT=8080/'               -e 's/^HMS_GRAFANA_ADMIN_USERNAME=.*/HMS_GRAFANA_ADMIN_USERNAME=admin/'               -e "s/^HMS_GRAFANA_ADMIN_PASSWORD=.*/HMS_GRAFANA_ADMIN_PASSWORD=$(openssl rand -hex 16)/"               -e 's/^HMS_GRAFANA_PORT=.*/HMS_GRAFANA_PORT=3000/' \
               .env.example > .env
           if grep -E '^[A-Z_]+=$' .env; then echo "unset variables above: add them to this step"; exit 1; fi
+      # The DB volume is external (survives `down -v`, see README), so a fresh runner must create it, as up.sh does.
+      - name: Create database volume
+        run: docker volume create "$(grep -E '^HMS_DB_VOLUME=' .env | cut -d= -f2-)"
       - name: Start stack and wait for healthchecks
         run: docker compose -f infra/compose/compose.yml --env-file .env --profile monitoring up -d --build --wait --wait-timeout 300
       - name: Smoke test through the proxy
