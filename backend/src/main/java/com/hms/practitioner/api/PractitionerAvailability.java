@@ -30,6 +30,9 @@ public interface PractitionerAvailability {
     /** The practitioner's default slot length in minutes; empty for an unknown or other-organization practitioner. */
     OptionalInt defaultSlotMinutes(UUID organizationId, UUID practitionerId);
 
+    /** Default slot length of an ACTIVE practitioner; empty when unknown, in another organization, or inactive. */
+    OptionalInt activeSlotMinutes(UUID organizationId, UUID practitionerId);
+
     /** Half-open {@code [startAt, endAt)} in UTC. */
     record TimeSlot(Instant startAt, Instant endAt) {
     }

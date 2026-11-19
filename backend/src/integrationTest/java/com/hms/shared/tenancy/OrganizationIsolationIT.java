@@ -79,7 +79,6 @@ class OrganizationIsolationIT extends PostgresIT {
             "GET /api/v1/appointments", // list scoped by the principal; other-org filters match nothing
             "POST /api/v1/appointments", // ids in the body; cross-org patient/doctor covered by AppointmentBookingIT
             "POST /api/v1/appointments/walk-in", // ids in the body; cross-org patient/doctor answer 422, QueueTokenIT
-            "GET /api/v1/queue", // scoped by the principal's organization; another org's doctor has an empty queue
             "POST /api/v1/auth/logout",
             "GET /api/v1/auth/me",
             "GET /api/v1/patients",
@@ -195,6 +194,8 @@ class OrganizationIsolationIT extends PostgresIT {
             Map.entry("POST /api/v1/appointments/{id}/check-in", new CrossOrgCase(org -> post(
                     "/api/v1/appointments/{id}/check-in", org.checkInAppointmentId())
                     .contentType(MediaType.APPLICATION_JSON).content("{\"version\":0}"))),
+            Map.entry("GET /api/v1/queue", new CrossOrgCase(org -> get("/api/v1/queue")
+                    .param("doctorId", org.practitionerId().toString()))),
             Map.entry("GET /api/v1/doctors/{id}",
                     new CrossOrgCase(org -> get("/api/v1/doctors/{id}", org.practitionerId()))),
             Map.entry("PATCH /api/v1/doctors/{id}", new CrossOrgCase(org -> patch("/api/v1/doctors/{id}",
@@ -332,9 +333,10 @@ class OrganizationIsolationIT extends PostgresIT {
         List<String> unaccounted = new ArrayList<>();
         for (String key : mappingKeys()) {
             boolean takesId = key.contains("{");
-            boolean accounted = takesId
-                    ? CROSS_ORG_CASES.containsKey(key) || EXEMPT_WITH_ID.containsKey(key)
-                    : EXEMPT.contains(key) || EXEMPT.contains("* " + key.substring(key.indexOf(' ') + 1));
+            // A resource id may also come as a query parameter (GET /queue?doctorId=): a case covers it too.
+            boolean accounted = CROSS_ORG_CASES.containsKey(key) || (takesId
+                    ? EXEMPT_WITH_ID.containsKey(key)
+                    : EXEMPT.contains(key) || EXEMPT.contains("* " + key.substring(key.indexOf(' ') + 1)));
             if (!accounted) {
                 unaccounted.add(key);
             }
