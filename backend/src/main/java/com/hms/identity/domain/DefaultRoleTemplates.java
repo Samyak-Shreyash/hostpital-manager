@@ -24,7 +24,10 @@ public final class DefaultRoleTemplates {
                     "catalog:*", "ward:*", "bed:*", "practitioner:*", "staff:*", Permissions.USER_READ,
                     Permissions.AUDIT_READ, Permissions.REPORT_CLINICAL),
             template("DOCTOR", "Doctor", Permissions.PATIENT_READ, Permissions.PATIENT_UPDATE_CLINICAL,
-                    "encounter:*", "prescription:*", "admission:*", "discharge:*"),
+                    // Doctors edit their own encounters; encounter:update-any is for a custom role (V26).
+                    Permissions.ENCOUNTER_CREATE, Permissions.ENCOUNTER_READ, Permissions.ENCOUNTER_UPDATE,
+                    Permissions.ENCOUNTER_FINALIZE, Permissions.ENCOUNTER_ADDENDUM, Permissions.OBSERVATION_WRITE,
+                    "prescription:*", "admission:*", "discharge:*"),
             template("NURSE", "Nurse", Permissions.PATIENT_READ, Permissions.PATIENT_UPDATE_CLINICAL,
                     Permissions.OBSERVATION_WRITE,
                     Permissions.BED_ASSIGN, Permissions.ADMISSION_READ),
