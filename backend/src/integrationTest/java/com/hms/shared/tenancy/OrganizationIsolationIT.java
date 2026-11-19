@@ -76,6 +76,7 @@ class OrganizationIsolationIT extends PostgresIT {
     /** Mappings without a path id: nothing to cross-check by id (list endpoints are scoped by the principal). */
     private static final Set<String> EXEMPT = Set.of(
             "POST /api/v1/auth/login",
+            "GET /api/v1/appointments", // list scoped by the principal; other-org filters match nothing
             "POST /api/v1/appointments", // ids in the body; cross-org patient/doctor covered by AppointmentBookingIT
             "POST /api/v1/auth/logout",
             "GET /api/v1/auth/me",
@@ -125,6 +126,11 @@ class OrganizationIsolationIT extends PostgresIT {
 
     private static final String ENTERED_IN_ERROR_BODY = "{\"status\":\"ENTERED_IN_ERROR\"}";
 
+    /** A free slot of the fixture doctor's Monday 09:00-10:00 window (Asia/Kolkata), always in the future. */
+    private static final java.time.Instant NEXT_MONDAY_0900_IST = java.time.LocalDate.now(java.time.ZoneId.of("Asia/Kolkata"))
+            .with(java.time.temporal.TemporalAdjusters.next(java.time.DayOfWeek.MONDAY)).atTime(9, 0)
+            .atZone(java.time.ZoneId.of("Asia/Kolkata")).toInstant();
+
     private static final String PRICE_BODY = "{\"amount\":\"500.00\"}";
 
     private static final Map<String, CrossOrgCase> CROSS_ORG_CASES = Map.ofEntries(
@@ -173,6 +179,17 @@ class OrganizationIsolationIT extends PostgresIT {
             // No-op bodies (unchanged values) so the shared fixture keeps version 0 whatever order cases run in.
             Map.entry("GET /api/v1/appointments/{id}",
                     new CrossOrgCase(org -> get("/api/v1/appointments/" + org.appointmentId()))),
+            // Valid bodies: input is validated before the lookup, so only the other org's id can answer 404.
+            Map.entry("POST /api/v1/appointments/{id}/reschedule", new CrossOrgCase(org -> post(
+                    "/api/v1/appointments/{id}/reschedule", org.rescheduleAppointmentId())
+                    .contentType(MediaType.APPLICATION_JSON).content("{\"version\":0,\"startAt\":\""
+                            + NEXT_MONDAY_0900_IST + "\",\"durationMinutes\":15}"))),
+            Map.entry("POST /api/v1/appointments/{id}/cancel", new CrossOrgCase(org -> post(
+                    "/api/v1/appointments/{id}/cancel", org.cancelAppointmentId()).contentType(MediaType.APPLICATION_JSON)
+                    .content("{\"version\":0,\"reason\":\"Synthetic reason\"}"))),
+            Map.entry("POST /api/v1/appointments/{id}/no-show", new CrossOrgCase(org -> post(
+                    "/api/v1/appointments/{id}/no-show", org.noShowAppointmentId()).contentType(MediaType.APPLICATION_JSON)
+                    .content("{\"version\":0}"))),
             Map.entry("GET /api/v1/doctors/{id}",
                     new CrossOrgCase(org -> get("/api/v1/doctors/{id}", org.practitionerId()))),
             Map.entry("PATCH /api/v1/doctors/{id}", new CrossOrgCase(org -> patch("/api/v1/doctors/{id}",
@@ -188,7 +205,8 @@ class OrganizationIsolationIT extends PostgresIT {
                     new CrossOrgCase(org -> get("/api/v1/doctors/{id}/availability", org.practitionerId()))),
             Map.entry("PUT /api/v1/doctors/{id}/availability", new CrossOrgCase(org -> put(
                     "/api/v1/doctors/{id}/availability", org.practitionerId()).contentType(MediaType.APPLICATION_JSON)
-                    .content("{\"version\":0,\"windows\":[]}"))),
+                    .content("{\"version\":0,\"windows\":[{\"weekday\":1,\"start\":\"09:00\",\"end\":\"10:00\","
+                            + "\"slotMinutes\":15}]}"))), // the fixture's own window: a no-op, so the version stays 0
             Map.entry("GET /api/v1/doctors/{id}/availability-exceptions", new CrossOrgCase(org -> get(
                     "/api/v1/doctors/{id}/availability-exceptions", org.practitionerId()))),
             Map.entry("POST /api/v1/doctors/{id}/availability-exceptions", new CrossOrgCase(org -> post(
@@ -215,7 +233,8 @@ class OrganizationIsolationIT extends PostgresIT {
     /** One organization's ids that endpoints can be called with. Extend as modules add entities. */
     record OrgFixture(UUID organizationId, UUID roleId, UUID lifecycleUserId, UUID patchUserId, UUID departmentId,
             UUID specialtyId, UUID serviceId, UUID patientId, UUID allergyId, UUID historyId, UUID practitionerId,
-            UUID staffId, UUID exceptionId, UUID appointmentId) {
+            UUID staffId, UUID exceptionId, UUID appointmentId, UUID rescheduleAppointmentId,
+            UUID cancelAppointmentId, UUID noShowAppointmentId) {
     }
 
     /**
@@ -455,6 +474,9 @@ class OrganizationIsolationIT extends PostgresIT {
         UUID staffUserId = insertUser(organizationId);
         UUID exceptionId = UUID.randomUUID();
         UUID appointmentId = UUID.randomUUID();
+        UUID rescheduleAppointmentId = UUID.randomUUID();
+        UUID cancelAppointmentId = UUID.randomUUID();
+        UUID noShowAppointmentId = UUID.randomUUID();
         inOrg(organizationId, () -> {
             jdbc.sql("""
                     INSERT INTO hms.department (id, organization_id, code, name, created_at, updated_at)
@@ -506,13 +528,30 @@ class OrganizationIsolationIT extends PostgresIT {
                         created_by, created_at, updated_at)
                     VALUES (?, ?, ?, ?, TIMESTAMPTZ '2026-11-16 04:00Z', TIMESTAMPTZ '2026-11-16 04:15Z', ?, now(), now())""")
                     .params(appointmentId, organizationId, patientId, practitionerId, practitionerUserId).update();
+            // One appointment per state-changing endpoint: each is consumed by its own control call.
+            List<UUID> lifecycle = List.of(rescheduleAppointmentId, cancelAppointmentId, noShowAppointmentId);
+            for (int i = 0; i < lifecycle.size(); i++) {
+                jdbc.sql("""
+                        INSERT INTO hms.appointment (id, organization_id, patient_id, practitioner_id, start_at,
+                            end_at, created_by, created_at, updated_at)
+                        VALUES (?, ?, ?, ?, TIMESTAMPTZ '2026-11-16 05:00Z' + make_interval(mins => ?),
+                            TIMESTAMPTZ '2026-11-16 05:15Z' + make_interval(mins => ?), ?, now(), now())""")
+                        .params(lifecycle.get(i), organizationId, patientId, practitionerId, i * 15, i * 15,
+                                practitionerUserId).update();
+            }
+            jdbc.sql("""
+                    INSERT INTO hms.practitioner_availability (id, organization_id, practitioner_id, weekday,
+                        start_time, end_time, slot_minutes, created_at)
+                    VALUES (?, ?, ?, 1, TIME '09:00', TIME '10:00', 15, now())""")
+                    .params(UUID.randomUUID(), organizationId, practitionerId).update();
             return jdbc.sql("""
                     INSERT INTO hms.practitioner_department (organization_id, practitioner_id, department_id,
                         created_at) VALUES (?, ?, ?, now())""")
                     .params(organizationId, practitionerId, departmentId).update();
         });
         return new OrgFixture(organizationId, roleId, lifecycleUserId, patchUserId, departmentId, specialtyId, serviceId, patientId,
-                allergyId, historyId, practitionerId, staffId, exceptionId, appointmentId);
+                allergyId, historyId, practitionerId, staffId, exceptionId, appointmentId, rescheduleAppointmentId,
+                cancelAppointmentId, noShowAppointmentId);
     }
 
     private UUID insertUser(UUID organizationId) {
