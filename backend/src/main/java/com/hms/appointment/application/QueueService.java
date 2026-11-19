@@ -14,6 +14,7 @@ import com.hms.patient.api.PatientDirectory;
 import com.hms.patient.api.PatientDirectory.PatientBrief;
 import com.hms.practitioner.api.PractitionerAvailability;
 import com.hms.shared.domain.BusinessRuleException;
+import com.hms.shared.domain.NotFoundException;
 import com.hms.shared.id.UuidV7Generator;
 import com.hms.shared.tenancy.OrganizationPrincipal;
 import java.time.Clock;
@@ -103,10 +104,8 @@ public class QueueService {
             throw AppointmentService.invalid("reason must be at most " + AppointmentService.MAX_REASON_LENGTH
                     + " characters.");
         }
-        if (!practitioners.isActive(org, doctorId)) {
-            throw new BusinessRuleException("DOCTOR_NOT_AVAILABLE", "The doctor does not exist or is inactive.");
-        }
-        int slot = practitioners.defaultSlotMinutes(org, doctorId).orElseThrow();
+        int slot = practitioners.activeSlotMinutes(org, doctorId).orElseThrow(() -> new BusinessRuleException(
+                "DOCTOR_NOT_AVAILABLE", "The doctor does not exist or is inactive."));
         Instant now = clock.instant();
         Instant start = now.truncatedTo(ChronoUnit.MINUTES);
         LocalDate day = day(org, now);
@@ -131,14 +130,17 @@ public class QueueService {
 
     /**
      * The doctor's queue for {@code date} (default: today in the organization's zone): checked-in and
-     * in-consultation patients by token. It names patients, so reading it is audited (filter names only). A doctor
-     * of another organization simply has an empty queue here: the principal's organization scopes the query.
+     * in-consultation patients by token. It names patients, so reading it is audited (filter names only). An unknown
+     * or other-organization doctor is {@code 404}; a doctor with nobody waiting has an empty list.
      */
     @Transactional
     public QueueView queue(OrganizationPrincipal actor, UUID doctorId, LocalDate date) {
         UUID org = actor.organizationId();
         if (doctorId == null) {
             throw AppointmentService.invalid("doctorId is required.");
+        }
+        if (practitioners.defaultSlotMinutes(org, doctorId).isEmpty()) {
+            throw new NotFoundException("Doctor not found.");
         }
         LocalDate day = date != null ? date : day(org, clock.instant());
         List<QueueRow> rows = repository.queue(org, doctorId, day);

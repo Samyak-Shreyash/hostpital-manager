@@ -222,10 +222,13 @@ class QueueTokenIT extends PostgresIT {
         mockMvc.perform(desk.apply(get("/api/v1/queue").param("doctorId", doctor.toString()).param("date",
                         LocalDate.now(IST).minusDays(1).toString())))
                 .andExpect(jsonPath("$.items", hasSize(0)));
-        // another organization's doctor has an empty queue here, not an error
-        mockMvc.perform(desk.apply(get("/api/v1/queue").param("doctorId",
-                        insertDoctor(fx.organization()).toString())))
+        // a doctor of this organization with nobody waiting: empty list; unknown or other-org doctor: 404
+        mockMvc.perform(desk.apply(get("/api/v1/queue").param("doctorId", insertDoctor(org).toString())))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.items", hasSize(0)));
+        mockMvc.perform(desk.apply(get("/api/v1/queue").param("doctorId",
+                        insertDoctor(fx.organization()).toString()))).andExpect(status().isNotFound());
+        mockMvc.perform(desk.apply(get("/api/v1/queue").param("doctorId", UUID.randomUUID().toString())))
+                .andExpect(status().isNotFound());
         mockMvc.perform(desk.apply(get("/api/v1/queue"))).andExpect(status().isUnprocessableEntity())
                 .andExpect(jsonPath("$.code", is("VALIDATION_ERROR")));
     }

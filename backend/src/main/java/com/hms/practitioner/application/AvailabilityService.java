@@ -283,6 +283,13 @@ public class AvailabilityService implements PractitionerAvailability {
                 .map(p -> OptionalInt.of(p.defaultSlotMinutes())).orElse(OptionalInt.empty());
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public OptionalInt activeSlotMinutes(UUID organizationId, UUID practitionerId) {
+        return practitioners.find(organizationId, practitionerId).filter(p -> "ACTIVE".equals(p.status()))
+                .map(p -> OptionalInt.of(p.defaultSlotMinutes())).orElse(OptionalInt.empty());
+    }
+
     // --- helpers ------------------------------------------------------------------------------------------------
 
     private boolean active(UUID org, UUID practitionerId) {
