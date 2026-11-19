@@ -3,6 +3,7 @@ package com.hms.appointment.web;
 import com.hms.appointment.application.AppointmentService;
 import com.hms.appointment.application.AppointmentService.BookCommand;
 import com.hms.appointment.application.AppointmentView;
+import com.hms.appointment.application.QueueService;
 import com.hms.identity.api.Permissions;
 import com.hms.shared.PageResult;
 import com.hms.shared.tenancy.OrganizationPrincipal;
@@ -22,15 +23,17 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
-/** Appointments (api-design.md section 7). [E5-1]: book, read; [E5-2]: list, reschedule, cancel, no-show. */
+/** Appointments (api-design.md section 7). [E5-1]: book, read; [E5-2]: list, reschedule, cancel, no-show; [E5-3]: check-in, walk-in. */
 @RestController
 @RequestMapping("/api/v1/appointments")
 class AppointmentController {
 
     private final AppointmentService appointments;
+    private final QueueService queue;
 
-    AppointmentController(AppointmentService appointments) {
+    AppointmentController(AppointmentService appointments, QueueService queue) {
         this.appointments = appointments;
+        this.queue = queue;
     }
 
     @PostMapping
@@ -73,6 +76,21 @@ class AppointmentController {
     AppointmentView cancel(@AuthenticationPrincipal OrganizationPrincipal actor, @PathVariable UUID id,
             @RequestBody CancelAppointmentRequest request) {
         return appointments.cancel(actor, id, request.version(), request.reason());
+    }
+
+    @PostMapping("/{id}/check-in")
+    @PreAuthorize("hasAuthority('appointment:check-in')")
+    AppointmentView checkIn(@AuthenticationPrincipal OrganizationPrincipal actor, @PathVariable UUID id,
+            @RequestBody AppointmentVersionRequest request) {
+        return queue.checkIn(actor, id, request.version());
+    }
+
+    @PostMapping("/walk-in")
+    @PreAuthorize("hasAuthority('appointment:create')")
+    @ResponseStatus(HttpStatus.CREATED)
+    AppointmentView walkIn(@AuthenticationPrincipal OrganizationPrincipal actor,
+            @RequestBody WalkInRequest request) {
+        return queue.walkIn(actor, request.patientId(), request.doctorId(), request.reason());
     }
 
     @PostMapping("/{id}/no-show")

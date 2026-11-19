@@ -78,6 +78,8 @@ class OrganizationIsolationIT extends PostgresIT {
             "POST /api/v1/auth/login",
             "GET /api/v1/appointments", // list scoped by the principal; other-org filters match nothing
             "POST /api/v1/appointments", // ids in the body; cross-org patient/doctor covered by AppointmentBookingIT
+            "POST /api/v1/appointments/walk-in", // ids in the body; cross-org patient/doctor answer 422, QueueTokenIT
+            "GET /api/v1/queue", // scoped by the principal's organization; another org's doctor has an empty queue
             "POST /api/v1/auth/logout",
             "GET /api/v1/auth/me",
             "GET /api/v1/patients",
@@ -190,6 +192,9 @@ class OrganizationIsolationIT extends PostgresIT {
             Map.entry("POST /api/v1/appointments/{id}/no-show", new CrossOrgCase(org -> post(
                     "/api/v1/appointments/{id}/no-show", org.noShowAppointmentId()).contentType(MediaType.APPLICATION_JSON)
                     .content("{\"version\":0}"))),
+            Map.entry("POST /api/v1/appointments/{id}/check-in", new CrossOrgCase(org -> post(
+                    "/api/v1/appointments/{id}/check-in", org.checkInAppointmentId())
+                    .contentType(MediaType.APPLICATION_JSON).content("{\"version\":0}"))),
             Map.entry("GET /api/v1/doctors/{id}",
                     new CrossOrgCase(org -> get("/api/v1/doctors/{id}", org.practitionerId()))),
             Map.entry("PATCH /api/v1/doctors/{id}", new CrossOrgCase(org -> patch("/api/v1/doctors/{id}",
@@ -234,7 +239,7 @@ class OrganizationIsolationIT extends PostgresIT {
     record OrgFixture(UUID organizationId, UUID roleId, UUID lifecycleUserId, UUID patchUserId, UUID departmentId,
             UUID specialtyId, UUID serviceId, UUID patientId, UUID allergyId, UUID historyId, UUID practitionerId,
             UUID staffId, UUID exceptionId, UUID appointmentId, UUID rescheduleAppointmentId,
-            UUID cancelAppointmentId, UUID noShowAppointmentId) {
+            UUID cancelAppointmentId, UUID noShowAppointmentId, UUID checkInAppointmentId) {
     }
 
     /**
@@ -415,7 +420,7 @@ class OrganizationIsolationIT extends PostgresIT {
         assertThat(expected).contains("role", "role_permission", "user_role", "document_sequence", "department",
                 "specialty", "service_catalog_item", "service_price", "patient", "patient_address",
                 "patient_contact", "practitioner", "practitioner_specialty", "practitioner_department", "staff",
-                "practitioner_availability", "availability_exception", "appointment");
+                "practitioner_availability", "availability_exception", "appointment", "queue_token_counter");
         assertThat(new TreeSet<>(rlsTables())).isEqualTo(expected);
     }
 
@@ -477,6 +482,7 @@ class OrganizationIsolationIT extends PostgresIT {
         UUID rescheduleAppointmentId = UUID.randomUUID();
         UUID cancelAppointmentId = UUID.randomUUID();
         UUID noShowAppointmentId = UUID.randomUUID();
+        UUID checkInAppointmentId = UUID.randomUUID();
         inOrg(organizationId, () -> {
             jdbc.sql("""
                     INSERT INTO hms.department (id, organization_id, code, name, created_at, updated_at)
@@ -529,7 +535,8 @@ class OrganizationIsolationIT extends PostgresIT {
                     VALUES (?, ?, ?, ?, TIMESTAMPTZ '2026-11-16 04:00Z', TIMESTAMPTZ '2026-11-16 04:15Z', ?, now(), now())""")
                     .params(appointmentId, organizationId, patientId, practitionerId, practitionerUserId).update();
             // One appointment per state-changing endpoint: each is consumed by its own control call.
-            List<UUID> lifecycle = List.of(rescheduleAppointmentId, cancelAppointmentId, noShowAppointmentId);
+            List<UUID> lifecycle = List.of(rescheduleAppointmentId, cancelAppointmentId, noShowAppointmentId,
+                    checkInAppointmentId);
             for (int i = 0; i < lifecycle.size(); i++) {
                 jdbc.sql("""
                         INSERT INTO hms.appointment (id, organization_id, patient_id, practitioner_id, start_at,
@@ -551,7 +558,7 @@ class OrganizationIsolationIT extends PostgresIT {
         });
         return new OrgFixture(organizationId, roleId, lifecycleUserId, patchUserId, departmentId, specialtyId, serviceId, patientId,
                 allergyId, historyId, practitionerId, staffId, exceptionId, appointmentId, rescheduleAppointmentId,
-                cancelAppointmentId, noShowAppointmentId);
+                cancelAppointmentId, noShowAppointmentId, checkInAppointmentId);
     }
 
     private UUID insertUser(UUID organizationId) {

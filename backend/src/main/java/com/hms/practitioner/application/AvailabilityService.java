@@ -32,6 +32,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
+import java.util.OptionalInt;
 import java.util.UUID;
 import java.util.regex.Pattern;
 import org.springframework.stereotype.Service;
@@ -273,6 +274,13 @@ public class AvailabilityService implements PractitionerAvailability {
     @Transactional(readOnly = true)
     public boolean isActive(UUID organizationId, UUID practitionerId) {
         return active(organizationId, practitionerId);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public OptionalInt defaultSlotMinutes(UUID organizationId, UUID practitionerId) {
+        return practitioners.find(organizationId, practitionerId)
+                .map(p -> OptionalInt.of(p.defaultSlotMinutes())).orElse(OptionalInt.empty());
     }
 
     // --- helpers ------------------------------------------------------------------------------------------------

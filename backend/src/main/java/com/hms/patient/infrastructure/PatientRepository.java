@@ -1,5 +1,6 @@
 package com.hms.patient.infrastructure;
 
+import com.hms.patient.api.PatientDirectory.PatientBrief;
 import com.hms.patient.application.PatientView.AddressView;
 import com.hms.patient.application.PatientView.ContactView;
 import java.math.BigDecimal;
@@ -9,7 +10,10 @@ import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -77,6 +81,21 @@ public class PatientRepository {
                     updated_at
                 FROM hms.patient WHERE organization_id = ? AND id = ?
                 """).params(org, id).query(PatientRepository::mapPatient).optional();
+    }
+
+    /** UHID and name of the patients with these ids in the organization; others are absent. */
+    public Map<UUID, PatientBrief> findBriefs(UUID org,
+            Collection<UUID> ids) {
+        if (ids.isEmpty()) {
+            return Map.of();
+        }
+        Map<UUID, PatientBrief> result = new HashMap<>();
+        jdbc.sql("SELECT id, uhid, full_name FROM hms.patient WHERE organization_id = :org AND id IN (:ids)")
+                .param("org", org).param("ids", ids)
+                .query((rs, n) -> new PatientBrief(
+                        rs.getObject("id", UUID.class), rs.getString("uhid"), rs.getString("full_name")))
+                .list().forEach(b -> result.put(b.id(), b));
+        return result;
     }
 
     public Optional<AddressView> findCurrentAddress(UUID org, UUID patientId) {
@@ -251,12 +270,12 @@ public class PatientRepository {
                 Timestamp.from(now)).update();
     }
 
-    private record Where(String sql, java.util.Map<String, Object> params) {
+    private record Where(String sql, Map<String, Object> params) {
     }
 
     private static Where where(UUID org, SearchFilter f) {
         List<String> clauses = new ArrayList<>(List.of("organization_id = :org"));
-        java.util.Map<String, Object> params = new java.util.LinkedHashMap<>();
+        Map<String, Object> params = new java.util.LinkedHashMap<>();
         params.put("org", org);
         if (f.name() != null) {
             clauses.add("full_name OPERATOR(hms.%>) :name");

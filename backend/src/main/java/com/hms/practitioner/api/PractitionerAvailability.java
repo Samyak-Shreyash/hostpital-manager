@@ -3,6 +3,7 @@ package com.hms.practitioner.api;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.OptionalInt;
 import java.util.UUID;
 
 /**
@@ -25,6 +26,9 @@ public interface PractitionerAvailability {
 
     /** Whether the practitioner exists in the organization and is ACTIVE. */
     boolean isActive(UUID organizationId, UUID practitionerId);
+
+    /** The practitioner's default slot length in minutes; empty for an unknown or other-organization practitioner. */
+    OptionalInt defaultSlotMinutes(UUID organizationId, UUID practitionerId);
 
     /** Half-open {@code [startAt, endAt)} in UTC. */
     record TimeSlot(Instant startAt, Instant endAt) {
