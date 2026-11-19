@@ -27,7 +27,7 @@ class OrganizationTransactionListener implements TransactionExecutionListener {
 
     @Override
     public void afterBegin(TransactionExecution transaction, Throwable beginFailure) {
-        if (beginFailure != null || RESOLVING.get()) {
+        if (beginFailure != null || RESOLVING.get() || SessionStoreTransactions.NAME.equals(transaction.getTransactionName())) {
             return;
         }
         RESOLVING.set(true);

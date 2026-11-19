@@ -173,7 +173,7 @@ class AppointmentBookingIT extends PostgresIT {
                 .update());
         insertRaw(at("09:15"), at("09:45"), "SCHEDULED");
         assertThatThrownBy(() -> fx.inOrg(org, () -> jdbc.sql("DELETE FROM hms.appointment WHERE id = ?")
-                .param(first).update())).hasMessageContaining("permission denied");
+                .param(first).update())).rootCause().hasMessageContaining("permission denied");
     }
 
     @Test
