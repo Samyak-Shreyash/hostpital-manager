@@ -76,6 +76,7 @@ flowchart LR
   PRC --> IDN
   PAT[patient] --> ORG
   APT[appointment] --> PAT
+  APT --> ORG
   APT --> PRC
   CLN[clinical] --> PAT
   CLN --> PRC

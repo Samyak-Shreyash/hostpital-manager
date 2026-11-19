@@ -205,6 +205,14 @@ Implemented `[E5-1]` (`POST /appointments`, `GET /appointments/{id}`):
 - Audit: `APPOINTMENT_BOOKED` (field names), `APPOINTMENT_AVAILABILITY_OVERRIDDEN` when overridden, `APPOINTMENT_VIEWED` on detail.
 - `GET /doctors/{id}/slots` now leaves out booked times (Q9).
 
+Implemented `[E5-2]` (`GET /appointments`, `POST /appointments/{id}/reschedule|cancel|no-show`; check-in, walk-in and the queue follow in `[E5-3]`):
+- States `SCHEDULED, CHECKED_IN, IN_CONSULTATION, COMPLETED, CANCELLED, NO_SHOW, RESCHEDULED`; allowed moves exactly as domain-model.md section 6 (`AppointmentStatus.canTransitionTo`); anything else is `409 INVALID_STATE_TRANSITION`. Every action sends the `version` the caller last saw; a stale one is `409 CONCURRENT_MODIFICATION` (checked before the transition). Unknown or other-organization ids are `404`.
+- `POST /appointments/{id}/reschedule` `{version, startAt, durationMinutes}` (permission `appointment:update`; only from `SCHEDULED`): marks the old appointment `RESCHEDULED` (its time is freed, so the new slot may overlap it) and returns `201` with a new `SCHEDULED` appointment whose `rescheduledFromId` is the old id; patient, doctor and `reason` carry over. The new slot obeys the booking rules (`422 OUTSIDE_AVAILABILITY`, `422 START_IN_PAST` without `appointment:backdate`, `422 DOCTOR_NOT_AVAILABLE`, `409 SLOT_CONFLICT`); there is no availability override on a reschedule. On any error nothing changes. An appointment can be rescheduled once (it has one successor).
+- `POST /appointments/{id}/cancel` `{version, reason}` (`appointment:cancel`; from `SCHEDULED` or `CHECKED_IN`): `reason` is required, 1-500 characters after trimming, else `422 VALIDATION_ERROR`. Returns `200` with `status: CANCELLED`, `cancelReason`, `cancelledAt`.
+- `POST /appointments/{id}/no-show` `{version}` (`appointment:update`; from `SCHEDULED`): `200` with `status: NO_SHOW`. `CANCELLED`, `NO_SHOW` and `RESCHEDULED` free the doctor's time.
+- `GET /appointments?doctorId=&patientId=&date=&status=&page=&size=` (`appointment:read`): all filters optional; `date` is a day in the organization's timezone; `status` one of the seven states else `422`; ordered by `startAt`; envelope `{items, page, size, totalItems}` (`size` max 100). Items are the detail representation (adds `rescheduledFromId`, `cancelReason`, `cancelledAt`, null when not applicable).
+- Audit: `APPOINTMENT_RESCHEDULED` (old id) plus `APPOINTMENT_BOOKED` (new id), `APPOINTMENT_CANCELLED`, `APPOINTMENT_NO_SHOW`, `APPOINTMENT_LISTED` (filter names). Field names only; the reason text is never audited or logged.
+
 ## 8. Encounters & clinical
 | Method & path | Purpose | Permission |
 |---|---|---|
