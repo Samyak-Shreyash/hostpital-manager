@@ -115,7 +115,9 @@ class RoleTemplateBackfillMigrationIT extends PostgresIT {
 
     @Test
     void doctorAndNurseGainClinicalEntryWrites() throws SQLException {
-        assertThat(permissions("DOCTOR")).containsExactlyInAnyOrder("patient:read", "patient:update-clinical");
+        // V26 ([E6-1]) later adds observation:write for doctors (vitals).
+        assertThat(permissions("DOCTOR")).containsExactlyInAnyOrder("patient:read", "patient:update-clinical",
+                "observation:write");
         assertThat(permissions("NURSE")).containsExactlyInAnyOrder(
                 "patient:read", "observation:write", "patient:update-clinical");
     }

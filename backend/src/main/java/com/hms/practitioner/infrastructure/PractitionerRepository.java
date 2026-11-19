@@ -85,6 +85,12 @@ public class PractitionerRepository {
                 .params(org, id).query(PractitionerRepository::map).optional();
     }
 
+    /** The id of the ACTIVE practitioner linked to the user (one practitioner per user, V18). */
+    public Optional<UUID> findActiveIdByUser(UUID org, UUID userId) {
+        return jdbc.sql("SELECT id FROM hms.practitioner WHERE organization_id = ? AND user_id = ?"
+                        + " AND status = 'ACTIVE'").params(org, userId).query(UUID.class).optional();
+    }
+
     /** The practitioner row locked FOR UPDATE until commit; empty for an unknown or other-org id. */
     public Optional<PractitionerRow> lock(UUID org, UUID id) {
         return jdbc.sql("SELECT " + COLUMNS

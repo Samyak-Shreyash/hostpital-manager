@@ -78,6 +78,7 @@ class OrganizationIsolationIT extends PostgresIT {
             "POST /api/v1/auth/login",
             "GET /api/v1/appointments", // list scoped by the principal; other-org filters match nothing
             "POST /api/v1/appointments", // ids in the body; cross-org patient/doctor covered by AppointmentBookingIT
+            "POST /api/v1/encounters", // ids in the body; cross-org appointment/patient answer 404/422, EncounterIT
             "POST /api/v1/appointments/walk-in", // ids in the body; cross-org patient/doctor answer 422, QueueTokenIT
             "POST /api/v1/auth/logout",
             "GET /api/v1/auth/me",
@@ -194,6 +195,26 @@ class OrganizationIsolationIT extends PostgresIT {
             Map.entry("POST /api/v1/appointments/{id}/check-in", new CrossOrgCase(org -> post(
                     "/api/v1/appointments/{id}/check-in", org.checkInAppointmentId())
                     .contentType(MediaType.APPLICATION_JSON).content("{\"version\":0}"))),
+            // [E6-1] Valid bodies and the fixture's own version, so only the other org's id can answer 404.
+            Map.entry("GET /api/v1/encounters/{id}",
+                    new CrossOrgCase(org -> get("/api/v1/encounters/{id}", org.encounterId()))),
+            Map.entry("GET /api/v1/patients/{id}/encounters",
+                    new CrossOrgCase(org -> get("/api/v1/patients/{id}/encounters", org.patientId()))),
+            Map.entry("PUT /api/v1/encounters/{id}/observations", new CrossOrgCase(org -> put(
+                    "/api/v1/encounters/{id}/observations", org.encounterId()).contentType(MediaType.APPLICATION_JSON)
+                    .content("{\"version\":0,\"observations\":[]}"))),
+            Map.entry("PUT /api/v1/encounters/{id}/notes/{kind}", new CrossOrgCase(org -> put(
+                    "/api/v1/encounters/{id}/notes/SYMPTOMS", org.notesEncounterId())
+                    .contentType(MediaType.APPLICATION_JSON).content("{\"version\":0,\"text\":\"Synthetic note\"}"))),
+            Map.entry("PUT /api/v1/encounters/{id}/diagnoses", new CrossOrgCase(org -> put(
+                    "/api/v1/encounters/{id}/diagnoses", org.diagnosesEncounterId()).contentType(MediaType.APPLICATION_JSON)
+                    .content("{\"version\":0,\"diagnoses\":[]}"))),
+            Map.entry("PUT /api/v1/encounters/{id}/treatment-plan", new CrossOrgCase(org -> put(
+                    "/api/v1/encounters/{id}/treatment-plan", org.planEncounterId())
+                    .contentType(MediaType.APPLICATION_JSON).content("{\"version\":0,\"text\":\"Synthetic plan\"}"))),
+            Map.entry("PUT /api/v1/encounters/{id}/follow-up", new CrossOrgCase(org -> put(
+                    "/api/v1/encounters/{id}/follow-up", org.followUpEncounterId()).contentType(MediaType.APPLICATION_JSON)
+                    .content("{\"version\":0,\"date\":\"2030-01-15\"}"))),
             Map.entry("GET /api/v1/queue", new CrossOrgCase(org -> get("/api/v1/queue")
                     .param("doctorId", org.practitionerId().toString()))),
             Map.entry("GET /api/v1/doctors/{id}",
@@ -240,7 +261,8 @@ class OrganizationIsolationIT extends PostgresIT {
     record OrgFixture(UUID organizationId, UUID roleId, UUID lifecycleUserId, UUID patchUserId, UUID departmentId,
             UUID specialtyId, UUID serviceId, UUID patientId, UUID allergyId, UUID historyId, UUID practitionerId,
             UUID staffId, UUID exceptionId, UUID appointmentId, UUID rescheduleAppointmentId,
-            UUID cancelAppointmentId, UUID noShowAppointmentId, UUID checkInAppointmentId) {
+            UUID cancelAppointmentId, UUID noShowAppointmentId, UUID checkInAppointmentId, UUID encounterId, UUID notesEncounterId,
+            UUID diagnosesEncounterId, UUID planEncounterId, UUID followUpEncounterId) {
     }
 
     /**
@@ -422,7 +444,8 @@ class OrganizationIsolationIT extends PostgresIT {
         assertThat(expected).contains("role", "role_permission", "user_role", "document_sequence", "department",
                 "specialty", "service_catalog_item", "service_price", "patient", "patient_address",
                 "patient_contact", "practitioner", "practitioner_specialty", "practitioner_department", "staff",
-                "practitioner_availability", "availability_exception", "appointment", "queue_token_counter");
+                "practitioner_availability", "availability_exception", "appointment", "queue_token_counter", "encounter", "encounter_observation",
+                "clinical_note", "encounter_diagnosis", "treatment_plan", "follow_up");
         assertThat(new TreeSet<>(rlsTables())).isEqualTo(expected);
     }
 
@@ -485,6 +508,11 @@ class OrganizationIsolationIT extends PostgresIT {
         UUID cancelAppointmentId = UUID.randomUUID();
         UUID noShowAppointmentId = UUID.randomUUID();
         UUID checkInAppointmentId = UUID.randomUUID();
+        UUID encounterId = UUID.randomUUID();
+        UUID notesEncounterId = UUID.randomUUID();
+        UUID diagnosesEncounterId = UUID.randomUUID();
+        UUID planEncounterId = UUID.randomUUID();
+        UUID followUpEncounterId = UUID.randomUUID();
         inOrg(organizationId, () -> {
             jdbc.sql("""
                     INSERT INTO hms.department (id, organization_id, code, name, created_at, updated_at)
@@ -548,6 +576,14 @@ class OrganizationIsolationIT extends PostgresIT {
                         .params(lifecycle.get(i), organizationId, patientId, practitionerId, i * 15, i * 15,
                                 practitionerUserId).update();
             }
+            // One encounter per state-changing endpoint (each own-org control call bumps its version).
+            for (UUID id : List.of(encounterId, notesEncounterId, diagnosesEncounterId, planEncounterId,
+                    followUpEncounterId)) {
+                jdbc.sql("""
+                        INSERT INTO hms.encounter (id, organization_id, patient_id, practitioner_id, started_at,
+                            created_by, created_at, updated_at) VALUES (?, ?, ?, ?, now(), ?, now(), now())""")
+                        .params(id, organizationId, patientId, practitionerId, practitionerUserId).update();
+            }
             jdbc.sql("""
                     INSERT INTO hms.practitioner_availability (id, organization_id, practitioner_id, weekday,
                         start_time, end_time, slot_minutes, created_at)
@@ -560,7 +596,8 @@ class OrganizationIsolationIT extends PostgresIT {
         });
         return new OrgFixture(organizationId, roleId, lifecycleUserId, patchUserId, departmentId, specialtyId, serviceId, patientId,
                 allergyId, historyId, practitionerId, staffId, exceptionId, appointmentId, rescheduleAppointmentId,
-                cancelAppointmentId, noShowAppointmentId, checkInAppointmentId);
+                cancelAppointmentId, noShowAppointmentId, checkInAppointmentId, encounterId,
+                notesEncounterId, diagnosesEncounterId, planEncounterId, followUpEncounterId);
     }
 
     private UUID insertUser(UUID organizationId) {

@@ -1,6 +1,7 @@
 package com.hms.appointment.application;
 
 import com.hms.appointment.api.AppointmentLifecycle;
+import com.hms.appointment.api.AppointmentLookup;
 import com.hms.appointment.domain.AppointmentStatus;
 import com.hms.appointment.infrastructure.AppointmentRepository;
 import com.hms.appointment.infrastructure.AppointmentRepository.AppointmentRow;
@@ -26,6 +27,7 @@ import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -47,7 +49,7 @@ import org.springframework.transaction.annotation.Transactional;
  * and then ask {@link AppointmentStatus#canTransitionTo} ({@code 409 INVALID_STATE_TRANSITION}).
  */
 @Service
-public class AppointmentService implements AppointmentLifecycle {
+public class AppointmentService implements AppointmentLifecycle, AppointmentLookup {
 
     static final String ENTITY = "APPOINTMENT";
     static final int MAX_DURATION_MINUTES = 480;
@@ -295,6 +297,13 @@ public class AppointmentService implements AppointmentLifecycle {
     @Transactional
     public void markCompleted(UUID organizationId, UUID appointmentId) {
         move(organizationId, appointmentId, AppointmentStatus.COMPLETED);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<AppointmentRef> find(UUID organizationId, UUID appointmentId) {
+        return repository.find(organizationId, appointmentId)
+                .map(r -> new AppointmentRef(r.id(), r.patientId(), r.practitionerId(), r.status()));
     }
 
     private void move(UUID org, UUID id, AppointmentStatus target) {
