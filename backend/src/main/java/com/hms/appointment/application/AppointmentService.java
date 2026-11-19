@@ -1,5 +1,6 @@
 package com.hms.appointment.application;
 
+import com.hms.appointment.api.AppointmentLifecycle;
 import com.hms.appointment.domain.AppointmentStatus;
 import com.hms.appointment.infrastructure.AppointmentRepository;
 import com.hms.appointment.infrastructure.AppointmentRepository.AppointmentRow;
@@ -46,7 +47,7 @@ import org.springframework.transaction.annotation.Transactional;
  * and then ask {@link AppointmentStatus#canTransitionTo} ({@code 409 INVALID_STATE_TRANSITION}).
  */
 @Service
-public class AppointmentService {
+public class AppointmentService implements AppointmentLifecycle {
 
     static final String ENTITY = "APPOINTMENT";
     static final int MAX_DURATION_MINUTES = 480;
@@ -278,12 +279,40 @@ public class AppointmentService {
         }
     }
 
+    /**
+     * The consultation starts ([E5-3] port for the clinical module): CHECKED_IN to IN_CONSULTATION, decided on the
+     * locked row by the same state machine. There is no caller-supplied version here and no audit event: the
+     * clinical module audits the encounter that drives it.
+     */
+    @Override
+    @Transactional
+    public void markInConsultation(UUID organizationId, UUID appointmentId) {
+        move(organizationId, appointmentId, AppointmentStatus.IN_CONSULTATION);
+    }
+
+    /** The consultation ends: IN_CONSULTATION to COMPLETED. */
+    @Override
+    @Transactional
+    public void markCompleted(UUID organizationId, UUID appointmentId) {
+        move(organizationId, appointmentId, AppointmentStatus.COMPLETED);
+    }
+
+    private void move(UUID org, UUID id, AppointmentStatus target) {
+        AppointmentRow row = repository.lock(org, id).orElseThrow(AppointmentService::notFound);
+        requireState(row, target);
+        repository.transition(org, id, target.name(), null, null, clock.instant());
+    }
+
     /** Version first (a stale caller is told to reload), then the state machine on the locked row. */
-    private static void requireTransition(AppointmentRow row, long version, AppointmentStatus target) {
+    static void requireTransition(AppointmentRow row, long version, AppointmentStatus target) {
         if (row.version() != version) {
             throw new ConflictException("CONCURRENT_MODIFICATION",
                     "The resource was changed by someone else. Reload and try again.");
         }
+        requireState(row, target);
+    }
+
+    private static void requireState(AppointmentRow row, AppointmentStatus target) {
         AppointmentStatus current = AppointmentStatus.valueOf(row.status());
         if (!current.canTransitionTo(target)) {
             throw new ConflictException("INVALID_STATE_TRANSITION",
@@ -291,18 +320,18 @@ public class AppointmentService {
         }
     }
 
-    private static NotFoundException notFound() {
+    static NotFoundException notFound() {
         return new NotFoundException("Appointment not found.");
     }
 
-    private static AppointmentView view(AppointmentRow r) {
+    static AppointmentView view(AppointmentRow r) {
         return new AppointmentView(r.id(), r.patientId(), r.practitionerId(), r.startAt(), r.endAt(),
                 (int) Duration.between(r.startAt(), r.endAt()).toMinutes(), r.type(), r.status(), r.reason(),
                 r.outsideAvailability(), r.version(), r.createdAt(), r.updatedAt(), r.rescheduledFromId(),
-                r.cancelReason(), r.cancelledAt());
+                r.cancelReason(), r.cancelledAt(), r.tokenNo(), r.tokenDate());
     }
 
-    private static BusinessRuleException invalid(String message) {
+    static BusinessRuleException invalid(String message) {
         return new BusinessRuleException("VALIDATION_ERROR", message);
     }
 }
