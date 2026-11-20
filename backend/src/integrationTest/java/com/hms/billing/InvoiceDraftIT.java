@@ -285,8 +285,6 @@ class InvoiceDraftIT extends PostgresIT {
         InvoiceBalance balance = fx.inOrg(org, () -> balances.lockForPayment(org, id));
         assertThat(balance.status()).isEqualTo("ISSUED");
         assertThat(balance.total()).isEqualTo(Money.of("117.99"));
-        assertThat(balance.paid()).isEqualTo(Money.ZERO);
-        assertThat(balance.refunded()).isEqualTo(Money.ZERO);
         fx.inOrg(org, () -> {
             balances.applyPaymentStatus(org, id, "PARTIALLY_PAID");
             return null;

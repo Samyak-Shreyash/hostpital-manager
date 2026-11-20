@@ -29,6 +29,7 @@ import com.hms.shared.domain.Money;
 import com.hms.shared.domain.NotFoundException;
 import com.hms.shared.id.UuidV7Generator;
 import com.hms.shared.numbering.DocumentNumberAllocator;
+import com.hms.shared.numbering.FinancialYear;
 import com.hms.shared.tenancy.OrganizationPrincipal;
 import com.hms.shared.web.idempotency.IdempotencyService;
 import java.math.BigDecimal;
@@ -295,8 +296,7 @@ public class InvoiceService implements InvoiceBalancePort {
 
     /** {@code 2026-27} for any date from 1 April 2026 to 31 March 2027. */
     static String financialYear(LocalDate date) {
-        int start = date.getMonthValue() >= 4 ? date.getYear() : date.getYear() - 1;
-        return start + "-" + String.format("%02d", (start + 1) % 100);
+        return FinancialYear.of(date);
     }
 
     // --- InvoiceBalancePort (payment module, [E8-x]) ---
@@ -305,7 +305,7 @@ public class InvoiceService implements InvoiceBalancePort {
     @Transactional(propagation = Propagation.MANDATORY)
     public InvoiceBalance lockForPayment(UUID organizationId, UUID invoiceId) {
         InvoiceRow row = repository.lock(organizationId, invoiceId).orElseThrow(InvoiceService::notFound);
-        return new InvoiceBalance(row.status(), row.total(), Money.ZERO, Money.ZERO);
+        return new InvoiceBalance(row.status(), row.total());
     }
 
     @Override

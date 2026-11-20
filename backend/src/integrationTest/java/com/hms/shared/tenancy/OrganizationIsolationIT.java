@@ -79,6 +79,7 @@ class OrganizationIsolationIT extends PostgresIT {
             "GET /api/v1/appointments", // list scoped by the principal; other-org filters match nothing
             "POST /api/v1/appointments", // ids in the body; cross-org patient/doctor covered by AppointmentBookingIT
             "GET /api/v1/invoices", // list scoped by the principal; other-org patientId matches nothing
+            "GET /api/v1/payments", // list scoped by the principal ([E7-3])
             "POST /api/v1/invoices", // ids in the body; cross-org patient/encounter answer 404, InvoiceDraftIT
             "POST /api/v1/encounters", // ids in the body; cross-org appointment/patient answer 404/422, EncounterIT
             "POST /api/v1/appointments/walk-in", // ids in the body; cross-org patient/doctor answer 422, QueueTokenIT
@@ -261,6 +262,11 @@ class OrganizationIsolationIT extends PostgresIT {
             Map.entry("POST /api/v1/invoices/{id}/issue", new CrossOrgCase(org -> post(
                     "/api/v1/invoices/{id}/issue", org.issueInvoiceId())
                     .header("Idempotency-Key", "iso-" + UUID.randomUUID()))),
+            // [E7-3] Payment on an ISSUED invoice (total 100.00); each control call pays 1.00 with a fresh key.
+            Map.entry("POST /api/v1/invoices/{id}/payments", new CrossOrgCase(org -> post(
+                    "/api/v1/invoices/{id}/payments", org.payInvoiceId())
+                    .header("Idempotency-Key", "iso-" + UUID.randomUUID()).contentType(MediaType.APPLICATION_JSON)
+                    .content("{\"amount\":\"1.00\",\"mode\":\"CASH\"}"))),
             Map.entry("GET /api/v1/queue", new CrossOrgCase(org -> get("/api/v1/queue")
                     .param("doctorId", org.practitionerId().toString()))),
             Map.entry("GET /api/v1/doctors/{id}",
@@ -311,7 +317,7 @@ class OrganizationIsolationIT extends PostgresIT {
             UUID diagnosesEncounterId, UUID planEncounterId, UUID followUpEncounterId, UUID finalizeEncounterId,
             UUID addendumEncounterId, UUID putPrescriptionId, UUID issuePrescriptionId, UUID revisePrescriptionId,
             UUID getPrescriptionId, UUID getInvoiceId, UUID putInvoiceId, UUID discardInvoiceId,
-            UUID discountInvoiceId, UUID issueInvoiceId) {
+            UUID discountInvoiceId, UUID issueInvoiceId, UUID payInvoiceId) {
     }
 
     /**
@@ -495,7 +501,7 @@ class OrganizationIsolationIT extends PostgresIT {
                 "patient_contact", "practitioner", "practitioner_specialty", "practitioner_department", "staff",
                 "practitioner_availability", "availability_exception", "appointment", "queue_token_counter", "encounter", "encounter_observation",
                 "clinical_note", "encounter_diagnosis", "treatment_plan", "follow_up", "prescription", "prescription_item",
-                "invoice", "invoice_item", "idempotency_record");
+                "invoice", "invoice_item", "idempotency_record", "payment");
         assertThat(new TreeSet<>(rlsTables())).isEqualTo(expected);
     }
 
@@ -574,6 +580,7 @@ class OrganizationIsolationIT extends PostgresIT {
         UUID discardInvoice = UUID.randomUUID();
         UUID discountInvoice = UUID.randomUUID();
         UUID issueInvoice = UUID.randomUUID();
+        UUID payInvoice = UUID.randomUUID();
         inOrg(organizationId, () -> {
             jdbc.sql("""
                     INSERT INTO hms.department (id, organization_id, code, name, created_at, updated_at)
@@ -678,7 +685,8 @@ class OrganizationIsolationIT extends PostgresIT {
                 }
             }
             // [E7-1] One DRAFT invoice per endpoint, each on its own encounter (one live invoice per encounter).
-            for (UUID invoice : List.of(getInvoice, putInvoice, discardInvoice, discountInvoice, issueInvoice)) {
+            for (UUID invoice : List.of(getInvoice, putInvoice, discardInvoice, discountInvoice, issueInvoice,
+                    payInvoice)) {
                 UUID invoiceEncounter = UUID.randomUUID();
                 jdbc.sql("""
                         INSERT INTO hms.encounter (id, organization_id, patient_id, practitioner_id, started_at,
@@ -689,7 +697,7 @@ class OrganizationIsolationIT extends PostgresIT {
                         INSERT INTO hms.invoice (id, organization_id, type, patient_id, encounter_id, created_by,
                             created_at, updated_at) VALUES (?, ?, 'OPD', ?, ?, ?, now(), now())""")
                         .params(invoice, organizationId, patientId, invoiceEncounter, practitionerUserId).update();
-                if (invoice.equals(discountInvoice) || invoice.equals(issueInvoice)) {
+                if (invoice.equals(discountInvoice) || invoice.equals(issueInvoice) || invoice.equals(payInvoice)) {
                     jdbc.sql("""
                             INSERT INTO hms.invoice_item (id, organization_id, invoice_id, position, description,
                                 quantity, unit_price, discount, tax_rate, gross, taxable, tax, total, created_at)
@@ -697,6 +705,11 @@ class OrganizationIsolationIT extends PostgresIT {
                             .params(UUID.randomUUID(), organizationId, invoice).update();
                 }
             }
+            // [E7-3] The payment fixture is ISSUED with a 100.00 total; its number cannot collide with the issue case.
+            jdbc.sql("""
+                    UPDATE hms.invoice SET status = 'ISSUED', invoice_no = 'FIXTURE/000001', issued_at = now(),
+                        issued_by = ?, subtotal = 100, total = 100 WHERE id = ?""")
+                    .params(practitionerUserId, payInvoice).update();
             jdbc.sql("""
                     INSERT INTO hms.practitioner_availability (id, organization_id, practitioner_id, weekday,
                         start_time, end_time, slot_minutes, created_at)
@@ -712,7 +725,7 @@ class OrganizationIsolationIT extends PostgresIT {
                 cancelAppointmentId, noShowAppointmentId, checkInAppointmentId, encounterId,
                 notesEncounterId, diagnosesEncounterId, planEncounterId, followUpEncounterId, finalizeEncounterId,
                 addendumEncounterId, putRx, issueRx, reviseRx, getRx, getInvoice, putInvoice, discardInvoice,
-                discountInvoice, issueInvoice);
+                discountInvoice, issueInvoice, payInvoice);
     }
 
     private UUID insertUser(UUID organizationId) {
