@@ -157,7 +157,8 @@ public class InvoiceService implements InvoiceBalancePort {
             throw new BusinessRuleException("VALIDATION_ERROR",
                     "page must be 0 or more and size 1 to " + MAX_PAGE_SIZE + ".");
         }
-        if (status != null && !Invoice.STATUSES.contains(status)) {
+        // One status or several separated by commas (the outstanding list asks for ISSUED,PARTIALLY_PAID).
+        if (status != null && !Invoice.STATUSES.containsAll(List.of(status.split(",", -1)))) {
             throw invalid("status", "Unknown invoice status.");
         }
         UUID org = actor.organizationId();

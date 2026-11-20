@@ -26,7 +26,7 @@ public class InvoiceRepository {
             + " discount_reason, tax_rate, gross, taxable, tax, total";
     private static final String FILTER = " WHERE organization_id = :org"
             + " AND (CAST(:patient AS uuid) IS NULL OR patient_id = :patient)"
-            + " AND (CAST(:status AS text) IS NULL OR status = :status)"
+            + " AND (CAST(:status AS text) IS NULL OR status = ANY(string_to_array(:status, ',')))"
             + " AND (CAST(:from AS timestamptz) IS NULL OR created_at >= :from)"
             + " AND (CAST(:to AS timestamptz) IS NULL OR created_at < :to)";
 

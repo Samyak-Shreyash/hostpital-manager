@@ -12,6 +12,8 @@ import { AuditPage } from '../features/audit/AuditPage'
 import { DayCalendarPage } from '../features/appointments/DayCalendarPage'
 import { QueueBoardPage } from '../features/appointments/QueueBoardPage'
 import { ConsultPage } from '../features/consultation/ConsultPage'
+import { InvoiceEditorPage } from '../features/billing/InvoiceEditorPage'
+import { OutstandingListPage } from '../features/billing/OutstandingListPage'
 import { CatalogPage } from '../features/catalog/CatalogPage'
 import { PatientDetailPage } from '../features/patients/PatientDetailPage'
 import { PatientRegisterPage } from '../features/patients/PatientRegisterPage'
@@ -95,6 +97,10 @@ export function AppRoutes() {
           </Route>
           <Route element={<RequirePermission permission="encounter:read" screen="Consultation" />}>
             <Route path="consult/:id" element={<ConsultPage />} />
+          </Route>
+          <Route element={<RequirePermission permission="invoice:read" screen="Billing" />}>
+            <Route path="invoices" element={<OutstandingListPage />} />
+            <Route path="invoices/:id" element={<InvoiceEditorPage />} />
           </Route>
           <Route element={<RequirePermission permission="catalog:read" screen="Departments & specialties" />}>
             <Route path="catalog" element={<CatalogPage />} />
