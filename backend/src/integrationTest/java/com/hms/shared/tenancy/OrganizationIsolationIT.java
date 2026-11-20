@@ -222,6 +222,22 @@ class OrganizationIsolationIT extends PostgresIT {
             Map.entry("POST /api/v1/encounters/{id}/addenda", new CrossOrgCase(org -> post(
                     "/api/v1/encounters/{id}/addenda", org.addendumEncounterId())
                     .contentType(MediaType.APPLICATION_JSON).content("{\"text\":\"Synthetic addendum\"}"))),
+            // [E6-3] Prescriptions: draft on an encounter; put, issue (no allergy matches), revise (an ISSUED one), read.
+            Map.entry("POST /api/v1/encounters/{id}/prescriptions", new CrossOrgCase(org -> post(
+                    "/api/v1/encounters/{id}/prescriptions", org.encounterId())
+                    .contentType(MediaType.APPLICATION_JSON).content("{}"))),
+            Map.entry("PUT /api/v1/prescriptions/{id}", new CrossOrgCase(org -> put(
+                    "/api/v1/prescriptions/{id}", org.putPrescriptionId()).contentType(MediaType.APPLICATION_JSON)
+                    .content("{\"version\":0,\"items\":[{\"drugName\":\"Syntheticol\",\"dose\":\"1\","
+                            + "\"frequency\":\"OD\",\"durationDays\":3}]}"))),
+            Map.entry("POST /api/v1/prescriptions/{id}/issue", new CrossOrgCase(org -> post(
+                    "/api/v1/prescriptions/{id}/issue", org.issuePrescriptionId())
+                    .contentType(MediaType.APPLICATION_JSON).content("{\"version\":0}"))),
+            Map.entry("POST /api/v1/prescriptions/{id}/revise", new CrossOrgCase(org -> post(
+                    "/api/v1/prescriptions/{id}/revise", org.revisePrescriptionId())
+                    .contentType(MediaType.APPLICATION_JSON).content("{}"))),
+            Map.entry("GET /api/v1/prescriptions/{id}",
+                    new CrossOrgCase(org -> get("/api/v1/prescriptions/{id}", org.getPrescriptionId()))),
             Map.entry("GET /api/v1/queue", new CrossOrgCase(org -> get("/api/v1/queue")
                     .param("doctorId", org.practitionerId().toString()))),
             Map.entry("GET /api/v1/doctors/{id}",
@@ -270,7 +286,8 @@ class OrganizationIsolationIT extends PostgresIT {
             UUID staffId, UUID exceptionId, UUID appointmentId, UUID rescheduleAppointmentId,
             UUID cancelAppointmentId, UUID noShowAppointmentId, UUID checkInAppointmentId, UUID encounterId, UUID notesEncounterId,
             UUID diagnosesEncounterId, UUID planEncounterId, UUID followUpEncounterId, UUID finalizeEncounterId,
-            UUID addendumEncounterId) {
+            UUID addendumEncounterId, UUID putPrescriptionId, UUID issuePrescriptionId, UUID revisePrescriptionId,
+            UUID getPrescriptionId) {
     }
 
     /**
@@ -453,7 +470,7 @@ class OrganizationIsolationIT extends PostgresIT {
                 "specialty", "service_catalog_item", "service_price", "patient", "patient_address",
                 "patient_contact", "practitioner", "practitioner_specialty", "practitioner_department", "staff",
                 "practitioner_availability", "availability_exception", "appointment", "queue_token_counter", "encounter", "encounter_observation",
-                "clinical_note", "encounter_diagnosis", "treatment_plan", "follow_up");
+                "clinical_note", "encounter_diagnosis", "treatment_plan", "follow_up", "prescription", "prescription_item");
         assertThat(new TreeSet<>(rlsTables())).isEqualTo(expected);
     }
 
@@ -523,6 +540,10 @@ class OrganizationIsolationIT extends PostgresIT {
         UUID followUpEncounterId = UUID.randomUUID();
         UUID finalizeEncounterId = UUID.randomUUID();
         UUID addendumEncounterId = UUID.randomUUID();
+        UUID putRx = UUID.randomUUID();
+        UUID issueRx = UUID.randomUUID();
+        UUID reviseRx = UUID.randomUUID();
+        UUID getRx = UUID.randomUUID();
         inOrg(organizationId, () -> {
             jdbc.sql("""
                     INSERT INTO hms.department (id, organization_id, code, name, created_at, updated_at)
@@ -601,6 +622,31 @@ class OrganizationIsolationIT extends PostgresIT {
                     VALUES (?, ?, ?, ?, 'FINALIZED', now(), now(), ?, ?, now(), now())""")
                     .params(addendumEncounterId, organizationId, patientId, practitionerId, practitionerUserId,
                             practitionerUserId).update();
+            // [E6-3] One prescription per endpoint, each on its own encounter (one live prescription per encounter).
+            for (Object[] rx : new Object[][] {{putRx, "DRAFT", false}, {issueRx, "DRAFT", true},
+                    {reviseRx, "ISSUED", true}, {getRx, "ISSUED", true}}) {
+                UUID rxEncounter = UUID.randomUUID();
+                jdbc.sql("""
+                        INSERT INTO hms.encounter (id, organization_id, patient_id, practitioner_id, started_at,
+                            created_by, created_at, updated_at) VALUES (?, ?, ?, ?, now(), ?, now(), now())""")
+                        .params(rxEncounter, organizationId, patientId, practitionerId, practitionerUserId).update();
+                jdbc.sql("""
+                        INSERT INTO hms.prescription (id, organization_id, encounter_id, patient_id, created_by,
+                            created_at, updated_at) VALUES (?, ?, ?, ?, ?, now(), now())""")
+                        .params(rx[0], organizationId, rxEncounter, patientId, practitionerUserId).update();
+                if ((boolean) rx[2]) {
+                    jdbc.sql("""
+                            INSERT INTO hms.prescription_item (id, organization_id, prescription_id, position,
+                                drug_name, dose, frequency, duration_days, created_at)
+                            VALUES (?, ?, ?, 0, 'Syntheticol', '1', 'OD', 3, now())""")
+                            .params(UUID.randomUUID(), organizationId, rx[0]).update();
+                }
+                if ("ISSUED".equals(rx[1])) {
+                    // Items first: the V28 guard refuses items on an issued prescription.
+                    jdbc.sql("UPDATE hms.prescription SET status = 'ISSUED', issued_at = now(), issued_by = ?"
+                            + " WHERE id = ?").params(practitionerUserId, rx[0]).update();
+                }
+            }
             jdbc.sql("""
                     INSERT INTO hms.practitioner_availability (id, organization_id, practitioner_id, weekday,
                         start_time, end_time, slot_minutes, created_at)
@@ -615,7 +661,7 @@ class OrganizationIsolationIT extends PostgresIT {
                 allergyId, historyId, practitionerId, staffId, exceptionId, appointmentId, rescheduleAppointmentId,
                 cancelAppointmentId, noShowAppointmentId, checkInAppointmentId, encounterId,
                 notesEncounterId, diagnosesEncounterId, planEncounterId, followUpEncounterId, finalizeEncounterId,
-                addendumEncounterId);
+                addendumEncounterId, putRx, issueRx, reviseRx, getRx);
     }
 
     private UUID insertUser(UUID organizationId) {

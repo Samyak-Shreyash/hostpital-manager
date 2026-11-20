@@ -39,6 +39,7 @@ public class ProblemDetailsHandler extends ResponseEntityExceptionHandler {
     static final String TYPE_BASE = "https://hms.example/problems/";
     private static final String PRIMARY_SPECIALTY_SQLSTATE = "HM002";
     private static final String ENCOUNTER_FINALIZED_SQLSTATE = "HM001";
+    private static final String PRESCRIPTION_IMMUTABLE_SQLSTATE = "HM003";
     private static final Logger log = LoggerFactory.getLogger(ProblemDetailsHandler.class);
 
     /** Codes for errors Spring raises itself, by status; anything else falls back to the status name. */
@@ -103,6 +104,11 @@ public class ProblemDetailsHandler extends ResponseEntityExceptionHandler {
         if (hasSqlState(ex, ENCOUNTER_FINALIZED_SQLSTATE)) {
             // The V27 guard (a finalized encounter is immutable) caught what the service check did not.
             return problem(HttpStatus.CONFLICT, "ENCOUNTER_FINALIZED", "The encounter is finalized; add an addendum.");
+        }
+        if (hasSqlState(ex, PRESCRIPTION_IMMUTABLE_SQLSTATE)) {
+            // The V28 guard (an issued prescription is immutable) caught what the service check did not.
+            return problem(HttpStatus.CONFLICT, "INVALID_STATE_TRANSITION",
+                    "The prescription is issued; revise it to change it.");
         }
         log.error("Unhandled exception", ex);
         return problem(HttpStatus.INTERNAL_SERVER_ERROR, "INTERNAL_ERROR", "An unexpected error occurred.");
