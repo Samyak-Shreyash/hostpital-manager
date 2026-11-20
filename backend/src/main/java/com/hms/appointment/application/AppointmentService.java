@@ -11,6 +11,8 @@ import com.hms.audit.api.AuditEntry;
 import com.hms.audit.api.AuditOutcome;
 import com.hms.audit.api.AuditRecorder;
 import com.hms.organization.api.OrganizationDirectory;
+import com.hms.patient.api.PatientDirectory;
+import com.hms.patient.api.PatientDirectory.PatientBrief;
 import com.hms.organization.api.OrganizationSummary;
 import com.hms.practitioner.api.PractitionerAvailability;
 import com.hms.shared.PageResult;
@@ -27,6 +29,7 @@ import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -66,15 +69,17 @@ public class AppointmentService implements AppointmentLifecycle, AppointmentLook
     private final AppointmentRepository repository;
     private final PractitionerAvailability availability;
     private final OrganizationDirectory organizations;
+    private final PatientDirectory patients;
     private final AuditRecorder audit;
     private final UuidV7Generator ids;
     private final Clock clock;
 
     public AppointmentService(AppointmentRepository repository, PractitionerAvailability availability,
-            OrganizationDirectory organizations, AuditRecorder audit, UuidV7Generator ids, Clock clock) {
+            OrganizationDirectory organizations, PatientDirectory patients, AuditRecorder audit, UuidV7Generator ids, Clock clock) {
         this.repository = repository;
         this.availability = availability;
         this.organizations = organizations;
+        this.patients = patients;
         this.audit = audit;
         this.ids = ids;
         this.clock = clock;
@@ -132,7 +137,7 @@ public class AppointmentService implements AppointmentLifecycle, AppointmentLook
             audit.record(new AuditEntry(org, actor.userId(), "APPOINTMENT_AVAILABILITY_OVERRIDDEN", ENTITY, id,
                     AuditOutcome.SUCCESS, List.of("outsideAvailability")));
         }
-        return view(repository.find(org, id).orElseThrow());
+        return withBrief(patients, org, view(repository.find(org, id).orElseThrow()));
     }
 
     /**
@@ -178,7 +183,7 @@ public class AppointmentService implements AppointmentLifecycle, AppointmentLook
                 AuditOutcome.SUCCESS, List.of("status")));
         audit.record(new AuditEntry(org, actor.userId(), "APPOINTMENT_BOOKED", ENTITY, fresh, AuditOutcome.SUCCESS,
                 List.of("patientId", "doctorId", "startAt", "endAt", "rescheduledFromId")));
-        return view(repository.find(org, fresh).orElseThrow());
+        return withBrief(patients, org, view(repository.find(org, fresh).orElseThrow()));
     }
 
     /** SCHEDULED or CHECKED_IN to CANCELLED; the reason is required and never audited or logged. */
@@ -201,7 +206,7 @@ public class AppointmentService implements AppointmentLifecycle, AppointmentLook
         repository.transition(org, id, AppointmentStatus.CANCELLED.name(), text, now, now);
         audit.record(new AuditEntry(org, actor.userId(), "APPOINTMENT_CANCELLED", ENTITY, id, AuditOutcome.SUCCESS,
                 List.of("status", "cancelReason")));
-        return view(repository.find(org, id).orElseThrow());
+        return withBrief(patients, org, view(repository.find(org, id).orElseThrow()));
     }
 
     /** SCHEDULED to NO_SHOW: frees the time. */
@@ -216,7 +221,7 @@ public class AppointmentService implements AppointmentLifecycle, AppointmentLook
         repository.transition(org, id, AppointmentStatus.NO_SHOW.name(), null, null, clock.instant());
         audit.record(new AuditEntry(org, actor.userId(), "APPOINTMENT_NO_SHOW", ENTITY, id, AuditOutcome.SUCCESS,
                 List.of("status")));
-        return view(repository.find(org, id).orElseThrow());
+        return withBrief(patients, org, view(repository.find(org, id).orElseThrow()));
     }
 
     /**
@@ -242,8 +247,8 @@ public class AppointmentService implements AppointmentLifecycle, AppointmentLook
             to = date.plusDays(1).atStartOfDay(zone).toInstant();
         }
         ListFilter filter = new ListFilter(doctorId, patientId, from, to, status);
-        List<AppointmentView> items = repository.list(org, filter, size, (long) page * size).stream()
-                .map(AppointmentService::view).toList();
+        List<AppointmentView> items = withBriefs(patients, org, repository.list(org, filter, size, (long) page * size)
+                .stream().map(AppointmentService::view).toList());
         List<String> used = new ArrayList<>();
         if (doctorId != null) {
             used.add("doctorId");
@@ -268,7 +273,7 @@ public class AppointmentService implements AppointmentLifecycle, AppointmentLook
         UUID org = actor.organizationId();
         AppointmentRow row = repository.find(org, id).orElseThrow(AppointmentService::notFound);
         audit.record(AuditEntry.of(org, actor.userId(), "APPOINTMENT_VIEWED", ENTITY, id, AuditOutcome.SUCCESS));
-        return view(row);
+        return withBrief(patients, org, view(row));
     }
 
     private void insertOrFail(NewAppointment appointment) {
@@ -333,11 +338,23 @@ public class AppointmentService implements AppointmentLifecycle, AppointmentLook
         return new NotFoundException("Appointment not found.");
     }
 
+    /** Adds the patient's UHID and name to the views with one batch lookup (never a per-patient read audit). */
+    static List<AppointmentView> withBriefs(PatientDirectory directory, UUID org, List<AppointmentView> views) {
+        Map<UUID, PatientBrief> briefs = directory.briefs(org, views.stream().map(AppointmentView::patientId)
+                .distinct().toList());
+        return views.stream().map(v -> v.withPatient(briefs.getOrDefault(v.patientId(),
+                new PatientBrief(v.patientId(), null, null)))).toList();
+    }
+
+    static AppointmentView withBrief(PatientDirectory directory, UUID org, AppointmentView view) {
+        return withBriefs(directory, org, List.of(view)).get(0);
+    }
+
     static AppointmentView view(AppointmentRow r) {
         return new AppointmentView(r.id(), r.patientId(), r.practitionerId(), r.startAt(), r.endAt(),
                 (int) Duration.between(r.startAt(), r.endAt()).toMinutes(), r.type(), r.status(), r.reason(),
                 r.outsideAvailability(), r.version(), r.createdAt(), r.updatedAt(), r.rescheduledFromId(),
-                r.cancelReason(), r.cancelledAt(), r.tokenNo(), r.tokenDate());
+                r.cancelReason(), r.cancelledAt(), r.tokenNo(), r.tokenDate(), null);
     }
 
     static BusinessRuleException invalid(String message) {

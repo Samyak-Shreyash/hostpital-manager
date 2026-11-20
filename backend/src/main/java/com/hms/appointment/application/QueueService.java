@@ -83,7 +83,7 @@ public class QueueService {
         repository.checkIn(org, id, token, day, now);
         audit.record(new AuditEntry(org, actor.userId(), "APPOINTMENT_CHECKED_IN", AppointmentService.ENTITY, id,
                 AuditOutcome.SUCCESS, List.of("status", "tokenNo", "tokenDate")));
-        return AppointmentService.view(repository.find(org, id).orElseThrow());
+        return AppointmentService.withBrief(patients, org, AppointmentService.view(repository.find(org, id).orElseThrow()));
     }
 
     /**
@@ -125,7 +125,7 @@ public class QueueService {
                 AuditOutcome.SUCCESS, fields));
         audit.record(new AuditEntry(org, actor.userId(), "APPOINTMENT_CHECKED_IN", AppointmentService.ENTITY, id,
                 AuditOutcome.SUCCESS, List.of("status", "tokenNo", "tokenDate")));
-        return AppointmentService.view(repository.find(org, id).orElseThrow());
+        return AppointmentService.withBrief(patients, org, AppointmentService.view(repository.find(org, id).orElseThrow()));
     }
 
     /**

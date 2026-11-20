@@ -255,7 +255,12 @@ class AppointmentLifecycleIT extends PostgresIT {
                 .andExpect(status().isOk()).andExpect(jsonPath("$.totalItems", is(3)))
                 .andExpect(jsonPath("$.page", is(0))).andExpect(jsonPath("$.size", is(20)))
                 .andExpect(jsonPath("$.items[0].startAt", is(at("09:00").toString())))
+                .andExpect(jsonPath("$.items[0].patient.uhid", is("HMS-000001")))
+                .andExpect(jsonPath("$.items[2].patient.uhid", is("HMS-000002")))
                 .andExpect(jsonPath("$.items[2].startAt", is(at("09:30").toString())));
+        // The brief is resolved in one batch and never audits a patient read.
+        assertThat(jdbc.sql("SELECT count(*) FROM hms.audit_event WHERE action LIKE 'PATIENT_%'")
+                .query(Integer.class).single()).isZero();
         mockMvc.perform(desk.apply(get(URL).param("patientId", second.toString())))
                 .andExpect(jsonPath("$.totalItems", is(1)));
         mockMvc.perform(desk.apply(get(URL).param("status", "CANCELLED")))
