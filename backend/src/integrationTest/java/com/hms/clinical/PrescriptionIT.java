@@ -103,6 +103,16 @@ class PrescriptionIT extends PostgresIT {
     }
 
     @Test
+    void itemIdsAreUuidV7() throws Exception {
+        UUID rx = newDraft();
+        rput(doctor, RX + "/" + rx, "{\"version\":0,\"items\":[" + item("Paracetamol", "1", "TID", 3) + ","
+                + item("Ibuprofen", "1", "BD", 5) + "]}").andExpect(status().isOk());
+        List<UUID> itemIds = fx.inOrg(org, () -> jdbc.sql("SELECT id FROM hms.prescription_item"
+                + " WHERE prescription_id = ?").param(rx).query(UUID.class).list());
+        assertThat(itemIds).hasSize(2).allSatisfy(id -> assertThat(id.version()).isEqualTo(7));
+    }
+
+    @Test
     void itemRulesAreEnforcedWithFieldErrors() throws Exception {
         UUID rx = newDraft();
         rput(doctor, RX + "/" + rx, "{\"version\":0,\"items\":[" + item("Paracetamol", null, "TID", 3) + "]}")

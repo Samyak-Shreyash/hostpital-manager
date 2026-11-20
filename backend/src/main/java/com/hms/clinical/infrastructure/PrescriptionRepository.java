@@ -1,5 +1,6 @@
 package com.hms.clinical.infrastructure;
 
+import com.hms.shared.id.UuidV7Generator;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.List;
@@ -30,9 +31,11 @@ public class PrescriptionRepository {
     }
 
     private final JdbcClient jdbc;
+    private final UuidV7Generator ids;
 
-    PrescriptionRepository(JdbcClient jdbc) {
+    PrescriptionRepository(JdbcClient jdbc, UuidV7Generator ids) {
         this.jdbc = jdbc;
+        this.ids = ids;
     }
 
     /** @return false when the encounter already has a DRAFT or ISSUED prescription (the unique indexes decide) */
@@ -96,7 +99,7 @@ public class PrescriptionRepository {
                     INSERT INTO hms.prescription_item (id, organization_id, prescription_id, position, drug_name,
                         strength, form, route, dose, frequency, duration_days, instructions, created_at)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """).params(UUID.randomUUID(), org, prescriptionId, position++, i.drugName(), i.strength(),
+                    """).params(ids.next(), org, prescriptionId, position++, i.drugName(), i.strength(),
                     i.form(), i.route(), i.dose(), i.frequency(), i.durationDays(), i.instructions(),
                     Timestamp.from(now)).update();
         }
