@@ -215,6 +215,13 @@ class OrganizationIsolationIT extends PostgresIT {
             Map.entry("PUT /api/v1/encounters/{id}/follow-up", new CrossOrgCase(org -> put(
                     "/api/v1/encounters/{id}/follow-up", org.followUpEncounterId()).contentType(MediaType.APPLICATION_JSON)
                     .content("{\"version\":0,\"date\":\"2030-01-15\"}"))),
+            // [E6-2] Finalize (version 0 of the fixture) and addendum (fixture encounter is FINALIZED).
+            Map.entry("POST /api/v1/encounters/{id}/finalize", new CrossOrgCase(org -> post(
+                    "/api/v1/encounters/{id}/finalize", org.finalizeEncounterId())
+                    .contentType(MediaType.APPLICATION_JSON).content("{\"version\":0}"))),
+            Map.entry("POST /api/v1/encounters/{id}/addenda", new CrossOrgCase(org -> post(
+                    "/api/v1/encounters/{id}/addenda", org.addendumEncounterId())
+                    .contentType(MediaType.APPLICATION_JSON).content("{\"text\":\"Synthetic addendum\"}"))),
             Map.entry("GET /api/v1/queue", new CrossOrgCase(org -> get("/api/v1/queue")
                     .param("doctorId", org.practitionerId().toString()))),
             Map.entry("GET /api/v1/doctors/{id}",
@@ -262,7 +269,8 @@ class OrganizationIsolationIT extends PostgresIT {
             UUID specialtyId, UUID serviceId, UUID patientId, UUID allergyId, UUID historyId, UUID practitionerId,
             UUID staffId, UUID exceptionId, UUID appointmentId, UUID rescheduleAppointmentId,
             UUID cancelAppointmentId, UUID noShowAppointmentId, UUID checkInAppointmentId, UUID encounterId, UUID notesEncounterId,
-            UUID diagnosesEncounterId, UUID planEncounterId, UUID followUpEncounterId) {
+            UUID diagnosesEncounterId, UUID planEncounterId, UUID followUpEncounterId, UUID finalizeEncounterId,
+            UUID addendumEncounterId) {
     }
 
     /**
@@ -513,6 +521,8 @@ class OrganizationIsolationIT extends PostgresIT {
         UUID diagnosesEncounterId = UUID.randomUUID();
         UUID planEncounterId = UUID.randomUUID();
         UUID followUpEncounterId = UUID.randomUUID();
+        UUID finalizeEncounterId = UUID.randomUUID();
+        UUID addendumEncounterId = UUID.randomUUID();
         inOrg(organizationId, () -> {
             jdbc.sql("""
                     INSERT INTO hms.department (id, organization_id, code, name, created_at, updated_at)
@@ -578,12 +588,19 @@ class OrganizationIsolationIT extends PostgresIT {
             }
             // One encounter per state-changing endpoint (each own-org control call bumps its version).
             for (UUID id : List.of(encounterId, notesEncounterId, diagnosesEncounterId, planEncounterId,
-                    followUpEncounterId)) {
+                    followUpEncounterId, finalizeEncounterId)) {
                 jdbc.sql("""
                         INSERT INTO hms.encounter (id, organization_id, patient_id, practitioner_id, started_at,
                             created_by, created_at, updated_at) VALUES (?, ?, ?, ?, now(), ?, now(), now())""")
                         .params(id, organizationId, patientId, practitionerId, practitionerUserId).update();
             }
+            // [E6-2] A FINALIZED encounter for the addendum endpoint.
+            jdbc.sql("""
+                    INSERT INTO hms.encounter (id, organization_id, patient_id, practitioner_id, status, started_at,
+                        finalized_at, finalized_by, created_by, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, 'FINALIZED', now(), now(), ?, ?, now(), now())""")
+                    .params(addendumEncounterId, organizationId, patientId, practitionerId, practitionerUserId,
+                            practitionerUserId).update();
             jdbc.sql("""
                     INSERT INTO hms.practitioner_availability (id, organization_id, practitioner_id, weekday,
                         start_time, end_time, slot_minutes, created_at)
@@ -597,7 +614,8 @@ class OrganizationIsolationIT extends PostgresIT {
         return new OrgFixture(organizationId, roleId, lifecycleUserId, patchUserId, departmentId, specialtyId, serviceId, patientId,
                 allergyId, historyId, practitionerId, staffId, exceptionId, appointmentId, rescheduleAppointmentId,
                 cancelAppointmentId, noShowAppointmentId, checkInAppointmentId, encounterId,
-                notesEncounterId, diagnosesEncounterId, planEncounterId, followUpEncounterId);
+                notesEncounterId, diagnosesEncounterId, planEncounterId, followUpEncounterId, finalizeEncounterId,
+                addendumEncounterId);
     }
 
     private UUID insertUser(UUID organizationId) {

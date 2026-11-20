@@ -86,6 +86,21 @@ public class EncounterRepository {
                 .params(org, patientId).query(Long.class).single();
     }
 
+    /** OPEN to FINALIZED on the locked row (the V27 guard allows exactly this update), bumping the version. */
+    public void finalizeEncounter(UUID org, UUID id, UUID by, Instant now) {
+        jdbc.sql("UPDATE hms.encounter SET status = 'FINALIZED', finalized_at = ?, finalized_by = ?,"
+                        + " version = version + 1, updated_at = ? WHERE organization_id = ? AND id = ?")
+                .params(Timestamp.from(now), by, Timestamp.from(now), org, id).update();
+    }
+
+    /** Appends an addendum note; addenda accumulate and are never replaced. */
+    public void addAddendum(UUID org, UUID encounterId, UUID noteId, String text, UUID author, Instant now) {
+        jdbc.sql("""
+                INSERT INTO hms.clinical_note (id, organization_id, encounter_id, kind, text, author_id, created_at)
+                VALUES (?, ?, ?, 'ADDENDUM', ?, ?, ?)
+                """).params(noteId, org, encounterId, text, author, Timestamp.from(now)).update();
+    }
+
     /** Bumps the version of the locked row. */
     public void touch(UUID org, UUID id, Instant now) {
         jdbc.sql("UPDATE hms.encounter SET version = version + 1, updated_at = ? WHERE organization_id = ? AND id = ?")

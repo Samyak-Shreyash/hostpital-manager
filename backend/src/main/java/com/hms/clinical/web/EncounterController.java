@@ -4,7 +4,9 @@ import com.hms.clinical.application.EncounterService;
 import com.hms.clinical.application.EncounterService.StartCommand;
 import com.hms.clinical.application.EncounterView;
 import com.hms.clinical.application.EncounterView.Summary;
+import com.hms.clinical.web.EncounterRequests.AddendumRequest;
 import com.hms.clinical.web.EncounterRequests.DiagnosesRequest;
+import com.hms.clinical.web.EncounterRequests.FinalizeRequest;
 import com.hms.clinical.web.EncounterRequests.FollowUpRequest;
 import com.hms.clinical.web.EncounterRequests.ObservationsRequest;
 import com.hms.clinical.web.EncounterRequests.StartEncounterRequest;
@@ -113,6 +115,21 @@ class EncounterController {
             @PathVariable UUID id, @RequestBody FollowUpRequest request) {
         return encounters.putFollowUp(actor, id, request.version(), request.date(), request.instructions(),
                 mayEditAny(authentication));
+    }
+
+    @PostMapping("/encounters/{id}/finalize")
+    @PreAuthorize("hasAuthority('encounter:finalize')")
+    EncounterView finalizeEncounter(@AuthenticationPrincipal OrganizationPrincipal actor,
+            Authentication authentication, @PathVariable UUID id, @RequestBody FinalizeRequest request) {
+        return encounters.finalizeEncounter(actor, id, request.version(), mayEditAny(authentication));
+    }
+
+    @PostMapping("/encounters/{id}/addenda")
+    @PreAuthorize("hasAuthority('encounter:addendum')")
+    @ResponseStatus(HttpStatus.CREATED)
+    EncounterView addendum(@AuthenticationPrincipal OrganizationPrincipal actor, Authentication authentication,
+            @PathVariable UUID id, @RequestBody AddendumRequest request) {
+        return encounters.addAddendum(actor, id, request.text(), mayEditAny(authentication));
     }
 
     private static boolean mayEditAny(Authentication authentication) {
