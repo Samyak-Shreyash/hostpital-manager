@@ -11,9 +11,14 @@ import com.hms.clinical.infrastructure.PrescriptionRepository;
 import com.hms.clinical.infrastructure.PrescriptionRepository.ItemRow;
 import com.hms.clinical.infrastructure.PrescriptionRepository.NewPrescription;
 import com.hms.clinical.infrastructure.PrescriptionRepository.PrescriptionRow;
+import com.hms.organization.api.OrganizationDirectory;
+import com.hms.organization.api.OrganizationSummary;
 import com.hms.patient.api.PatientAllergies;
 import com.hms.patient.api.PatientAllergies.AllergyInfo;
+import com.hms.patient.api.PatientDirectory;
+import com.hms.patient.api.PatientDirectory.PatientBrief;
 import com.hms.practitioner.api.PractitionerDirectory;
+import com.hms.practitioner.api.PractitionerDirectory.PractitionerBrief;
 import com.hms.shared.domain.BusinessRuleException;
 import com.hms.shared.domain.ConflictException;
 import com.hms.shared.domain.NotFoundException;
@@ -21,6 +26,8 @@ import com.hms.shared.id.UuidV7Generator;
 import com.hms.shared.tenancy.OrganizationPrincipal;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -55,17 +62,21 @@ public class PrescriptionService {
     private final EncounterRepository encounters;
     private final PatientAllergies allergies;
     private final PractitionerDirectory practitioners;
+    private final OrganizationDirectory organizations;
+    private final PatientDirectory patients;
     private final AuditRecorder audit;
     private final UuidV7Generator ids;
     private final Clock clock;
 
     public PrescriptionService(PrescriptionRepository repository, EncounterRepository encounters,
-            PatientAllergies allergies, PractitionerDirectory practitioners, AuditRecorder audit,
-            UuidV7Generator ids, Clock clock) {
+            PatientAllergies allergies, PractitionerDirectory practitioners, OrganizationDirectory organizations,
+            PatientDirectory patients, AuditRecorder audit, UuidV7Generator ids, Clock clock) {
         this.repository = repository;
         this.encounters = encounters;
         this.allergies = allergies;
         this.practitioners = practitioners;
+        this.organizations = organizations;
+        this.patients = patients;
         this.audit = audit;
         this.ids = ids;
         this.clock = clock;
@@ -96,6 +107,44 @@ public class PrescriptionService {
         PrescriptionRow row = repository.find(org, id).orElseThrow(PrescriptionService::notFound);
         audit.record(AuditEntry.of(org, actor.userId(), "PRESCRIPTION_VIEWED", ENTITY, id, AuditOutcome.SUCCESS));
         return view(org, row);
+    }
+
+    /** A printable prescription: its bytes and a business-key based file name. */
+    public record PdfFile(byte[] bytes, String filename) {
+    }
+
+    /**
+     * The PDF of an ISSUED or SUPERSEDED prescription ([E6-5]); a DRAFT is not printable. Every name printed comes
+     * from the owning modules' api ports. Generating it is audited like reading it (clinical record, field names only).
+     */
+    @Transactional
+    public PdfFile pdf(OrganizationPrincipal actor, UUID id) {
+        UUID org = actor.organizationId();
+        PrescriptionRow row = repository.find(org, id).orElseThrow(PrescriptionService::notFound);
+        if ("DRAFT".equals(row.status())) {
+            throw new ConflictException("INVALID_STATE_TRANSITION", "A draft prescription cannot be printed; issue it first.");
+        }
+        EncounterRow encounter = encounters.find(org, row.encounterId()).orElseThrow(PrescriptionService::notFound);
+        OrganizationSummary organization = organizations.find(org).orElseThrow(() -> notFound());
+        PatientBrief patient = patients.briefs(org, List.of(row.patientId())).get(row.patientId());
+        PractitionerBrief doctor = practitioners.brief(org, encounter.practitionerId()).orElse(null);
+        if (patient == null) {
+            throw notFound();
+        }
+        ZoneId zone = ZoneId.of(organization.timezone());
+        String date = DateTimeFormatter.ofPattern("dd MMM yyyy").withZone(zone)
+                .format(row.issuedAt() != null ? row.issuedAt() : clock.instant());
+        String registration = doctor == null ? null : doctor.registrationNo()
+                + (doctor.registrationCouncil() == null ? "" : " (" + doctor.registrationCouncil() + ")");
+        List<PrescriptionPdf.Line> lines = repository.items(org, id).stream().map(i -> new PrescriptionPdf.Line(
+                i.drugName(), i.strength(), i.form(), i.route(), i.dose(), i.frequency(), i.durationDays(),
+                i.instructions())).toList();
+        byte[] bytes = PrescriptionPdf.render(new PrescriptionPdf.Content(organization.name(),
+                organization.address(), patient.name(), patient.uhid(), doctor == null ? null : doctor.fullName(),
+                registration, date, "SUPERSEDED".equals(row.status()), lines));
+        audit.record(new AuditEntry(org, actor.userId(), "PRESCRIPTION_PDF_GENERATED", ENTITY, id,
+                AuditOutcome.SUCCESS, List.of("status", "versionNo")));
+        return new PdfFile(bytes, "prescription-" + patient.uhid() + "-v" + row.versionNo() + ".pdf");
     }
 
     /** Replaces the items of a DRAFT. */

@@ -238,6 +238,9 @@ class OrganizationIsolationIT extends PostgresIT {
                     .contentType(MediaType.APPLICATION_JSON).content("{}"))),
             Map.entry("GET /api/v1/prescriptions/{id}",
                     new CrossOrgCase(org -> get("/api/v1/prescriptions/{id}", org.getPrescriptionId()))),
+            // [E6-5] The PDF of the (ISSUED) fixture prescription.
+            Map.entry("GET /api/v1/prescriptions/{id}/pdf",
+                    new CrossOrgCase(org -> get("/api/v1/prescriptions/{id}/pdf", org.getPrescriptionId()))),
             Map.entry("GET /api/v1/queue", new CrossOrgCase(org -> get("/api/v1/queue")
                     .param("doctorId", org.practitionerId().toString()))),
             Map.entry("GET /api/v1/doctors/{id}",

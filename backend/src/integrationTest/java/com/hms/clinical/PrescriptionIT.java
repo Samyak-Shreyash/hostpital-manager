@@ -7,6 +7,7 @@ import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -15,6 +16,8 @@ import com.hms.identity.api.RoleProvisioning;
 import com.hms.shared.tenancy.OrganizationContext;
 import com.hms.support.PostgresIT;
 import com.jayway.jsonpath.JsonPath;
+import com.lowagie.text.pdf.PdfReader;
+import com.lowagie.text.pdf.parser.PdfTextExtractor;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
@@ -272,6 +275,63 @@ class PrescriptionIT extends PostgresIT {
                 FROM hms.prescription WHERE id = ?""")).isEqualTo("HM003");
         assertThat(sqlState(rx, "UPDATE hms.prescription SET status = 'SUPERSEDED' WHERE id = ?")).isNull();
         assertThat(sqlState(rx, "UPDATE hms.prescription SET status = 'ISSUED' WHERE id = ?")).isEqualTo("HM003");
+    }
+
+    @Test
+    void pdfOfAnIssuedPrescriptionHasBusinessDataNoUuidAndIsAudited() throws Exception {
+        String orgName = fx.inOrg(org, () -> {
+            jdbc.sql("UPDATE hms.organization SET address = '7 Synthetic Lane, Testville' WHERE id = ?")
+                    .param(org).update();
+            return jdbc.sql("SELECT name FROM hms.organization WHERE id = ?").param(org).query(String.class)
+                    .single();
+        });
+        String regNo = fx.inOrg(org, () -> jdbc.sql("SELECT registration_no FROM hms.practitioner"
+                + " WHERE organization_id = ? AND full_name = 'Dr. Test Rx' LIMIT 1").param(org)
+                .query(String.class).single());
+        UUID rx = issuedPrescription();
+        byte[] pdf = rget(reader, RX + "/" + rx + "/pdf").andExpect(status().isOk())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PDF))
+                .andReturn().getResponse().getContentAsByteArray();
+        String text = pdfText(pdf);
+        assertThat(text).contains(orgName, "7 Synthetic Lane, Testville", "Test Rx Patient", "HMS-000001",
+                "Dr. Test Rx", regNo, "Paracetamol", "500 mg", "TID", INSTRUCTIONS);
+        assertThat(text).doesNotContain("SUPERSEDED");
+        assertThat(text).doesNotContainPattern("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-"
+                + "[0-9a-fA-F]{12}");
+
+        assertThat(fx.auditActions(rx)).contains("PRESCRIPTION_PDF_GENERATED");
+        List<String> rows = jdbc.sql("SELECT action || ' ' || array_to_string(changed_fields, ',')"
+                + " FROM hms.audit_event WHERE entity_id = ? AND action = 'PRESCRIPTION_PDF_GENERATED'")
+                .param(rx).query(String.class).list();
+        assertThat(rows).hasSize(1);
+        assertThat(String.join("|", rows)).doesNotContain("Paracetamol").doesNotContain("narwhal");
+    }
+
+    @Test
+    void pdfOfASupersededPrescriptionIsWatermarkedAndADraftHasNoPdf() throws Exception {
+        UUID rx = issuedPrescription();
+        UUID revised = UUID.fromString(JsonPath.read(rpost(doctor, RX + "/" + rx + "/revise", "{}")
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString(), "$.id"));
+        byte[] pdf = rget(doctor, RX + "/" + rx + "/pdf").andExpect(status().isOk()).andReturn().getResponse()
+                .getContentAsByteArray();
+        assertThat(pdfText(pdf)).contains("SUPERSEDED", "Paracetamol");
+        rget(doctor, RX + "/" + revised + "/pdf").andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code", is("INVALID_STATE_TRANSITION")));
+        rget(doctor, RX + "/" + UUID.randomUUID() + "/pdf").andExpect(status().isNotFound());
+    }
+
+    private static String pdfText(byte[] pdf) throws Exception {
+        PdfReader reader = new PdfReader(pdf);
+        try {
+            PdfTextExtractor extractor = new PdfTextExtractor(reader);
+            StringBuilder all = new StringBuilder();
+            for (int page = 1; page <= reader.getNumberOfPages(); page++) {
+                all.append(extractor.getTextFromPage(page)).append(' ');
+            }
+            return all.toString();
+        } finally {
+            reader.close();
+        }
     }
 
     // --- helpers ---------------------------------------------------------------------------------------------

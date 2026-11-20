@@ -3,6 +3,7 @@ spring-boot = "4.1.2"
 spring-dependency-management = "1.1.7"
 springdoc = "3.2.0"
 archunit = "1.5.1"
+openpdf = "2.4.0"
 
 [libraries]
 spring-boot-starter-webmvc = { module = "org.springframework.boot:spring-boot-starter-webmvc" }
@@ -15,6 +16,7 @@ spring-boot-starter-session-jdbc = { module = "org.springframework.boot:spring-b
 flyway-postgresql = { module = "org.flywaydb:flyway-database-postgresql" }
 postgresql = { module = "org.postgresql:postgresql" }
 micrometer-registry-prometheus = { module = "io.micrometer:micrometer-registry-prometheus" }
+openpdf = { module = "com.github.librepdf:openpdf", version.ref = "openpdf" }
 springdoc-openapi = { module = "org.springdoc:springdoc-openapi-starter-webmvc-ui", version.ref = "springdoc" }
 
 spring-boot-starter-test = { module = "org.springframework.boot:spring-boot-starter-test" }
