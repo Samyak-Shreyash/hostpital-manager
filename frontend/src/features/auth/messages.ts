@@ -25,6 +25,12 @@ const MESSAGES: Record<string, string> = {
   SPECIALTY_NOT_AVAILABLE: 'One of the selected specialties is unknown or inactive.',
   DEPARTMENT_NOT_AVAILABLE: 'One of the selected departments is unknown or inactive.',
   AVAILABILITY_OVERLAP: 'Two availability windows overlap on the same day.',
+  SLOT_CONFLICT: 'That time was just taken by another booking. Close this and pick another slot.',
+  OUTSIDE_AVAILABILITY: 'That time is outside the doctor’s availability.',
+  START_IN_PAST: 'That time has already passed.',
+  DOCTOR_NOT_AVAILABLE: 'This doctor is not available for appointments.',
+  PATIENT_NOT_AVAILABLE: 'This patient is not available for appointments.',
+  INVALID_STATE_TRANSITION: 'This appointment can no longer be changed that way. Reload to see its current status.',
   FORBIDDEN: 'You do not have permission to do this.',
 }
 
