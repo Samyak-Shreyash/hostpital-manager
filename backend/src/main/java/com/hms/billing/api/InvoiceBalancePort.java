@@ -12,8 +12,8 @@ public interface InvoiceBalancePort {
 
     /**
      * Locks the invoice row ({@code SELECT ... FOR UPDATE}, lock order bed -> admission -> invoice) until the caller's
-     * transaction ends, and returns its status and amounts. {@code paid} and {@code refunded} are zero in [E7-1]: the
-     * payment module owns those sums and derives them from its own tables (ADR-0012).
+     * transaction ends, and returns its status and total. The amounts paid and refunded are not part of the balance:
+     * the payment module owns them and derives them from its own tables under this lock ([E7-3], ADR-0012).
      */
     InvoiceBalance lockForPayment(UUID organizationId, UUID invoiceId);
 
@@ -23,6 +23,6 @@ public interface InvoiceBalancePort {
      */
     void applyPaymentStatus(UUID organizationId, UUID invoiceId, String newStatus);
 
-    record InvoiceBalance(String status, Money total, Money paid, Money refunded) {
+    record InvoiceBalance(String status, Money total) {
     }
 }
