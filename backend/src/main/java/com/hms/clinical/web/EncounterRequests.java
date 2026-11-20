@@ -19,6 +19,12 @@ final class EncounterRequests {
     record ObservationsRequest(Long version, List<ObservationInput> observations) {
     }
 
+    record FinalizeRequest(Long version) {
+    }
+
+    record AddendumRequest(String text) {
+    }
+
     record TextRequest(Long version, String text) {
     }
 

@@ -6,6 +6,7 @@ import com.hms.appointment.api.AppointmentLookup.AppointmentRef;
 import com.hms.audit.api.AuditEntry;
 import com.hms.audit.api.AuditOutcome;
 import com.hms.audit.api.AuditRecorder;
+import com.hms.clinical.api.EncounterFinalized;
 import com.hms.clinical.api.EncounterQuery;
 import com.hms.clinical.application.EncounterView.Diagnosis;
 import com.hms.clinical.application.EncounterView.FollowUp;
@@ -40,6 +41,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -83,10 +85,11 @@ public class EncounterService implements EncounterQuery {
     private final AuditRecorder audit;
     private final UuidV7Generator ids;
     private final Clock clock;
+    private final ApplicationEventPublisher events;
 
     public EncounterService(EncounterRepository repository, AppointmentLookup appointments,
             AppointmentLifecycle lifecycle, PatientDirectory patients, PractitionerDirectory practitioners,
-            AuditRecorder audit, UuidV7Generator ids, Clock clock) {
+            AuditRecorder audit, UuidV7Generator ids, Clock clock, ApplicationEventPublisher events) {
         this.repository = repository;
         this.appointments = appointments;
         this.lifecycle = lifecycle;
@@ -95,6 +98,7 @@ public class EncounterService implements EncounterQuery {
         this.audit = audit;
         this.ids = ids;
         this.clock = clock;
+        this.events = events;
     }
 
     @Transactional
@@ -275,6 +279,51 @@ public class EncounterService implements EncounterQuery {
         Instant now = clock.instant();
         repository.upsertFollowUp(org, id, date, body, actor.userId(), now);
         return saved(actor, row, "ENCOUNTER_FOLLOW_UP_UPDATED", List.of("followUp"), now);
+    }
+
+    /**
+     * Locks the encounter for good ([E6-2]): treating doctor (or encounter:update-any), OPEN, current version. Marks
+     * the appointment COMPLETED when there is one (ad hoc encounters have none) and publishes
+     * {@link EncounterFinalized} in the same transaction.
+     */
+    @Transactional
+    public EncounterView finalizeEncounter(OrganizationPrincipal actor, UUID id, Long version, boolean mayEditAny) {
+        UUID org = actor.organizationId();
+        requireVersion(version);
+        EncounterRow row = editable(org, id, version, actor, mayEditAny);
+        Instant now = clock.instant();
+        repository.finalizeEncounter(org, id, actor.userId(), now);
+        if (row.appointmentId() != null) {
+            lifecycle.markCompleted(org, row.appointmentId());
+        }
+        audit.record(new AuditEntry(org, actor.userId(), "ENCOUNTER_FINALIZED", ENTITY, id, AuditOutcome.SUCCESS,
+                List.of("status", "finalizedAt")));
+        events.publishEvent(new EncounterFinalized(org, id, row.patientId(), row.practitionerId(),
+                row.appointmentId(), now));
+        return view(org, repository.find(org, id).orElseThrow(),
+                patients.briefs(org, List.of(row.patientId())).get(row.patientId()));
+    }
+
+    /**
+     * Appends an addendum to a FINALIZED encounter (anything else is {@code 409 INVALID_STATE_TRANSITION}). The
+     * encounter row itself is immutable, so its version does not change. The text is audited by field name only.
+     */
+    @Transactional
+    public EncounterView addAddendum(OrganizationPrincipal actor, UUID id, String text, boolean mayEditAny) {
+        UUID org = actor.organizationId();
+        String body = text(text, MAX_NOTE, "text", true);
+        EncounterRow row = repository.lock(org, id).orElseThrow(EncounterService::notFound);
+        requireTreating(practitioners.activePractitionerOfUser(org, actor.userId()), row.practitionerId(),
+                mayEditAny);
+        if (!"FINALIZED".equals(row.status())) {
+            throw new ConflictException("INVALID_STATE_TRANSITION",
+                    "An addendum can only be added to a finalized encounter.");
+        }
+        repository.addAddendum(org, id, ids.next(), body, actor.userId(), clock.instant());
+        audit.record(new AuditEntry(org, actor.userId(), "ENCOUNTER_ADDENDUM_ADDED", ENTITY, id,
+                AuditOutcome.SUCCESS, List.of("addendum")));
+        return view(org, repository.find(org, id).orElseThrow(),
+                patients.briefs(org, List.of(row.patientId())).get(row.patientId()));
     }
 
     @Override
