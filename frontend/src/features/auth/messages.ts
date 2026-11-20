@@ -31,6 +31,9 @@ const MESSAGES: Record<string, string> = {
   DOCTOR_NOT_AVAILABLE: 'This doctor is not available for appointments.',
   PATIENT_NOT_AVAILABLE: 'This patient is not available for appointments.',
   INVALID_STATE_TRANSITION: 'This appointment can no longer be changed that way. Reload to see its current status.',
+  ENCOUNTER_FINALIZED: 'This encounter is already finalized and can no longer be edited. Reload to see it.',
+  ALLERGY_NOT_ACKNOWLEDGED: 'Acknowledge the allergy warnings before issuing this prescription.',
+  NOT_A_PRACTITIONER: 'Only a user linked to a doctor record can start an ad hoc consultation.',
   FORBIDDEN: 'You do not have permission to do this.',
 }
 

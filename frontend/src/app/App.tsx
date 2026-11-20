@@ -11,6 +11,7 @@ import { HomePage } from '../features/HomePage'
 import { AuditPage } from '../features/audit/AuditPage'
 import { DayCalendarPage } from '../features/appointments/DayCalendarPage'
 import { QueueBoardPage } from '../features/appointments/QueueBoardPage'
+import { ConsultPage } from '../features/consultation/ConsultPage'
 import { CatalogPage } from '../features/catalog/CatalogPage'
 import { PatientDetailPage } from '../features/patients/PatientDetailPage'
 import { PatientRegisterPage } from '../features/patients/PatientRegisterPage'
@@ -91,6 +92,9 @@ export function AppRoutes() {
           <Route element={<RequirePermission permission="appointment:read" screen="Appointments" />}>
             <Route path="appointments" element={<DayCalendarPage />} />
             <Route path="queue" element={<QueueBoardPage />} />
+          </Route>
+          <Route element={<RequirePermission permission="encounter:read" screen="Consultation" />}>
+            <Route path="consult/:id" element={<ConsultPage />} />
           </Route>
           <Route element={<RequirePermission permission="catalog:read" screen="Departments & specialties" />}>
             <Route path="catalog" element={<CatalogPage />} />
