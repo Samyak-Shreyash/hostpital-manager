@@ -40,7 +40,7 @@ test('login, landing page and logout (API mocked)', async ({ page }) => {
   await page.getByRole('button', { name: 'Sign in' }).click()
 
   await expect(page.getByRole('heading', { name: 'Welcome, Test Admin' })).toBeVisible()
-  await expect(page.getByRole('link', { name: 'Users' })).toBeVisible()
+  await expect(page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Users' })).toBeVisible()
   expect(loginCsrfHeader).toBe('e2e-token')
 
   await page.getByRole('button', { name: 'Sign out' }).click()
