@@ -1,5 +1,6 @@
 package com.hms.billing.web;
 
+import com.hms.billing.application.InvoicePdfService;
 import com.hms.billing.application.InvoiceService;
 import com.hms.billing.application.InvoiceService.ItemInput;
 import com.hms.billing.application.InvoiceView;
@@ -10,7 +11,10 @@ import com.hms.shared.web.idempotency.IdempotencyService;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
@@ -44,9 +48,11 @@ class InvoiceController {
     }
 
     private final InvoiceService invoices;
+    private final InvoicePdfService pdfs;
 
-    InvoiceController(InvoiceService invoices) {
+    InvoiceController(InvoiceService invoices, InvoicePdfService pdfs) {
         this.invoices = invoices;
+        this.pdfs = pdfs;
     }
 
     @PostMapping
@@ -69,6 +75,17 @@ class InvoiceController {
     @PreAuthorize("hasAuthority('invoice:read')")
     InvoiceView get(@AuthenticationPrincipal OrganizationPrincipal actor, @PathVariable UUID id) {
         return invoices.get(actor, id);
+    }
+
+    /** [E7-5] The printable invoice; {@code produces} is declared so a client asking for a PDF is routed here. */
+    @GetMapping(value = "/{id}/pdf", produces = MediaType.APPLICATION_PDF_VALUE)
+    @PreAuthorize("hasAuthority('invoice:read')")
+    ResponseEntity<byte[]> pdf(@AuthenticationPrincipal OrganizationPrincipal actor, @PathVariable UUID id) {
+        InvoicePdfService.PdfFile file = pdfs.pdf(actor, id);
+        return ResponseEntity.ok().contentType(MediaType.APPLICATION_PDF)
+                .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.inline().filename(file.filename())
+                        .build().toString())
+                .body(file.bytes());
     }
 
     @PutMapping("/{id}/items")

@@ -14,10 +14,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.hms.identity.AdminApiFixture;
 import com.hms.identity.api.RoleProvisioning;
 import com.hms.shared.tenancy.OrganizationContext;
+import com.hms.support.PdfText;
 import com.hms.support.PostgresIT;
 import com.jayway.jsonpath.JsonPath;
-import com.lowagie.text.pdf.PdfReader;
-import com.lowagie.text.pdf.parser.PdfTextExtractor;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
@@ -293,7 +292,7 @@ class PrescriptionIT extends PostgresIT {
         byte[] pdf = rget(reader, RX + "/" + rx + "/pdf").andExpect(status().isOk())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PDF))
                 .andReturn().getResponse().getContentAsByteArray();
-        String text = pdfText(pdf);
+        String text = PdfText.of(pdf);
         assertThat(text).contains(orgName, "7 Synthetic Lane, Testville", "Test Rx Patient", "HMS-000001",
                 "Dr. Test Rx", regNo, "Paracetamol", "500 mg", "TID", INSTRUCTIONS);
         assertThat(text).doesNotContain("SUPERSEDED");
@@ -315,24 +314,10 @@ class PrescriptionIT extends PostgresIT {
                 .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString(), "$.id"));
         byte[] pdf = rget(doctor, RX + "/" + rx + "/pdf").andExpect(status().isOk()).andReturn().getResponse()
                 .getContentAsByteArray();
-        assertThat(pdfText(pdf)).contains("SUPERSEDED", "Paracetamol");
+        assertThat(PdfText.of(pdf)).contains("SUPERSEDED", "Paracetamol");
         rget(doctor, RX + "/" + revised + "/pdf").andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code", is("INVALID_STATE_TRANSITION")));
         rget(doctor, RX + "/" + UUID.randomUUID() + "/pdf").andExpect(status().isNotFound());
-    }
-
-    private static String pdfText(byte[] pdf) throws Exception {
-        PdfReader reader = new PdfReader(pdf);
-        try {
-            PdfTextExtractor extractor = new PdfTextExtractor(reader);
-            StringBuilder all = new StringBuilder();
-            for (int page = 1; page <= reader.getNumberOfPages(); page++) {
-                all.append(extractor.getTextFromPage(page)).append(' ');
-            }
-            return all.toString();
-        } finally {
-            reader.close();
-        }
     }
 
     // --- helpers ---------------------------------------------------------------------------------------------

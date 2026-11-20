@@ -74,6 +74,7 @@ testing {
             dependencies {
                 implementation project()
                 implementation sourceSets.seed.output
+                implementation sourceSets.test.output // shared test support (PdfText)
                 implementation libs.spring.boot.starter.test
                 implementation libs.spring.boot.starter.webmvc.test
                 implementation libs.openpdf // text extraction in the PDF integration tests
