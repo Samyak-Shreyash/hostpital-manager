@@ -14,13 +14,14 @@ const entry = { appointmentId: 'a-1', patient: { id: 'p-1', uhid: 'DEMO-000001',
 const encounter = {
   id: 'e-1', patient: { id: 'p-1', uhid: 'DEMO-000001' }, practitionerId: 'd-1', appointmentId: 'a-1', status: 'OPEN',
   chiefComplaint: null, version: 0, startedAt: '2026-11-20T04:00:00Z', finalizedAt: null,
-  observations: [], warnings: [], notes: [], diagnoses: [], treatmentPlan: null, followUp: null,
+  observations: [], warnings: [], notes: [], diagnoses: [], treatmentPlan: null, followUp: null, prescriptions: [],
 }
 const draft = { id: 'rx-1', encounterId: 'e-1', patientId: 'p-1', status: 'DRAFT', versionNo: 1, supersedesId: null, issuedAt: null, issuedBy: null, version: 0, items: [], allergyWarnings: [] }
 const item = { drugName: 'Paracetamol', strength: null, form: null, route: null, dose: '500 mg', frequency: 'Twice daily', durationDays: 3, instructions: null }
 
 test('queue, start consult, vitals, issue a prescription, finalize (API mocked)', async ({ page }) => {
   let current = { ...encounter } as Record<string, unknown>
+  let prescriptions: { id: string; status: string; versionNo: number }[] = []
   await page.route('**/api/v1/**', async (route) => {
     const request = route.request()
     const path = new URL(request.url()).pathname
@@ -31,7 +32,7 @@ test('queue, start consult, vitals, issue a prescription, finalize (API mocked)'
     if (path === '/api/v1/doctors') return respond(200, { items: [doctor], page: 0, size: 100, totalItems: 1 })
     if (path === '/api/v1/queue') return respond(200, { doctorId: 'd-1', date: '2026-11-20', items: [entry] })
     if (path === '/api/v1/encounters' && method === 'POST') return respond(201, current)
-    if (path === '/api/v1/encounters/e-1' && method === 'GET') return respond(200, current)
+    if (path === '/api/v1/encounters/e-1' && method === 'GET') return respond(200, { ...current, prescriptions })
     if (path === '/api/v1/patients/p-1/encounters') return respond(200, { items: [], page: 0, size: 20, totalItems: 0 })
     if (path === '/api/v1/encounters/e-1/observations') {
       const body = request.postDataJSON()
@@ -41,9 +42,12 @@ test('queue, start consult, vitals, issue a prescription, finalize (API mocked)'
       }
       return respond(200, current)
     }
-    if (path === '/api/v1/encounters/e-1/prescriptions') return respond(201, draft)
+    if (path === '/api/v1/encounters/e-1/prescriptions') { prescriptions = [{ id: 'rx-1', status: 'DRAFT', versionNo: 1 }]; return respond(201, draft) }
     if (path === '/api/v1/prescriptions/rx-1' && method === 'PUT') return respond(200, { ...draft, version: 1, items: [item] })
-    if (path === '/api/v1/prescriptions/rx-1/issue') return respond(200, { ...draft, status: 'ISSUED', version: 2, issuedAt: '2026-11-20T04:30:00Z', items: [item] })
+    if (path === '/api/v1/prescriptions/rx-1/issue') {
+      prescriptions = [{ id: 'rx-1', status: 'ISSUED', versionNo: 1 }]
+      return respond(200, { ...draft, status: 'ISSUED', version: 2, issuedAt: '2026-11-20T04:30:00Z', items: [item] })
+    }
     if (path === '/api/v1/encounters/e-1/finalize') {
       current = { ...current, status: 'FINALIZED', version: 2, finalizedAt: '2026-11-20T04:40:00Z' }
       return respond(200, current)

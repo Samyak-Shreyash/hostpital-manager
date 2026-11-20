@@ -11,19 +11,6 @@ import { MutationProblem } from '../appointments/BookAppointmentDialog'
 import { useCan } from '../auth/useSession'
 import { consultErrorMessage, Section } from './shared'
 
-/**
- * The backend has no "prescription of this encounter" lookup (the encounter representation carries no prescription id),
- * so the id of the live prescription is remembered per browser tab (an id only, no clinical content). In a fresh tab
- * the section cannot find an existing prescription; starting another one is refused by the server (one live per encounter).
- */
-const storageKey = (encounterId: string) => `hms.rx.${encounterId}`
-function loadRxId(encounterId: string): string | null {
-  try { return sessionStorage.getItem(storageKey(encounterId)) } catch { return null }
-}
-function saveRxId(encounterId: string, id: string) {
-  try { sessionStorage.setItem(storageKey(encounterId), id) } catch { /* storage unavailable: the prescription is still shown */ }
-}
-
 interface ItemDraft {
   drugName: string; strength: string; form: string; route: string; dose: string; frequency: string; durationDays: string; instructions: string
 }
@@ -63,23 +50,35 @@ export function PrescriptionSection({ encounter, onReload }: { encounter: Encoun
   const queryClient = useQueryClient()
   const canCreate = useCan('prescription:create')
   const canRead = useCan('prescription:read')
-  const [rxId, setRxId] = useState<string | null>(() => loadRxId(encounter.id))
+  // The server lists the encounter's prescriptions (newest first); the live one (DRAFT or ISSUED) is the one to work on.
+  const rxId = (encounter.prescriptions ?? []).find((p) => p.status !== 'SUPERSEDED')?.id ?? null
   const rxQuery = useQuery({
     queryKey: clinicalKeys.prescription(rxId ?? ''), queryFn: () => getPrescription(rxId as string), enabled: !!rxId && canRead, staleTime: 30_000,
   })
+  const encounterKey = clinicalKeys.encounter(encounter.id)
   const adopt = (rx: Prescription) => {
     queryClient.setQueryData(clinicalKeys.prescription(rx.id), rx)
-    saveRxId(encounter.id, rx.id)
-    setRxId(rx.id)
+    // Keep the encounter's summary in step until the next read: this one first, the one it replaced marked superseded.
+    queryClient.setQueryData<Encounter>(encounterKey, (e) => e && ({
+      ...e,
+      prescriptions: [{ id: rx.id, status: rx.status, versionNo: rx.versionNo },
+        ...(e.prescriptions ?? []).filter((p) => p.id !== rx.id).map((p) => (p.id === rx.supersedesId ? { ...p, status: 'SUPERSEDED' as const } : p))],
+    }))
   }
-  const start = useMutation({ mutationFn: () => createPrescription(encounter.id), onSuccess: adopt })
+  const refresh = () => { void queryClient.invalidateQueries({ queryKey: encounterKey }) }
+  const start = useMutation({
+    mutationFn: () => createPrescription(encounter.id),
+    onSuccess: (rx) => { adopt(rx); refresh() },
+    // One live prescription per encounter: someone (or another tab) already made it, so read it from the server.
+    onError: (error) => { if (error instanceof ApiError && error.status === 409) refresh() },
+  })
   const rx = rxQuery.data
 
   return (
     <Section title="Prescription">
       {rxId && rxQuery.isPending && canRead && <p role="status">Loading prescription...</p>}
       {rxQuery.isError && <FormError message={consultErrorMessage(rxQuery.error)} />}
-      {rx && <PrescriptionEditor key={rx.id} rx={rx} onChange={adopt} onReload={onReload} />}
+      {rx && <PrescriptionEditor key={rx.id} rx={rx} onChange={adopt} onRevised={refresh} onReload={onReload} />}
       {!rx && !rxId && canCreate && (
         <>
           <p className="mb-2 text-sm text-slate-600">No prescription started for this visit.</p>
@@ -87,14 +86,18 @@ export function PrescriptionSection({ encounter, onReload }: { encounter: Encoun
         </>
       )}
       {!rx && !rxId && !canCreate && <p className="text-sm text-slate-600">No prescription.</p>}
-      <MutationProblem error={start.error} what="prescription" onReload={onReload} />
+      {start.error instanceof ApiError && start.error.status === 409
+        ? <FormError message="A prescription already exists for this visit. It is being loaded." />
+        : <MutationProblem error={start.error} what="prescription" onReload={onReload} />}
     </Section>
   )
 }
 
 const STATUS_TEXT = { DRAFT: 'Draft', ISSUED: 'Issued', SUPERSEDED: 'Superseded' } as const
 
-function PrescriptionEditor({ rx, onChange, onReload }: { rx: Prescription; onChange: (rx: Prescription) => void; onReload: () => void }) {
+function PrescriptionEditor({ rx, onChange, onRevised, onReload }: {
+  rx: Prescription; onChange: (rx: Prescription) => void; onRevised: () => void; onReload: () => void
+}) {
   const canCreate = useCan('prescription:create')
   const canIssue = useCan('prescription:issue')
   const canRead = useCan('prescription:read')
@@ -108,7 +111,7 @@ function PrescriptionEditor({ rx, onChange, onReload }: { rx: Prescription; onCh
 
   const save = useMutation({ mutationFn: (body: PrescriptionItem[]) => putPrescriptionItems(rx.id, rx.version, body), onSuccess: (r) => { setAcknowledged(false); onChange(r) } })
   const issue = useMutation({ mutationFn: () => issuePrescription(rx.id, rx.version, acknowledged), onSuccess: onChange })
-  const revise = useMutation({ mutationFn: () => revisePrescription(rx.id), onSuccess: onChange })
+  const revise = useMutation({ mutationFn: () => revisePrescription(rx.id), onSuccess: (r) => { onChange(r); onRevised() } })
   const saveErrors = itemErrors(save.error)
 
   const update = (i: number, key: keyof ItemDraft, value: string) => setItems(items.map((d, j) => (j === i ? { ...d, [key]: value } : d)))

@@ -27,6 +27,8 @@ export interface Encounter {
   diagnoses: Diagnosis[]
   treatmentPlan: string | null
   followUp: { date: string; instructions: string | null } | null
+  /** Newest first, superseded included; empty for callers without prescription:read. */
+  prescriptions: { id: string; status: PrescriptionStatus; versionNo: number }[]
 }
 
 export interface EncounterSummary {
