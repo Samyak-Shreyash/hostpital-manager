@@ -4,7 +4,7 @@ import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 
-/** Read-only view of the service catalog for other modules and for invoicing (no billing code uses it yet). */
+/** Read-only view of the service catalog for other modules and for invoicing (InvoiceService prices lines with it). */
 public interface ServicePriceLookup {
 
     /**
