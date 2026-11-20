@@ -11,7 +11,7 @@ const DOCTORS = { items: [{ id: 'd-1', userId: 'u-9', fullName: 'Dr. Test Exampl
 const ENC: Encounter = {
   id: 'e-1', patient: { id: 'p-1', uhid: 'DEMO-000001' }, practitionerId: 'd-1', appointmentId: 'a-1', status: 'OPEN',
   chiefComplaint: 'Fever for two days', version: 3, startedAt: '2026-11-20T04:00:00Z', finalizedAt: null,
-  observations: [], warnings: [], notes: [], diagnoses: [], treatmentPlan: null, followUp: null,
+  observations: [], warnings: [], notes: [], diagnoses: [], treatmentPlan: null, followUp: null, prescriptions: [],
 }
 const RX: Prescription = {
   id: 'rx-1', encounterId: 'e-1', patientId: 'p-1', status: 'DRAFT', versionNo: 1, supersedesId: null, issuedAt: null,
@@ -24,12 +24,16 @@ const HISTORY = {
   ],
   page: 0, size: 20, totalItems: 2,
 }
+// What the server lists as the encounter's prescriptions; the create/revise handlers below move it like the real one.
+let refs: Encounter['prescriptions'] = []
+const ref = (rx: Prescription) => ({ id: rx.id, status: rx.status, versionNo: rx.versionNo })
+const created = (rx: Prescription) => () => { refs = [ref(rx)]; return json(201, rx) }
 const bodyOf = (init?: RequestInit) => JSON.parse(String(init?.body))
 
 function consultRoutes(encounter: Encounter, extra: Parameters<typeof mockApi>[0] = {}, permissions = DOCTOR_PERMS) {
   return mockApi({
     'GET /api/v1/auth/me': json(200, session(permissions)),
-    [`GET /api/v1/encounters/${encounter.id}`]: json(200, encounter),
+    [`GET /api/v1/encounters/${encounter.id}`]: () => json(200, { ...encounter, prescriptions: refs }),
     'GET /api/v1/patients/p-1/encounters?page=0&size=20': json(200, HISTORY),
     ...extra,
   })
@@ -40,7 +44,7 @@ async function openConsult(encounter: Encounter = ENC) {
   await screen.findByRole('region', { name: 'Encounter summary' })
 }
 
-beforeEach(() => { try { sessionStorage.clear() } catch { /* ignore */ } })
+beforeEach(() => { refs = [] })
 
 describe('start consult from the queue', () => {
   const ENTRY = { appointmentId: 'a-1', patient: { id: 'p-1', uhid: 'DEMO-000001', name: 'Asha Testpatient' }, tokenNo: 4, status: 'CHECKED_IN' }
@@ -198,7 +202,7 @@ describe('prescription', () => {
   it('requires acknowledging allergy warnings before issuing, then offers the PDF', async () => {
     const warned: Prescription = { ...RX, version: 1, items: [ITEM], allergyWarnings: [{ substance: 'Paracetamol', severity: 'SEVERE' }] }
     const { calls } = consultRoutes(ENC, {
-      'POST /api/v1/encounters/e-1/prescriptions': json(201, RX),
+      'POST /api/v1/encounters/e-1/prescriptions': created(RX),
       'PUT /api/v1/prescriptions/rx-1': json(200, warned),
       'POST /api/v1/prescriptions/rx-1/issue': json(200, { ...warned, status: 'ISSUED', version: 2, issuedAt: '2026-11-20T04:30:00Z' }),
     })
@@ -225,7 +229,7 @@ describe('prescription', () => {
 
   it('shows 422 item errors beside the field', async () => {
     consultRoutes(ENC, {
-      'POST /api/v1/encounters/e-1/prescriptions': json(201, RX),
+      'POST /api/v1/encounters/e-1/prescriptions': created(RX),
       'PUT /api/v1/prescriptions/rx-1': json(422, { code: 'VALIDATION_ERROR', errors: [{ field: 'items[0].dose', code: 'REQUIRED', message: 'dose is required.' }] }),
     })
     await openConsult()
@@ -240,7 +244,7 @@ describe('prescription', () => {
 
   it('maps a missing acknowledgement from the server to a message', async () => {
     consultRoutes(ENC, {
-      'POST /api/v1/encounters/e-1/prescriptions': json(201, { ...RX, version: 1, items: [ITEM] }),
+      'POST /api/v1/encounters/e-1/prescriptions': created({ ...RX, version: 1, items: [ITEM] }),
       'POST /api/v1/prescriptions/rx-1/issue': json(422, { code: 'ALLERGY_NOT_ACKNOWLEDGED', detail: 'x' }),
     })
     await openConsult()
@@ -252,14 +256,43 @@ describe('prescription', () => {
   it('revises an issued prescription into a new draft', async () => {
     const issued: Prescription = { ...RX, status: 'ISSUED', version: 2, items: [ITEM], issuedAt: '2026-11-20T04:30:00Z' }
     consultRoutes(ENC, {
-      'POST /api/v1/encounters/e-1/prescriptions': json(201, issued),
-      'POST /api/v1/prescriptions/rx-1/revise': json(201, { ...RX, id: 'rx-2', versionNo: 2, supersedesId: 'rx-1', items: [ITEM] }),
+      'POST /api/v1/encounters/e-1/prescriptions': created(issued),
+      'POST /api/v1/prescriptions/rx-1/revise': () => {
+        const next = { ...RX, id: 'rx-2', versionNo: 2, supersedesId: 'rx-1', items: [ITEM] }
+        refs = [ref(next), { ...ref(issued), status: 'SUPERSEDED' }]
+        return json(201, next)
+      },
     })
     await openConsult()
     fireEvent.click(screen.getByRole('button', { name: 'Start prescription' }))
     fireEvent.click(await screen.findByRole('button', { name: 'Revise prescription' }))
     expect(await screen.findByRole('button', { name: 'Save medicines' })).toBeInTheDocument()
     expect(screen.getByText('Version 2')).toBeInTheDocument()
+  })
+})
+
+describe('prescription lookup from the server', () => {
+  it('finds the existing prescription on a fresh render (no browser storage involved)', async () => {
+    const issued: Prescription = { ...RX, status: 'ISSUED', version: 2, items: [{ drugName: 'Paracetamol', strength: null, form: null, route: null, dose: '500 mg', frequency: 'Twice daily', durationDays: 3, instructions: null }] }
+    refs = [{ id: 'rx-2', status: 'DRAFT', versionNo: 2 }, { id: 'rx-1', status: 'SUPERSEDED', versionNo: 1 }]
+    const { calls } = consultRoutes(ENC, { 'GET /api/v1/prescriptions/rx-2': json(200, { ...issued, id: 'rx-2', status: 'DRAFT', versionNo: 2 }) })
+    await openConsult()
+    expect(await screen.findByRole('button', { name: 'Save medicines' })).toBeInTheDocument()
+    expect(screen.getByText('Version 2')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Start prescription' })).not.toBeInTheDocument()
+    expect(calls.some((c) => c.key === 'GET /api/v1/prescriptions/rx-2')).toBe(true)
+  })
+
+  it('explains a 409 on create and reads the prescription from the server', async () => {
+    const issued: Prescription = { ...RX, status: 'ISSUED', version: 2 }
+    consultRoutes(ENC, {
+      'POST /api/v1/encounters/e-1/prescriptions': () => { refs = [ref(issued)]; return json(409, { code: 'INVALID_STATE_TRANSITION' }) },
+      'GET /api/v1/prescriptions/rx-1': json(200, issued),
+    })
+    await openConsult()
+    fireEvent.click(screen.getByRole('button', { name: 'Start prescription' }))
+    expect(await screen.findByText(/A prescription already exists for this visit/)).toBeInTheDocument()
+    expect(await screen.findByRole('link', { name: 'Open prescription PDF' })).toBeInTheDocument()
   })
 })
 

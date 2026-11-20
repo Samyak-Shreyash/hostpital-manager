@@ -46,14 +46,15 @@ class EncounterController {
     @ResponseStatus(HttpStatus.CREATED)
     EncounterView start(@AuthenticationPrincipal OrganizationPrincipal actor, Authentication authentication,
             @RequestBody StartEncounterRequest request) {
-        return encounters.start(actor, new StartCommand(request.appointmentId(), request.patientId(),
-                request.chiefComplaint(), mayEditAny(authentication)));
+        return shape(encounters.start(actor, new StartCommand(request.appointmentId(), request.patientId(),
+                request.chiefComplaint(), mayEditAny(authentication))), authentication);
     }
 
     @GetMapping("/encounters/{id}")
     @PreAuthorize("hasAuthority('encounter:read')")
-    EncounterView get(@AuthenticationPrincipal OrganizationPrincipal actor, @PathVariable UUID id) {
-        return encounters.get(actor, id);
+    EncounterView get(@AuthenticationPrincipal OrganizationPrincipal actor, Authentication authentication,
+            @PathVariable UUID id) {
+        return shape(encounters.get(actor, id), authentication);
     }
 
     @GetMapping("/patients/{id}/encounters")
@@ -74,8 +75,8 @@ class EncounterController {
     Object observations(@AuthenticationPrincipal OrganizationPrincipal actor, Authentication authentication,
             @PathVariable UUID id, @RequestBody ObservationsRequest request) {
         boolean support = mayEditAny(authentication) || !has(authentication, Permissions.ENCOUNTER_UPDATE);
-        EncounterView view = encounters.replaceObservations(actor, id, request.version(), request.observations(),
-                support);
+        EncounterView view = shape(encounters.replaceObservations(actor, id, request.version(), request.observations(),
+                support), authentication);
         if (has(authentication, Permissions.ENCOUNTER_READ)) {
             return view;
         }
@@ -91,37 +92,37 @@ class EncounterController {
     @PreAuthorize("hasAuthority('encounter:update')")
     EncounterView note(@AuthenticationPrincipal OrganizationPrincipal actor, Authentication authentication,
             @PathVariable UUID id, @PathVariable String kind, @RequestBody TextRequest request) {
-        return encounters.putNote(actor, id, kind, request.version(), request.text(), mayEditAny(authentication));
+        return shape(encounters.putNote(actor, id, kind, request.version(), request.text(), mayEditAny(authentication)), authentication);
     }
 
     @PutMapping("/encounters/{id}/diagnoses")
     @PreAuthorize("hasAuthority('encounter:update')")
     EncounterView diagnoses(@AuthenticationPrincipal OrganizationPrincipal actor, Authentication authentication,
             @PathVariable UUID id, @RequestBody DiagnosesRequest request) {
-        return encounters.replaceDiagnoses(actor, id, request.version(), request.diagnoses(),
-                mayEditAny(authentication));
+        return shape(encounters.replaceDiagnoses(actor, id, request.version(), request.diagnoses(),
+                mayEditAny(authentication)), authentication);
     }
 
     @PutMapping("/encounters/{id}/treatment-plan")
     @PreAuthorize("hasAuthority('encounter:update')")
     EncounterView treatmentPlan(@AuthenticationPrincipal OrganizationPrincipal actor, Authentication authentication,
             @PathVariable UUID id, @RequestBody TextRequest request) {
-        return encounters.putTreatmentPlan(actor, id, request.version(), request.text(), mayEditAny(authentication));
+        return shape(encounters.putTreatmentPlan(actor, id, request.version(), request.text(), mayEditAny(authentication)), authentication);
     }
 
     @PutMapping("/encounters/{id}/follow-up")
     @PreAuthorize("hasAuthority('encounter:update')")
     EncounterView followUp(@AuthenticationPrincipal OrganizationPrincipal actor, Authentication authentication,
             @PathVariable UUID id, @RequestBody FollowUpRequest request) {
-        return encounters.putFollowUp(actor, id, request.version(), request.date(), request.instructions(),
-                mayEditAny(authentication));
+        return shape(encounters.putFollowUp(actor, id, request.version(), request.date(), request.instructions(),
+                mayEditAny(authentication)), authentication);
     }
 
     @PostMapping("/encounters/{id}/finalize")
     @PreAuthorize("hasAuthority('encounter:finalize')")
     EncounterView finalizeEncounter(@AuthenticationPrincipal OrganizationPrincipal actor,
             Authentication authentication, @PathVariable UUID id, @RequestBody FinalizeRequest request) {
-        return encounters.finalizeEncounter(actor, id, request.version(), mayEditAny(authentication));
+        return shape(encounters.finalizeEncounter(actor, id, request.version(), mayEditAny(authentication)), authentication);
     }
 
     @PostMapping("/encounters/{id}/addenda")
@@ -129,7 +130,12 @@ class EncounterController {
     @ResponseStatus(HttpStatus.CREATED)
     EncounterView addendum(@AuthenticationPrincipal OrganizationPrincipal actor, Authentication authentication,
             @PathVariable UUID id, @RequestBody AddendumRequest request) {
-        return encounters.addAddendum(actor, id, request.text(), mayEditAny(authentication));
+        return shape(encounters.addAddendum(actor, id, request.text(), mayEditAny(authentication)), authentication);
+    }
+
+    /** The prescription summary is part of the view only for callers holding prescription:read. */
+    private static EncounterView shape(EncounterView view, Authentication authentication) {
+        return has(authentication, Permissions.PRESCRIPTION_READ) ? view : view.withPrescriptions(List.of());
     }
 
     private static boolean mayEditAny(Authentication authentication) {

@@ -21,6 +21,9 @@ public class PrescriptionRepository {
             UUID supersedesId, Instant issuedAt, UUID issuedBy, long version) {
     }
 
+    public record PrescriptionRefRow(UUID id, String status, int versionNo) {
+    }
+
     public record NewPrescription(UUID id, UUID org, UUID encounterId, UUID patientId, int versionNo,
             UUID supersedesId, UUID createdBy, Instant now) {
     }
@@ -51,6 +54,14 @@ public class PrescriptionRepository {
         } catch (DuplicateKeyException e) {
             return false;
         }
+    }
+
+    /** The encounter's prescriptions by id, status and version number, newest first (live and superseded). */
+    public List<PrescriptionRefRow> refs(UUID org, UUID encounterId) {
+        return jdbc.sql("SELECT id, status, version_no FROM hms.prescription WHERE organization_id = ? AND encounter_id = ?"
+                + " ORDER BY version_no DESC").params(org, encounterId)
+                .query((rs, n) -> new PrescriptionRefRow(rs.getObject("id", UUID.class), rs.getString("status"),
+                        rs.getInt("version_no"))).list();
     }
 
     public boolean liveExists(UUID org, UUID encounterId) {

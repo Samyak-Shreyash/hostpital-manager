@@ -18,6 +18,7 @@ import com.hms.clinical.application.EncounterView.Warning;
 import com.hms.clinical.domain.NoteKind;
 import com.hms.clinical.domain.ObservationKind;
 import com.hms.clinical.infrastructure.EncounterRepository;
+import com.hms.clinical.infrastructure.PrescriptionRepository;
 import com.hms.clinical.infrastructure.EncounterRepository.DiagnosisRow;
 import com.hms.clinical.infrastructure.EncounterRepository.EncounterRow;
 import com.hms.clinical.infrastructure.EncounterRepository.NewEncounter;
@@ -78,6 +79,7 @@ public class EncounterService implements EncounterQuery {
     }
 
     private final EncounterRepository repository;
+    private final PrescriptionRepository prescriptions;
     private final AppointmentLookup appointments;
     private final AppointmentLifecycle lifecycle;
     private final PatientDirectory patients;
@@ -87,10 +89,12 @@ public class EncounterService implements EncounterQuery {
     private final Clock clock;
     private final ApplicationEventPublisher events;
 
-    public EncounterService(EncounterRepository repository, AppointmentLookup appointments,
+    public EncounterService(EncounterRepository repository, PrescriptionRepository prescriptions,
+            AppointmentLookup appointments,
             AppointmentLifecycle lifecycle, PatientDirectory patients, PractitionerDirectory practitioners,
             AuditRecorder audit, UuidV7Generator ids, Clock clock, ApplicationEventPublisher events) {
         this.repository = repository;
+        this.prescriptions = prescriptions;
         this.appointments = appointments;
         this.lifecycle = lifecycle;
         this.patients = patients;
@@ -388,7 +392,8 @@ public class EncounterService implements EncounterQuery {
         return new EncounterView(r.id(), new PatientRef(r.patientId(), patient == null ? null : patient.uhid()),
                 r.practitionerId(), r.appointmentId(), r.status(), r.chiefComplaint(), r.version(), r.startedAt(),
                 r.finalizedAt(), observations, warnings, notes, diagnoses,
-                repository.plan(org, r.id()).orElse(null), followUp);
+                repository.plan(org, r.id()).orElse(null), followUp, prescriptions.refs(org, r.id()).stream()
+                        .map(p -> new EncounterView.PrescriptionRef(p.id(), p.status(), p.versionNo())).toList());
     }
 
     private static void requireVersion(Long version) {

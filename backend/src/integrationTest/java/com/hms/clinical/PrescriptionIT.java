@@ -105,6 +105,40 @@ class PrescriptionIT extends PostgresIT {
     }
 
     @Test
+    void encounterListsItsPrescriptionsNewestFirstOnlyForPrescriptionReaders() throws Exception {
+        fx.role(org, "ENCREAD", "encounter:read");
+        String encEmail = fx.uniqueEmail("encreader");
+        AdminApiFixture.Session encReader = fx.login(fx.user(org, encEmail, "ENCREAD"), encEmail);
+
+        UUID encounter = startEncounter();
+        rget(doctor, ENCOUNTERS + "/" + encounter).andExpect(status().isOk()).andExpect(jsonPath("$.prescriptions", hasSize(0)));
+        String created = rpost(doctor, ENCOUNTERS + "/" + encounter + "/prescriptions", "{}").andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        UUID first = UUID.fromString(JsonPath.read(created, "$.id"));
+        rget(doctor, ENCOUNTERS + "/" + encounter).andExpect(jsonPath("$.prescriptions", hasSize(1)))
+                .andExpect(jsonPath("$.prescriptions[0].id", is(first.toString())))
+                .andExpect(jsonPath("$.prescriptions[0].status", is("DRAFT")))
+                .andExpect(jsonPath("$.prescriptions[0].versionNo", is(1)));
+
+        rput(doctor, RX + "/" + first, "{\"version\":0,\"items\":[" + item("Paracetamol", "1", "BD", 3) + "]}").andExpect(status().isOk());
+        rpost(doctor, RX + "/" + first + "/issue", "{\"version\":1}").andExpect(status().isOk());
+        String revised = rpost(doctor, RX + "/" + first + "/revise", "{}").andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        UUID second = UUID.fromString(JsonPath.read(revised, "$.id"));
+        rget(doctor, ENCOUNTERS + "/" + encounter).andExpect(jsonPath("$.prescriptions", hasSize(2)))
+                .andExpect(jsonPath("$.prescriptions[0].id", is(second.toString())))
+                .andExpect(jsonPath("$.prescriptions[0].status", is("DRAFT")))
+                .andExpect(jsonPath("$.prescriptions[0].versionNo", is(2)))
+                .andExpect(jsonPath("$.prescriptions[1].id", is(first.toString())))
+                .andExpect(jsonPath("$.prescriptions[1].status", is("SUPERSEDED")))
+                .andExpect(jsonPath("$.prescriptions[1].versionNo", is(1)));
+
+        // Without prescription:read the summary is empty.
+        rget(encReader, ENCOUNTERS + "/" + encounter).andExpect(status().isOk())
+                .andExpect(jsonPath("$.prescriptions", hasSize(0)));
+    }
+
+    @Test
     void itemIdsAreUuidV7() throws Exception {
         UUID rx = newDraft();
         rput(doctor, RX + "/" + rx, "{\"version\":0,\"items\":[" + item("Paracetamol", "1", "TID", 3) + ","
