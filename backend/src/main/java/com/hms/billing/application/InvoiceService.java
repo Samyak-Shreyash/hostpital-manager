@@ -4,6 +4,7 @@ import com.hms.audit.api.AuditEntry;
 import com.hms.audit.api.AuditOutcome;
 import com.hms.audit.api.AuditRecorder;
 import com.hms.billing.api.InvoiceBalancePort;
+import com.hms.billing.api.InvoiceIssued;
 import com.hms.billing.api.ServicePrice;
 import com.hms.billing.api.ServicePriceLookup;
 import com.hms.billing.domain.Invoice;
@@ -18,6 +19,8 @@ import com.hms.billing.infrastructure.ServiceCatalogRepository;
 import com.hms.billing.infrastructure.ServiceCatalogRepository.ServiceRow;
 import com.hms.clinical.api.EncounterQuery;
 import com.hms.clinical.api.EncounterQuery.EncounterSummary;
+import com.hms.organization.api.OrganizationDirectory;
+import com.hms.organization.api.OrganizationSummary;
 import com.hms.patient.api.PatientDirectory;
 import com.hms.shared.PageResult;
 import com.hms.shared.domain.BusinessRuleException;
@@ -25,16 +28,21 @@ import com.hms.shared.domain.ConflictException;
 import com.hms.shared.domain.Money;
 import com.hms.shared.domain.NotFoundException;
 import com.hms.shared.id.UuidV7Generator;
+import com.hms.shared.numbering.DocumentNumberAllocator;
 import com.hms.shared.tenancy.OrganizationPrincipal;
+import com.hms.shared.web.idempotency.IdempotencyService;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
@@ -75,10 +83,19 @@ public class InvoiceService implements InvoiceBalancePort {
     private final AuditRecorder audit;
     private final UuidV7Generator ids;
     private final Clock clock;
+    private final OrganizationDirectory organizations;
+    private final DocumentNumberAllocator numbers;
+    private final IdempotencyService idempotency;
+    private final ApplicationEventPublisher events;
 
     public InvoiceService(InvoiceRepository repository, ServiceCatalogRepository catalog, ServicePriceLookup prices,
             EncounterQuery encounters, PatientDirectory patients, AuditRecorder audit, UuidV7Generator ids,
-            Clock clock) {
+            Clock clock, OrganizationDirectory organizations, DocumentNumberAllocator numbers,
+            IdempotencyService idempotency, ApplicationEventPublisher events) {
+        this.organizations = organizations;
+        this.numbers = numbers;
+        this.idempotency = idempotency;
+        this.events = events;
         this.repository = repository;
         this.catalog = catalog;
         this.prices = prices;
@@ -226,6 +243,60 @@ public class InvoiceService implements InvoiceBalancePort {
         audit.record(new AuditEntry(org, actor.userId(), "INVOICE_DISCARDED", ENTITY, id, AuditOutcome.SUCCESS,
                 List.of("status")));
         return view(org, repository.find(org, id).orElseThrow(), true);
+    }
+
+    static final String ISSUE_ENDPOINT = "POST /api/v1/invoices/{id}/issue";
+    static final String INVOICE_SEQUENCE = "INVOICE";
+
+    /** The request hash of an issue call: the route and the invoice id (the request has no body). */
+    public static String issueRequestHash(UUID id) {
+        return IdempotencyService.hash(ISSUE_ENDPOINT, id);
+    }
+
+    /**
+     * DRAFT to ISSUED ([E7-2], BIL-5, ADR-0012) under {@code idempotencyKey}: a replay of the key returns the stored
+     * response. Locks the invoice, requires DRAFT and at least one item, recomputes the totals from the stored lines,
+     * then allocates the gapless INVOICE number of the financial year (April to March in the organization's time
+     * zone) last, so the counter row is held as briefly as possible and a rollback returns the number.
+     */
+    @Transactional
+    public IdempotencyService.Result<InvoiceView> issue(OrganizationPrincipal actor, UUID id, String idempotencyKey,
+            String requestHash) {
+        IdempotencyService.requireKey(idempotencyKey);
+        return idempotency.execute(actor.organizationId(), ISSUE_ENDPOINT, idempotencyKey, requestHash, 200,
+                InvoiceView.class, () -> doIssue(actor, id));
+    }
+
+    private InvoiceView doIssue(OrganizationPrincipal actor, UUID id) {
+        UUID org = actor.organizationId();
+        InvoiceRow row = repository.lock(org, id).orElseThrow(InvoiceService::notFound);
+        requireDraft(row);
+        List<InvoiceLine> lines = repository.items(org, id).stream().map(ItemRow::line).toList();
+        if (lines.isEmpty()) {
+            throw new BusinessRuleException("BUSINESS_RULE_VIOLATION", "An invoice needs at least one item to issue.");
+        }
+        InvoiceCalculator.InvoiceTotals totals = InvoiceCalculator.totals(lines.stream().map(InvoiceLine::totals)
+                .toList());
+        Instant now = clock.instant();
+        ZoneId zone = organizations.find(org).map(OrganizationSummary::timezone).map(ZoneId::of)
+                .orElseThrow(() -> new IllegalStateException("organization without a time zone"));
+        String fy = financialYear(LocalDate.ofInstant(now, zone));
+        long sequence = numbers.next(org, INVOICE_SEQUENCE, "FY" + fy); // last lock: after the invoice row
+        String invoiceNo = fy + "/" + String.format("%06d", sequence);
+        repository.markIssued(org, id, invoiceNo, actor.userId(), totals, now);
+        audit.record(new AuditEntry(org, actor.userId(), "INVOICE_ISSUED", ENTITY, id, AuditOutcome.SUCCESS,
+                List.of("status", "invoiceNo", "issuedAt", "issuedBy", "subtotal", "discountTotal", "taxTotal",
+                        "total")));
+        InvoiceRow issued = repository.find(org, id).orElseThrow();
+        events.publishEvent(new InvoiceIssued(org, id, issued.patientId(), invoiceNo, issued.total().toString(),
+                issued.issuedAt()));
+        return view(org, issued, true);
+    }
+
+    /** {@code 2026-27} for any date from 1 April 2026 to 31 March 2027. */
+    static String financialYear(LocalDate date) {
+        int start = date.getMonthValue() >= 4 ? date.getYear() : date.getYear() - 1;
+        return start + "-" + String.format("%02d", (start + 1) % 100);
     }
 
     // --- InvoiceBalancePort (payment module, [E8-x]) ---

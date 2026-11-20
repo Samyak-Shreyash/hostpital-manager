@@ -122,6 +122,17 @@ public class InvoiceRepository {
                 totals.total().amount(), Timestamp.from(now), org, invoiceId).update();
     }
 
+    /** DRAFT to ISSUED on the locked row: number, issue time and issuer, recomputed totals; bumps the version. */
+    public void markIssued(UUID org, UUID id, String invoiceNo, UUID issuedBy, InvoiceTotals totals, Instant now) {
+        jdbc.sql("""
+                UPDATE hms.invoice SET status = 'ISSUED', invoice_no = ?, issued_at = ?, issued_by = ?, subtotal = ?,
+                    discount_total = ?, tax_total = ?, total = ?, version = version + 1, updated_at = ?
+                WHERE organization_id = ? AND id = ?
+                """).params(invoiceNo, Timestamp.from(now), issuedBy, totals.subtotal().amount(),
+                totals.discountTotal().amount(), totals.taxTotal().amount(), totals.total().amount(),
+                Timestamp.from(now), org, id).update();
+    }
+
     /** Sets the status of the locked row, bumping the version. */
     public void setStatus(UUID org, UUID id, String status, Instant now) {
         jdbc.sql("UPDATE hms.invoice SET status = ?, version = version + 1, updated_at = ?"
