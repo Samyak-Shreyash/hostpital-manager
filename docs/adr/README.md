@@ -20,8 +20,9 @@
 | [0014](0014-per-module-observability.md) | Per-module observability (logging, metrics, monitoring) | Accepted |
 | [0015](0015-database-roles-and-migration-privileges.md) | Database roles and migration privileges | Accepted |
 | [0016](0016-audit-allowlisted-values.md) | Old/new values for allowlisted non-PHI audit fields (amends 0007) | Accepted (2026-11-17, owner) |
+| [0017](0017-pdf-generation-openpdf.md) | PDF generation with OpenPDF (vs openhtmltopdf / JasperReports) | Accepted (2026-11-20, owner) |
 
 ## Open ADR candidates (not yet written)
-Centralised log search (e.g. Loki; see ADR-0014), Backup/DR approach (pgBackRest vs managed PostgreSQL), hosting provider, frontend state/forms conventions, PDF generation library, search approach, ABDM adapter boundary (Stage 1.5), time zone handling for daily charges.
+Centralised log search (e.g. Loki; see ADR-0014), Backup/DR approach (pgBackRest vs managed PostgreSQL), hosting provider, frontend state/forms conventions, search approach, ABDM adapter boundary (Stage 1.5), time zone handling for daily charges.
 
 Note: these ADRs are condensed. Each has context, decision and consequences; some lack an explicit Problem/Options section and should be expanded when approved.
