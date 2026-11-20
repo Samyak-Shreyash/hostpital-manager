@@ -285,10 +285,11 @@ class PrescriptionIT extends PostgresIT {
             return jdbc.sql("SELECT name FROM hms.organization WHERE id = ?").param(org).query(String.class)
                     .single();
         });
-        String regNo = fx.inOrg(org, () -> jdbc.sql("SELECT registration_no FROM hms.practitioner"
-                + " WHERE organization_id = ? AND full_name = 'Dr. Test Rx' LIMIT 1").param(org)
-                .query(String.class).single());
         UUID rx = issuedPrescription();
+        // Every test inserts its own 'Dr. Test Rx', so take the doctor of this prescription's encounter.
+        String regNo = fx.inOrg(org, () -> jdbc.sql("SELECT p.registration_no FROM hms.prescription r"
+                + " JOIN hms.encounter e ON e.id = r.encounter_id JOIN hms.practitioner p ON p.id = e.practitioner_id"
+                + " WHERE r.id = ?").param(rx).query(String.class).single());
         byte[] pdf = rget(reader, RX + "/" + rx + "/pdf").andExpect(status().isOk())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PDF))
                 .andReturn().getResponse().getContentAsByteArray();

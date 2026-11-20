@@ -42,6 +42,7 @@ public final class Permissions {
     public static final String INVOICE_ISSUE = "invoice:issue";
     public static final String INVOICE_CREDIT = "invoice:credit";
     public static final String INVOICE_PRICE_OVERRIDE = "invoice:price-override";
+    public static final String INVOICE_DISCOUNT = "invoice:discount";
     public static final String OBSERVATION_WRITE = "observation:write";
     public static final String ORG_READ = "org:read";
     public static final String ORG_UPDATE = "org:update";
@@ -88,6 +89,7 @@ public final class Permissions {
             DISCHARGE_DEFER_BILLING, ENCOUNTER_CREATE, ENCOUNTER_READ, ENCOUNTER_UPDATE,
             ENCOUNTER_UPDATE_ANY, ENCOUNTER_FINALIZE, ENCOUNTER_ADDENDUM, INVOICE_CREATE,
             INVOICE_READ, INVOICE_UPDATE, INVOICE_ISSUE, INVOICE_CREDIT, INVOICE_PRICE_OVERRIDE,
+            INVOICE_DISCOUNT,
             OBSERVATION_WRITE, ORG_READ, ORG_UPDATE, PATIENT_CREATE, PATIENT_READ, PATIENT_SEARCH,
             PATIENT_UPDATE, PATIENT_UPDATE_CLINICAL, PATIENT_UPDATE_IDENTITY, PATIENT_OVERRIDE_DUPLICATE,
             PAYMENT_CREATE, PAYMENT_READ,

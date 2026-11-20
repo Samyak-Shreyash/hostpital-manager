@@ -65,7 +65,7 @@ Built-in roles are copied into each organization at bootstrap. A System Administ
 ### Accountant — 12
 | Area | Permissions |
 |---|---|
-| Invoices | `invoice:create`, `invoice:read`, `invoice:update`, `invoice:issue`, `invoice:credit`, `invoice:price-override` |
+| Invoices | `invoice:create`, `invoice:read`, `invoice:update`, `invoice:issue`, `invoice:credit`, `invoice:price-override`, `invoice:discount` |
 | Payments | `payment:create`, `payment:read` |
 | Refunds | `refund:create`, `refund:read`, `refund:approve` |
 | Reports | `report:finance` |
