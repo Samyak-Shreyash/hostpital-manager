@@ -3,6 +3,7 @@ import { defineConfig } from '@playwright/test'
 // Runs against the Vite dev server of ../frontend with the API mocked in the tests (page.route).
 export default defineConfig({
   testDir: './tests',
+  testIgnore: 'm3-opd-journey.spec.ts', // needs the real stack: npm run test:e2e:real-stack
   reporter: 'list',
   use: { baseURL: 'http://localhost:5173' },
   webServer: {

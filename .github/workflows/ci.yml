@@ -1,4 +1,4 @@
-# CI gate (ADR-0013, [E0-1], [E0-2], [E0-3]). Required status checks on `main`: backend, frontend, secret-scan, image, compose.
+# CI gate (ADR-0013, [E0-1], [E0-2], [E0-3], [E7-M3]). Required status checks on `main`: backend, frontend, secret-scan, image, compose.
 # Scanners run as pinned container images rather than third-party actions.
 name: CI
 
@@ -111,3 +111,72 @@ jobs:
         run: docker compose -f infra/compose/compose.yml --env-file .env --profile monitoring logs
       - if: always()
         run: docker compose -f infra/compose/compose.yml --env-file .env --profile monitoring down -v
+
+  # [E7-M3] Full OPD journey in a browser against the real Compose stack (no mocks). Not in the required checks list yet.
+  e2e-real-stack:
+    runs-on: ubuntu-latest
+    env:
+      COMPOSE: docker compose -f infra/compose/compose.yml --env-file .env
+    steps:
+      - uses: actions/checkout@v6
+      # Same throwaway .env as the compose job, plus the first-run bootstrap (organization + System Administrator).
+      - name: Write CI .env
+        run: |
+          sed -e 's/^HMS_DB_NAME=.*/HMS_DB_NAME=hms/' \
+              -e "s/^HMS_DB_PASSWORD=.*/HMS_DB_PASSWORD=$(openssl rand -hex 16)/" \
+              -e "s/^HMS_DB_MIGRATION_PASSWORD=.*/HMS_DB_MIGRATION_PASSWORD=$(openssl rand -hex 16)/" \
+              -e 's/^HMS_DB_ADMIN_USERNAME=.*/HMS_DB_ADMIN_USERNAME=hms_admin/' \
+              -e "s/^HMS_DB_ADMIN_PASSWORD=.*/HMS_DB_ADMIN_PASSWORD=$(openssl rand -hex 16)/" \
+              -e 's/^HMS_DB_PORT=.*/HMS_DB_PORT=5432/' \
+              -e 's|^HMS_DB_URL=.*|HMS_DB_URL=jdbc:postgresql://localhost:5432/hms|' \
+              -e 's/^HMS_SERVER_PORT=.*/HMS_SERVER_PORT=8080/' \
+              -e 's/^HMS_PROXY_PORT=.*/HMS_PROXY_PORT=8080/' \
+              -e 's/^HMS_GRAFANA_ADMIN_USERNAME=.*/HMS_GRAFANA_ADMIN_USERNAME=admin/' \
+              -e "s/^HMS_GRAFANA_ADMIN_PASSWORD=.*/HMS_GRAFANA_ADMIN_PASSWORD=$(openssl rand -hex 16)/" \
+              -e 's/^HMS_GRAFANA_PORT=.*/HMS_GRAFANA_PORT=3000/' \
+              -e 's/^# HMS_BOOTSTRAP_ORG_NAME=.*/HMS_BOOTSTRAP_ORG_NAME=E2E Clinic/' \
+              -e 's/^# HMS_BOOTSTRAP_ADMIN_EMAIL=.*/HMS_BOOTSTRAP_ADMIN_EMAIL=e2e-admin@example.test/' \
+              -e 's|^# HMS_BOOTSTRAP_ADMIN_PASSWORD_FILE=.*|HMS_BOOTSTRAP_ADMIN_PASSWORD_FILE=/var/lib/hms/bootstrap/admin-password.txt|' \
+              .env.example > .env
+          if grep -E '^[A-Z_]+=$' .env; then echo "unset variables above: add them to this step"; exit 1; fi
+      - name: Create database volume
+        run: docker volume create "$(grep -E '^HMS_DB_VOLUME=' .env | cut -d= -f2-)"
+      - name: Start stack and wait for healthchecks
+        run: $COMPOSE up -d --build --wait --wait-timeout 300
+      # The journey prepares its own doctor, service and availability through the API ("seeding"); seedData is not used
+      # because its users have unknown passwords. Credentials stay in the job environment and are masked in logs.
+      - name: Read the bootstrap admin password
+        run: |
+          pw="$($COMPOSE exec -T api cat /var/lib/hms/bootstrap/admin-password.txt | tr -d '\r\n')"
+          echo "::add-mask::$pw"
+          new="E2e-$(openssl rand -hex 12)"
+          echo "::add-mask::$new"
+          {
+            echo "E2E_ADMIN_PASSWORD=$pw"
+            echo "E2E_ADMIN_NEW_PASSWORD=$new"
+            echo "E2E_ADMIN_EMAIL=e2e-admin@example.test"
+            echo "E2E_BASE_URL=http://localhost:8080"
+          } >> "$GITHUB_ENV"
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: frontend/.nvmrc
+          cache: npm
+          cache-dependency-path: e2e/package-lock.json
+      - name: Install e2e dependencies and Chromium
+        working-directory: e2e
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+      - name: Run the M3 OPD journey
+        working-directory: e2e
+        run: npm run test:e2e:real-stack
+      - if: failure()
+        run: $COMPOSE logs --tail 200
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-real-stack-traces
+          path: e2e/test-results
+          if-no-files-found: ignore
+      - if: always()
+        run: $COMPOSE down -v

@@ -1,8 +1,51 @@
 # e2e
 
-Playwright browser tests. Run with `npm ci && npx playwright install chromium && npm run test:e2e`; the config starts the
-Vite dev server of `../frontend` itself.
+Playwright browser tests, in two projects.
 
-**Not a full-stack test.** The backend is not started: `tests/login-logout.spec.ts` mocks `/api/v1/**` with
-`page.route`, so it checks the SPA's routing, login form, CSRF header and logout only, not the real API. A full-stack
-journey suite needs the Compose stack and comes with its own issue. Test data is synthetic (`admin@example.test`).
+## Mocked specs (default, `npm run test:e2e`)
+
+Run with `npm ci && npx playwright install chromium && npm run test:e2e`; `playwright.config.ts` starts the Vite dev
+server of `../frontend` itself. **Not full-stack:** the backend is not started; each spec mocks `/api/v1/**` with
+`page.route`, so they check the SPA's routing, forms, CSRF header and flows, not the real API. Test data is synthetic.
+`tests/m3-opd-journey.spec.ts` is excluded here.
+
+## Real-stack journey (`real-stack` project, `npm run test:e2e:real-stack`) [E7-M3]
+
+`tests/m3-opd-journey.spec.ts` drives the whole OPD slice through the browser against the **real Compose stack** (no
+mocks): login, register patient, book, check in, queue, consult (vitals, diagnosis, prescription issue, finalize),
+invoice (draft, add service, issue), pay in full, then fetches the receipt and asserts `content-type: application/pdf`.
+Config: `playwright.real-stack.config.ts` (no dev server; targets `E2E_BASE_URL`).
+
+Prerequisites:
+
+1. A **fresh** stack with the first-run bootstrap (README "First organization"): in `.env` set `HMS_BOOTSTRAP_ORG_NAME`,
+   `HMS_BOOTSTRAP_ADMIN_EMAIL` and `HMS_BOOTSTRAP_ADMIN_PASSWORD_FILE=/var/lib/hms/bootstrap/admin-password.txt`, then
+   `docker compose -f infra/compose/compose.yml --env-file .env up -d --build --wait`. The stack must run the `dev` profile
+   (the Compose default).
+2. Read the temporary admin password (do not commit or log it):
+   `docker compose -f infra/compose/compose.yml --env-file .env exec -T api cat /var/lib/hms/bootstrap/admin-password.txt`.
+3. `npm ci && npx playwright install chromium`.
+
+Environment variables (never commit real values):
+
+| Variable | Meaning |
+|---|---|
+| `E2E_BASE_URL` | Stack URL (default `http://localhost:8080`; use `HMS_PROXY_PORT` from `.env`). |
+| `E2E_ADMIN_EMAIL` | The bootstrap administrator (`HMS_BOOTSTRAP_ADMIN_EMAIL`). |
+| `E2E_ADMIN_PASSWORD` | Its current password: the temporary one on the first run, afterwards the new one. |
+| `E2E_ADMIN_NEW_PASSWORD` | Needed only while the admin still has the temporary password: the first run changes it to this value, so use it as `E2E_ADMIN_PASSWORD` on later runs. |
+
+The seed task (`./gradlew seedData`) is not needed: its users have unknown passwords. The spec prepares its own data
+through the API, unique per run, so it can be rerun on the same stack: as the administrator it creates one clinician user
+(roles Doctor, Receptionist, Accountant, Facility Administrator, random password), then as that user a specialty, a
+priced catalogue service (300.00), the clinician's own practitioner profile and 09:00-17:00 availability on every weekday.
+The appointment is booked for **tomorrow** (facility time zone Asia/Kolkata) so a free slot always exists; check-in and
+the queue are today. The patient name is `E2eTest Patient<random>`, the phone `0000xxxxxx` and the date of birth random
+(so the duplicate check does not stop reruns). Rows stay in that database: use a throwaway stack, not real data.
+
+```bash
+E2E_BASE_URL=http://localhost:8080 E2E_ADMIN_EMAIL=... E2E_ADMIN_PASSWORD=... E2E_ADMIN_NEW_PASSWORD=... \
+  npm run test:e2e:real-stack
+```
+
+CI runs it in the `e2e-real-stack` job of `.github/workflows/ci.yml`.

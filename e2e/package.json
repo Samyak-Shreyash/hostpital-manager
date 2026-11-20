@@ -5,7 +5,8 @@
   "type": "module",
   "engines": { "node": ">=22" },
   "scripts": {
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "test:e2e:real-stack": "playwright test -c playwright.real-stack.config.ts"
   },
   "devDependencies": {
     "@playwright/test": "1.65.0"
