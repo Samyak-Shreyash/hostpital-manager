@@ -5,18 +5,19 @@ import { Dialog } from '../../components/Dialog'
 import { Field, FormError, inputClass, primaryButton, secondaryButton } from '../../components/ui'
 import { isMoneyAmount } from '../../lib/money'
 import { useCan } from '../auth/useSession'
-import { AMOUNT_HINT, billingErrorMessage, RETRY_ON_NETWORK_ERROR, STATUS_LABELS, useIdempotencyKey } from './shared'
+import { AMOUNT_HINT, billingErrorMessage, RETRY_ON_NETWORK_ERROR, STATUS_LABELS, type IdempotencyKey } from './shared'
 
 const MODE_LABELS: Record<PaymentMode, string> = { CASH: 'Cash', CARD: 'Card', UPI: 'UPI', BANK_TRANSFER: 'Bank transfer', CHEQUE: 'Cheque' }
 
 /**
  * Records one payment. The amount is checked by pattern only; whether it exceeds what is outstanding is the server's
  * answer (409 EXCEEDS_OUTSTANDING, "Outstanding is X."). The result shows the server's outstanding and receipt.
+ * The idempotency key is owned by the caller (one per invoice, kept across close/reopen) so a retry after a network
+ * error that closed the dialog reuses the same key until the payment succeeds or the request changes.
  */
-export function PaymentDialog({ invoiceId, onRecorded, onClose }: { invoiceId: string; onRecorded: (p: RecordedPayment) => void; onClose: () => void }) {
+export function PaymentDialog({ invoiceId, idempotencyKey: key, onRecorded, onClose }: { invoiceId: string; idempotencyKey: IdempotencyKey; onRecorded: (p: RecordedPayment) => void; onClose: () => void }) {
   const queryClient = useQueryClient()
   const canReceipt = useCan('payment:read')
-  const key = useIdempotencyKey()
   const [amount, setAmount] = useState('')
   const [mode, setMode] = useState<PaymentMode>('CASH')
   const [referenceNo, setReferenceNo] = useState('')

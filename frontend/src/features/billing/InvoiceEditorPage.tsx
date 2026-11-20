@@ -7,7 +7,7 @@ import { errorMessage } from '../auth/messages'
 import { useCan } from '../auth/useSession'
 import { DraftEditor } from './DraftEditor'
 import { PaymentDialog } from './PaymentDialog'
-import { STATUS_LABELS } from './shared'
+import { STATUS_LABELS, useIdempotencyKey } from './shared'
 
 const ISSUED_STATUSES = ['ISSUED', 'PARTIALLY_PAID', 'PAID', 'CANCELLED']
 
@@ -57,6 +57,8 @@ export function InvoiceEditorPage() {
   const canOpenEncounter = useCan('encounter:read')
   const canOpenPatient = useCan('patient:read')
   const [paying, setPaying] = useState(false)
+  // Lives above the dialog: closing and reopening after a network error must not mint a new key (double payment).
+  const paymentKey = useIdempotencyKey()
   // Payments taken on this screen only: the API has no per-invoice payment list yet.
   const [payments, setPayments] = useState<RecordedPayment[]>([])
   const invoice = useQuery({ queryKey: billingKeys.detail(id), queryFn: () => getInvoice(id), enabled: !!id })
@@ -110,7 +112,7 @@ export function InvoiceEditorPage() {
             </section>
           )}
           {paying && (
-            <PaymentDialog invoiceId={data.id} onRecorded={(p) => setPayments((current) => [...current, p])} onClose={() => setPaying(false)} />
+            <PaymentDialog invoiceId={data.id} idempotencyKey={paymentKey} onRecorded={(p) => setPayments((current) => [...current, p])} onClose={() => setPaying(false)} />
           )}
         </>
       )}

@@ -27,6 +27,8 @@ export function billingErrorMessage(error: unknown): string {
  * unchanged, so a retry after a network error or a refusal replays the same intent instead of repeating it. `done()`
  * after success, or a different fingerprint, starts a new intent with a new key.
  */
+export type IdempotencyKey = ReturnType<typeof useIdempotencyKey>
+
 export function useIdempotencyKey() {
   const current = useRef<{ fingerprint: string; key: string } | null>(null)
   return {

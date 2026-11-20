@@ -282,6 +282,34 @@ describe('payment', () => {
     expect(keys[2]).not.toBe(keys[0])
   })
 
+  it('keeps the key across close and reopen after a network error, so a retry cannot pay twice', async () => {
+    const keys: string[] = []
+    let offline = true
+    editorRoutes(ISSUED, CASHIER, {
+      'POST /api/v1/invoices/inv-1/payments': (init) => {
+        keys.push(headersOf(init)['Idempotency-Key'])
+        if (offline) throw new TypeError('Failed to fetch')
+        return json(201, RECORDED)
+      },
+    })
+    let dialog = await openDialog()
+    fireEvent.change(within(dialog).getByLabelText('Amount'), { target: { value: '0.10' } })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Record payment' }))
+    await within(dialog).findByRole('alert')
+    const firstKey = keys[0]
+    expect(keys.every((k) => k === firstKey)).toBe(true)
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+
+    offline = false
+    fireEvent.click(screen.getByRole('button', { name: 'Take payment' }))
+    dialog = await screen.findByRole('dialog', { name: 'Record payment' })
+    fireEvent.change(within(dialog).getByLabelText('Amount'), { target: { value: '0.10' } })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Record payment' }))
+    expect(await within(dialog).findByText('RCT-2026-27/000044')).toBeInTheDocument()
+    expect(keys[keys.length - 1]).toBe(firstKey)
+  })
+
   it('is not offered on a paid invoice', async () => {
     editorRoutes(invoice({ status: 'PAID' }))
     await openEditor()
