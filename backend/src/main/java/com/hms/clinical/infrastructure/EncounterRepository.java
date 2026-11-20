@@ -1,5 +1,6 @@
 package com.hms.clinical.infrastructure;
 
+import com.hms.shared.id.UuidV7Generator;
 import java.math.BigDecimal;
 import java.sql.Date;
 import java.sql.Timestamp;
@@ -42,9 +43,11 @@ public class EncounterRepository {
     }
 
     private final JdbcClient jdbc;
+    private final UuidV7Generator ids;
 
-    EncounterRepository(JdbcClient jdbc) {
+    EncounterRepository(JdbcClient jdbc, UuidV7Generator ids) {
         this.jdbc = jdbc;
+        this.ids = ids;
     }
 
     /** @return false when the appointment already has an encounter (the unique constraint decides) */
@@ -116,7 +119,7 @@ public class EncounterRepository {
             jdbc.sql("""
                     INSERT INTO hms.encounter_observation (id, organization_id, encounter_id, kind, value, unit,
                         recorded_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                    """).params(UUID.randomUUID(), org, encounterId, r.kind(), r.value(), r.unit(), by,
+                    """).params(ids.next(), org, encounterId, r.kind(), r.value(), r.unit(), by,
                     Timestamp.from(now)).update();
         }
     }
@@ -158,7 +161,7 @@ public class EncounterRepository {
             jdbc.sql("""
                     INSERT INTO hms.encounter_diagnosis (id, organization_id, encounter_id, code, description,
                         is_primary, position, recorded_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """).params(UUID.randomUUID(), org, encounterId, r.code(), r.description(), r.primary(),
+                    """).params(ids.next(), org, encounterId, r.code(), r.description(), r.primary(),
                     position++, by, Timestamp.from(now)).update();
         }
     }
