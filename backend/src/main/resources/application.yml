@@ -41,6 +41,8 @@ hms:
   billing:
     # [E7-4] Refunds above this amount wait for a different user with refund:approve (plan ruling R4).
     refund-approval-threshold: ${HMS_REFUND_APPROVAL_THRESHOLD:1000.00}
+    # [E7-7] Nightly reconciliation, 02:30 Asia/Kolkata; set to "-" to disable.
+    reconciliation-cron: ${HMS_RECONCILIATION_CRON:0 30 2 * * *}
 
 management:
   endpoints:

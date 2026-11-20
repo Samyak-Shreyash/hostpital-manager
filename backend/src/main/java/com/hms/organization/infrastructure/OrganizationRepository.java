@@ -40,6 +40,11 @@ public class OrganizationRepository {
                 .optional();
     }
 
+    public java.util.List<UUID> activeIds() {
+        return jdbc.sql("SELECT id FROM hms.organization WHERE status = 'ACTIVE' ORDER BY id")
+                .query(UUID.class).list();
+    }
+
     public boolean anyExists() {
         return jdbc.sql("SELECT EXISTS (SELECT 1 FROM hms.organization)").query(Boolean.class).single();
     }

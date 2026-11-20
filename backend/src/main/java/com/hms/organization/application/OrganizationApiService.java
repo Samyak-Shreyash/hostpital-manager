@@ -49,6 +49,12 @@ class OrganizationApiService implements OrganizationDirectory, OrganizationProvi
 
     @Override
     @Transactional(readOnly = true)
+    public java.util.List<UUID> activeOrganizationIds() {
+        return organizations.activeIds();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public DuplicateThresholds duplicateThresholds(UUID organizationId) {
         return organizations.find(organizationId)
                 .map(r -> new DuplicateThresholds(r.duplicateDobThreshold(), r.duplicatePhoneThreshold()))
