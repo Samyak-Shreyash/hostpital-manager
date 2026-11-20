@@ -17,7 +17,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 /**
- * V21 (owner decisions 2026-11-14) backfills organizations that existed before it: a fresh database is migrated
+ * V21 (owner decisions 2026-11-14) and V30 ([E7-8]) backfill organizations that existed before it: a fresh database is migrated
  * to V20, an organization with the pre-V21 built-in roles and a custom role is inserted, then V21 runs.
  */
 class RoleTemplateBackfillMigrationIT extends PostgresIT {
@@ -49,6 +49,8 @@ class RoleTemplateBackfillMigrationIT extends PostgresIT {
             role(owner, "NURSE", "patient:read", "observation:write");
             role(owner, "RECEPTIONIST", "patient:read", "patient:create", "patient:update",
                     "patient:update-clinical", "patient:update-identity", "patient:override-duplicate");
+            role(owner, "ACCOUNTANT", "invoice:read", "invoice:update");
+            role(owner, "CUSTOM_BILLING", "invoice:read", "invoice:update");
             role(owner, "CUSTOM_DESK", "patient:read", "patient:update-clinical", "patient:update-identity");
             owner.commit();
         }
@@ -126,6 +128,14 @@ class RoleTemplateBackfillMigrationIT extends PostgresIT {
     void receptionistLosesIdentityAndClinicalEdits() throws SQLException {
         assertThat(permissions("RECEPTIONIST")).containsExactlyInAnyOrder(
                 "patient:read", "patient:create", "patient:update", "patient:override-duplicate");
+    }
+
+    @Test
+    void accountantGainsInvoiceDiscountButCustomBillingRolesDoNot() throws SQLException {
+        // V30 ([E7-8]) grants invoice:discount to the built-in ACCOUNTANT only.
+        assertThat(permissions("ACCOUNTANT")).containsExactlyInAnyOrder(
+                "invoice:read", "invoice:update", "invoice:discount");
+        assertThat(permissions("CUSTOM_BILLING")).containsExactlyInAnyOrder("invoice:read", "invoice:update");
     }
 
     @Test

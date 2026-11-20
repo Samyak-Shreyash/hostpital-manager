@@ -27,6 +27,7 @@ import com.hms.shared.domain.NotFoundException;
 import com.hms.shared.id.UuidV7Generator;
 import com.hms.shared.tenancy.OrganizationPrincipal;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -44,7 +45,8 @@ import org.springframework.transaction.annotation.Transactional;
  * created for an encounter of the patient; its items are replaced as a whole while DRAFT. A catalog item is priced
  * from {@link ServicePriceLookup} at the moment of the change and the price is copied onto the line, so a later
  * catalog price never alters the draft. A price that differs from the catalog, or a line without a catalog service,
- * needs {@code invoice:price-override}. Totals are sums of the rounded lines ({@link InvoiceCalculator}). Every write
+ * needs {@code invoice:price-override}. A line discount needs {@code invoice:discount} and a reason ([E7-8]); an
+ * invoice-level percent discount is distributed half-up to the lines. Totals are sums of the rounded lines ({@link InvoiceCalculator}). Every write
  * locks the invoice row and decides on the locked state and version. Audit records field names only.
  */
 @Service
@@ -56,6 +58,9 @@ public class InvoiceService implements InvoiceBalancePort {
     private static final BigDecimal MIN_QUANTITY = new BigDecimal("0.01");
     private static final BigDecimal MAX_QUANTITY = new BigDecimal("9999");
     private static final BigDecimal MAX_TAX_RATE = new BigDecimal("100");
+    private static final BigDecimal HUNDRED = new BigDecimal("100");
+    /** The largest amount a NUMERIC(14,2) column holds; each line total and the invoice total stay within it. */
+    static final BigDecimal MAX_AMOUNT = new BigDecimal("999999999999.99");
 
     /** One requested line. Quantity and tax rate are decimal strings; money is a {@link Money} decimal string. */
     public record ItemInput(UUID serviceId, String description, String quantity, Money unitPrice, Money discount,
@@ -144,19 +149,69 @@ public class InvoiceService implements InvoiceBalancePort {
     /** Replaces the items of a DRAFT and recomputes its totals. */
     @Transactional
     public InvoiceView replaceItems(OrganizationPrincipal actor, UUID id, Long version, List<ItemInput> inputs,
-            boolean mayOverridePrice) {
+            boolean mayOverridePrice, boolean mayDiscount) {
         UUID org = actor.organizationId();
         requireVersion(version);
         InvoiceRow row = repository.lock(org, id).orElseThrow(InvoiceService::notFound);
         requireDraft(row);
         Instant now = clock.instant();
-        List<InvoiceLine> lines = lines(org, inputs, now, mayOverridePrice);
+        List<InvoiceLine> lines = lines(org, inputs, now, mayOverridePrice, mayDiscount);
         requireCurrent(row, version);
         repository.replaceItems(org, id, lines, InvoiceCalculator.totals(lines.stream().map(InvoiceLine::totals)
                 .toList()), now);
         audit.record(new AuditEntry(org, actor.userId(), "INVOICE_ITEMS_UPDATED", ENTITY, id, AuditOutcome.SUCCESS,
                 List.of("items", "subtotal", "discountTotal", "taxTotal", "total")));
+        if (lines.stream().anyMatch(l -> positive(l.discount()))) {
+            auditDiscount(org, actor, id);
+        }
         return view(org, repository.find(org, id).orElseThrow(), true);
+    }
+
+    /**
+     * Invoice-level discount of {@code percent} (0 to 100) on a DRAFT: every line gets
+     * {@code round_half_up(gross x percent / 100)} and the reason, then is recalculated. Replaces line discounts.
+     */
+    @Transactional
+    public InvoiceView applyPercentDiscount(OrganizationPrincipal actor, UUID id, Long version, String percentText,
+            String reasonText) {
+        UUID org = actor.organizationId();
+        requireVersion(version);
+        InvoiceRow row = repository.lock(org, id).orElseThrow(InvoiceService::notFound);
+        requireDraft(row);
+        List<Map<String, String>> errors = new ArrayList<>();
+        BigDecimal percent = decimal(percentText, "percent", true, BigDecimal.ZERO, HUNDRED, errors);
+        String reason = text(reasonText, "reason", errors);
+        if (reason == null) {
+            errors.add(error("reason", "REQUIRED", "reason is required."));
+        }
+        if (!errors.isEmpty()) {
+            throw fieldErrors(errors);
+        }
+        requireCurrent(row, version);
+        List<InvoiceLine> current = repository.items(org, id).stream().map(ItemRow::line).toList();
+        if (current.isEmpty()) {
+            throw new BusinessRuleException("BUSINESS_RULE_VIOLATION", "The invoice has no items to discount.");
+        }
+        List<InvoiceLine> lines = new ArrayList<>();
+        for (InvoiceLine l : current) {
+            Money discount = l.totals().gross().percentage(percent);
+            lines.add(InvoiceLine.of(l.serviceId(), l.description(), l.quantity(), l.unitPrice(), discount,
+                    positive(discount) ? reason : null, l.taxRate()));
+        }
+        repository.replaceItems(org, id, lines, InvoiceCalculator.totals(lines.stream().map(InvoiceLine::totals)
+                .toList()), clock.instant());
+        auditDiscount(org, actor, id);
+        return view(org, repository.find(org, id).orElseThrow(), true);
+    }
+
+    /** Field names only; the reason is free text and never goes to the audit trail. */
+    private void auditDiscount(UUID org, OrganizationPrincipal actor, UUID id) {
+        audit.record(new AuditEntry(org, actor.userId(), "INVOICE_DISCOUNT_APPLIED", ENTITY, id,
+                AuditOutcome.SUCCESS, List.of("items", "discountTotal", "taxTotal", "total")));
+    }
+
+    private static boolean positive(Money amount) {
+        return amount.compareTo(Money.ZERO) > 0;
     }
 
     /** DRAFT to DISCARDED (a draft created by mistake); the encounter can then be invoiced again. */
@@ -198,13 +253,16 @@ public class InvoiceService implements InvoiceBalancePort {
     // --- internals ---
 
     /** Validates and prices every line; field errors (422) first, then the price-override permission (403). */
-    private List<InvoiceLine> lines(UUID org, List<ItemInput> inputs, Instant now, boolean mayOverridePrice) {
+    private List<InvoiceLine> lines(UUID org, List<ItemInput> inputs, Instant now, boolean mayOverridePrice,
+            boolean mayDiscount) {
         if (inputs == null || inputs.isEmpty() || inputs.size() > MAX_ITEMS) {
             throw fieldErrors(List.of(error("items", "SIZE", "items needs 1 to " + MAX_ITEMS + " entries.")));
         }
         List<Map<String, String>> errors = new ArrayList<>();
+        List<Map<String, String>> tooLarge = new ArrayList<>();
         List<InvoiceLine> lines = new ArrayList<>();
         boolean overrides = false;
+        boolean discounts = false;
         for (int i = 0; i < inputs.size(); i++) {
             ItemInput in = inputs.get(i);
             String p = "items[" + i + "].";
@@ -251,21 +309,56 @@ public class InvoiceService implements InvoiceBalancePort {
                 errors.add(error(p + "discount", "RANGE", "discount must not be negative."));
             }
             String reason = text(in.discountReason(), p + "discountReason", errors);
+            if (positive(discount) && reason == null && errors.size() == before) {
+                errors.add(error(p + "discountReason", "REQUIRED", "A discount needs a reason."));
+            }
             if (errors.size() > before) {
                 continue;
             }
-            LineTotals check = InvoiceCalculator.line(quantity, unitPrice, Money.ZERO, taxRate);
-            if (discount.compareTo(check.gross()) > 0) {
-                errors.add(error(p + "discount", "RANGE", "discount must not exceed the line amount."));
+            // Check against NUMERIC(14,2) before any Money arithmetic: a larger amount is a field error, not a 500.
+            BigDecimal gross = unitPrice.amount().multiply(quantity).setScale(2, RoundingMode.HALF_UP);
+            if (gross.compareTo(MAX_AMOUNT) > 0) {
+                errors.add(error(p + "unitPrice", "RANGE",
+                        "unitPrice x quantity must not exceed " + MAX_AMOUNT.toPlainString() + "."));
                 continue;
             }
-            lines.add(InvoiceLine.of(in.serviceId(), description, quantity, unitPrice, discount, reason, taxRate));
+            if (discount.amount().compareTo(gross) > 0) {
+                tooLarge.add(error(p + "discount", "RANGE", "discount must not exceed the line amount."));
+                continue;
+            }
+            BigDecimal taxable = gross.subtract(discount.amount());
+            BigDecimal lineTotal = taxable.add(taxable.multiply(taxRate).divide(HUNDRED, 2, RoundingMode.HALF_UP));
+            if (lineTotal.compareTo(MAX_AMOUNT) > 0) {
+                errors.add(error(p + "unitPrice", "RANGE",
+                        "The line total including tax must not exceed " + MAX_AMOUNT.toPlainString() + "."));
+                continue;
+            }
+            discounts |= positive(discount);
+            lines.add(InvoiceLine.of(in.serviceId(), description, quantity, unitPrice, discount,
+                    positive(discount) ? reason : null, taxRate));
+        }
+        if (errors.isEmpty() && tooLarge.isEmpty()) {
+            BigDecimal subtotal = lines.stream().map(l -> l.totals().gross().amount()).reduce(BigDecimal.ZERO,
+                    BigDecimal::add);
+            BigDecimal total = lines.stream().map(l -> l.totals().total().amount()).reduce(BigDecimal.ZERO,
+                    BigDecimal::add);
+            if (subtotal.compareTo(MAX_AMOUNT) > 0 || total.compareTo(MAX_AMOUNT) > 0) {
+                errors.add(error("items", "RANGE",
+                        "The invoice amount must not exceed " + MAX_AMOUNT.toPlainString() + "."));
+            }
         }
         if (!errors.isEmpty()) {
             throw fieldErrors(errors);
         }
+        if (!tooLarge.isEmpty()) {
+            throw new BusinessRuleException("BUSINESS_RULE_VIOLATION", "A discount exceeds its line amount.",
+                    Map.of("errors", tooLarge));
+        }
         if (overrides && !mayOverridePrice) {
             throw new AccessDeniedException("A price other than the catalog price needs invoice:price-override.");
+        }
+        if (discounts && !mayDiscount) {
+            throw new AccessDeniedException("A discount needs invoice:discount.");
         }
         return lines;
     }

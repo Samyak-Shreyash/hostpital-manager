@@ -69,6 +69,13 @@ class DefaultRoleTemplatesTest {
     }
 
     @Test
+    void everyTemplateThatUpdatesInvoicesMayAlsoDiscount() {
+        assertThat(roles.get("ACCOUNTANT")).contains(Permissions.INVOICE_UPDATE, Permissions.INVOICE_DISCOUNT);
+        assertThat(roles.entrySet()).filteredOn(e -> e.getValue().contains(Permissions.INVOICE_UPDATE))
+                .allSatisfy(e -> assertThat(e.getValue()).contains(Permissions.INVOICE_DISCOUNT));
+    }
+
+    @Test
     void unknownCodesAndEmptyWildcardsAreRejected() {
         assertThatIllegalArgumentException().isThrownBy(() -> DefaultRoleTemplates.expand("patient:teleport"));
         assertThatIllegalArgumentException().isThrownBy(() -> DefaultRoleTemplates.expand("nothing:*"));

@@ -34,6 +34,9 @@ class InvoiceController {
     record ItemsRequest(Long version, List<ItemInput> items) {
     }
 
+    record DiscountRequest(Long version, String percent, String reason) {
+    }
+
     record VersionRequest(Long version) {
     }
 
@@ -71,7 +74,16 @@ class InvoiceController {
             @PathVariable UUID id, @RequestBody ItemsRequest request) {
         boolean mayOverride = authentication.getAuthorities().stream()
                 .anyMatch(a -> Permissions.INVOICE_PRICE_OVERRIDE.equals(a.getAuthority()));
-        return invoices.replaceItems(actor, id, request.version(), request.items(), mayOverride);
+        boolean mayDiscount = authentication.getAuthorities().stream()
+                .anyMatch(a -> Permissions.INVOICE_DISCOUNT.equals(a.getAuthority()));
+        return invoices.replaceItems(actor, id, request.version(), request.items(), mayOverride, mayDiscount);
+    }
+
+    @PutMapping("/{id}/discount")
+    @PreAuthorize("hasAuthority('invoice:discount')")
+    InvoiceView discount(@AuthenticationPrincipal OrganizationPrincipal actor, @PathVariable UUID id,
+            @RequestBody DiscountRequest request) {
+        return invoices.applyPercentDiscount(actor, id, request.version(), request.percent(), request.reason());
     }
 
     @PostMapping("/{id}/discard")

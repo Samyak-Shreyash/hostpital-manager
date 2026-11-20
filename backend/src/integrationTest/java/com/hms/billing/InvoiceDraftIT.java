@@ -83,7 +83,8 @@ class InvoiceDraftIT extends PostgresIT {
         org = fx.organization();
         fx.role(org, "CASHIER", "invoice:create", "invoice:read", "invoice:update", "catalog:manage",
                 "catalog:read");
-        fx.role(org, "BILLSUP", "invoice:create", "invoice:read", "invoice:update", "invoice:price-override");
+        fx.role(org, "BILLSUP", "invoice:create", "invoice:read", "invoice:update", "invoice:price-override",
+                "invoice:discount");
         fx.role(org, "BILLREAD", "invoice:read");
         cashier = fx.loggedIn(org, "cashier", "CASHIER");
         supervisor = fx.loggedIn(org, "supervisor", "BILLSUP");
@@ -130,7 +131,7 @@ class InvoiceDraftIT extends PostgresIT {
     @Test
     void itemsArePricedFromTheCatalogAndTotalsAreSumsOfRoundedLines() throws Exception {
         UUID id = newDraft();
-        putItems(cashier, id, 0, "{\"serviceId\":\"" + consultation + "\",\"quantity\":\"3\",\"taxRate\":\"18\"},"
+        putItems(supervisor, id, 0, "{\"serviceId\":\"" + consultation + "\",\"quantity\":\"3\",\"taxRate\":\"18\"},"
                 + "{\"serviceId\":\"" + consultation + "\",\"description\":\"Follow-up\",\"quantity\":\"0.5\","
                 + "\"discount\":\"1.00\",\"discountReason\":\"Synthetic goodwill\",\"taxRate\":\"0\"}")
                 .andExpect(status().isOk())
@@ -153,7 +154,8 @@ class InvoiceDraftIT extends PostgresIT {
         List<UUID> itemIds = fx.inOrg(org, () -> jdbc.sql("SELECT id FROM hms.invoice_item WHERE invoice_id = ?")
                 .param(id).query(UUID.class).list());
         assertThat(itemIds).hasSize(2).allSatisfy(i -> assertThat(i.version()).isEqualTo(7));
-        assertThat(fx.auditActions(id)).containsExactly("INVOICE_CREATED", "INVOICE_ITEMS_UPDATED");
+        assertThat(fx.auditActions(id)).containsExactly("INVOICE_CREATED", "INVOICE_ITEMS_UPDATED",
+                "INVOICE_DISCOUNT_APPLIED");
         // Replacing items replaces, it does not append.
         putItems(cashier, id, 1, "{\"serviceId\":\"" + consultation + "\",\"quantity\":\"1\"}")
                 .andExpect(status().isOk()).andExpect(jsonPath("$.items", hasSize(1)))
@@ -205,7 +207,8 @@ class InvoiceDraftIT extends PostgresIT {
         putItems(cashier, id, 0, "{\"serviceId\":\"" + consultation + "\",\"quantity\":\"1\",\"taxRate\":\"100.01\"}")
                 .andExpect(status().isUnprocessableContent())
                 .andExpect(jsonPath("$.errors[0].field", is("items[0].taxRate")));
-        putItems(cashier, id, 0, "{\"serviceId\":\"" + consultation + "\",\"quantity\":\"1\",\"discount\":\"33.34\"}")
+        putItems(cashier, id, 0, "{\"serviceId\":\"" + consultation + "\",\"quantity\":\"1\",\"discount\":\"33.34\","
+                + "\"discountReason\":\"Synthetic goodwill\"}")
                 .andExpect(status().isUnprocessableContent())
                 .andExpect(jsonPath("$.errors[0].field", is("items[0].discount")));
         putItems(cashier, id, 0, "{\"serviceId\":\"" + UUID.randomUUID() + "\",\"quantity\":\"1\"}")
