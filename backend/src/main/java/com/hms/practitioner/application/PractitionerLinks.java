@@ -22,4 +22,11 @@ class PractitionerLinks implements PractitionerDirectory {
     public Optional<UUID> activePractitionerOfUser(UUID organizationId, UUID userId) {
         return repository.findActiveIdByUser(organizationId, userId);
     }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<PractitionerBrief> brief(UUID organizationId, UUID practitionerId) {
+        return repository.find(organizationId, practitionerId).map(r -> new PractitionerBrief(r.fullName(),
+                r.registrationNo(), r.registrationCouncil()));
+    }
 }

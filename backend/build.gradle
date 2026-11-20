@@ -27,6 +27,7 @@ dependencies {
     implementation libs.spring.boot.starter.session.jdbc // server-side sessions in PostgreSQL (ADR-0005, [E1-3])
     implementation libs.flyway.postgresql
     implementation libs.springdoc.openapi
+    implementation libs.openpdf // PDF generation (ADR-0017, [E6-4])
     runtimeOnly libs.postgresql
     runtimeOnly libs.micrometer.registry.prometheus // /actuator/prometheus scrape endpoint (ADR-0014, [E0-7])
 
@@ -75,6 +76,7 @@ testing {
                 implementation sourceSets.seed.output
                 implementation libs.spring.boot.starter.test
                 implementation libs.spring.boot.starter.webmvc.test
+                implementation libs.openpdf // text extraction in the PDF integration tests
                 implementation libs.spring.boot.testcontainers
                 implementation libs.testcontainers.postgresql
                 implementation libs.testcontainers.junit

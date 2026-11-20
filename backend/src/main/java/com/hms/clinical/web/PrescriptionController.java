@@ -7,7 +7,11 @@ import com.hms.identity.api.Permissions;
 import com.hms.shared.tenancy.OrganizationPrincipal;
 import java.util.List;
 import java.util.UUID;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -20,7 +24,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
-/** Prescriptions (api-design.md section 9). [E6-3]: draft, replace items, issue, revise, read. */
+/** Prescriptions (api-design.md section 9). [E6-3]: draft, replace items, issue, revise, read; [E6-5]: PDF. */
 @RestController
 @RequestMapping("/api/v1")
 class PrescriptionController {
@@ -74,6 +78,16 @@ class PrescriptionController {
     @PreAuthorize("hasAuthority('prescription:read')")
     PrescriptionView get(@AuthenticationPrincipal OrganizationPrincipal actor, @PathVariable UUID id) {
         return prescriptions.get(actor, id);
+    }
+
+    @GetMapping("/prescriptions/{id}/pdf")
+    @PreAuthorize("hasAuthority('prescription:read')")
+    ResponseEntity<byte[]> pdf(@AuthenticationPrincipal OrganizationPrincipal actor, @PathVariable UUID id) {
+        PrescriptionService.PdfFile file = prescriptions.pdf(actor, id);
+        return ResponseEntity.ok().contentType(MediaType.APPLICATION_PDF)
+                .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.inline().filename(file.filename()).build()
+                        .toString())
+                .body(file.bytes());
     }
 
     private static boolean mayEditAny(Authentication authentication) {

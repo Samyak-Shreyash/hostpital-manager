@@ -269,7 +269,7 @@ PUT /prescriptions/{id}
 ```
 Rules: ≥1 item; drugName, dose, frequency, durationDays (1–365) mandatory; allergy match produces `allergyWarnings` (non-blocking; issuing requires `acknowledgeAllergyWarnings=true`).
 
-**Implemented `[E6-3]`: prescriptions with allergy warnings.** (`GET /prescriptions/{id}/pdf` is not part of this issue.)
+**Implemented `[E6-3]`: prescriptions with allergy warnings.** (`GET /prescriptions/{id}/pdf` follows in `[E6-5]`, below.)
 - `POST /encounters/{id}/prescriptions` (`prescription:create`): `201` with an empty `DRAFT` (`versionNo` 1, `version` 0). Allowed on an `OPEN` or a `FINALIZED` encounter. An encounter has at most one live (DRAFT or ISSUED) prescription: a second one is `409 INVALID_STATE_TRANSITION` (revise instead). Audit `PRESCRIPTION_CREATED`.
 - `PUT /prescriptions/{id}` `{version, items}` (`prescription:create`): replaces the whole item list of a DRAFT, `200`, `version` bumped. Order of checks: `422` (no version), `404`, `403`, `409 INVALID_STATE_TRANSITION` (not a DRAFT), `422 VALIDATION_ERROR` with `errors:[{field,code,message}]` (BR-C3: `drugName`, `dose`, `frequency`, `durationDays` 1-365 required; 1-50 items; field names like `items[0].dose`; the message never echoes the text), `409 CONCURRENT_MODIFICATION`. Audit `PRESCRIPTION_ITEMS_UPDATED` (field `items`).
 - `POST /prescriptions/{id}/issue` `{version, acknowledgeAllergyWarnings?}` (`prescription:issue`): DRAFT to ISSUED (`issuedAt`, `issuedBy`). No items is `422 VALIDATION_ERROR`; with allergy warnings and without `acknowledgeAllergyWarnings:true`, `422 ALLERGY_NOT_ACKNOWLEDGED`. A non-DRAFT is `409 INVALID_STATE_TRANSITION`. Audit `PRESCRIPTION_ISSUED` (`status`, `issuedAt`, `issuedBy`, plus `acknowledgeAllergyWarnings` when warnings existed).
@@ -278,6 +278,10 @@ Rules: ≥1 item; drugName, dose, frequency, durationDays (1–365) mandatory; a
 - Write rule (as encounters): the treating practitioner of the encounter, or a holder of `encounter:update-any`; others get `403`. Unknown or other-org ids are `404`.
 - Allergy warnings (`PUT`, `GET`, `issue`): the patient's active allergies (entries entered in error excluded) come from `patient.api.PatientAllergies.activeAllergies`; a warning is `{substance, severity}`, raised when the lower-cased `drugName` and the substance contain one another; one per substance, in recording order. Never audited.
 - Database: V28 refuses changes to an issued prescription and its items (SQLSTATE `HM003`, mapped to `409 INVALID_STATE_TRANSITION`); see `database-design.md` section 20i.
+
+**Implemented `[E6-5]`: prescription PDF.** (library: ADR-0017, OpenPDF)
+- `GET /prescriptions/{id}/pdf` (`prescription:read`): `200 application/pdf` (`Content-Disposition: inline`, file name `prescription-<UHID>-v<versionNo>.pdf`). Only an `ISSUED` or `SUPERSEDED` prescription is printable; a `DRAFT` is `409 INVALID_STATE_TRANSITION`; unknown or other-org id `404`. Content: organization name and address, patient name and UHID, doctor name and registration no. (council in brackets), issue date (organization time zone), one row per item, and the text `SUPERSEDED` as a diagonal watermark on a superseded one. Internal ids are never printed; the data comes through the `organization`, `patient` and `practitioner` api ports.
+- Audit `PRESCRIPTION_PDF_GENERATED` (fields `status`, `versionNo`), same transaction; no clinical values.
 
 ## 10. Wards, beds, bed assignments
 | Method & path | Permission |

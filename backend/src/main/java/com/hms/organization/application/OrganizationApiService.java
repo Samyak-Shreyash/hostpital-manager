@@ -44,7 +44,7 @@ class OrganizationApiService implements OrganizationDirectory, OrganizationProvi
     @Transactional(readOnly = true)
     public Optional<OrganizationSummary> find(UUID organizationId) {
         return organizations.find(organizationId)
-                .map(r -> new OrganizationSummary(r.id(), r.name(), r.timezone()));
+                .map(r -> new OrganizationSummary(r.id(), r.name(), r.timezone(), r.address()));
     }
 
     @Override
