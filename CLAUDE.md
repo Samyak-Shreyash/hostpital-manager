@@ -68,7 +68,7 @@ Code + automated tests passing in CI · audit coverage where sensitive · Flyway
 Concurrent bed allocation · duplicate patient registration · appointment conflicts · concurrent payments · invoice calculation accuracy · unauthorized patient access · cross-organization access (every endpoint returns 404 for another org's ids).
 
 ## 8. Layout & commands
-> Scaffolded by `[E0-1]`; Compose dev stack by `[E0-3]`. `e2e/` has a mocked-API Playwright smoke (`npm run test:e2e`, see `e2e/README.md`); perf tooling does not exist yet.
+> Scaffolded by `[E0-1]`; Compose dev stack by `[E0-3]`. `e2e/` has mocked-API Playwright specs (`npm run test:e2e`) and a real-stack M3 OPD journey (`npm run test:e2e:real-stack`, CI job `e2e-real-stack`; see `e2e/README.md`); perf tooling does not exist yet.
 
 ```
 backend/   Gradle (single project, modules as packages), src/{main,test,integrationTest,architectureTest}
