@@ -115,6 +115,7 @@ jobs:
   # [E7-M3] Full OPD journey in a browser against the real Compose stack (no mocks). Not in the required checks list yet.
   e2e-real-stack:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     env:
       COMPOSE: docker compose -f infra/compose/compose.yml --env-file .env
     steps:
@@ -139,6 +140,7 @@ jobs:
               -e 's|^# HMS_BOOTSTRAP_ADMIN_PASSWORD_FILE=.*|HMS_BOOTSTRAP_ADMIN_PASSWORD_FILE=/var/lib/hms/bootstrap/admin-password.txt|' \
               .env.example > .env
           if grep -E '^[A-Z_]+=$' .env; then echo "unset variables above: add them to this step"; exit 1; fi
+          grep -q '^HMS_BOOTSTRAP_ADMIN_EMAIL=' .env || { echo "bootstrap admin email not set: .env.example changed"; exit 1; }
       - name: Create database volume
         run: docker volume create "$(grep -E '^HMS_DB_VOLUME=' .env | cut -d= -f2-)"
       - name: Start stack and wait for healthchecks
@@ -173,7 +175,7 @@ jobs:
       - if: failure()
         run: $COMPOSE logs --tail 200
       - if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: e2e-real-stack-traces
           path: e2e/test-results
