@@ -1,1 +1,11 @@
+// Plugins resolve from the Gradle Plugin Portal plus Maven Central directly: the Spring Boot plugin's own dependencies
+// (spring-boot-loader-tools, commons-compress) live on Maven Central, and relying on the portal to relay them has
+// failed in clean Docker builds that have no Gradle cache.
+pluginManagement {
+    repositories {
+        gradlePluginPortal()
+        mavenCentral()
+    }
+}
+
 rootProject.name = 'hms-backend'
