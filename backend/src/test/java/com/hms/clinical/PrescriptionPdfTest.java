@@ -5,8 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.hms.clinical.application.PrescriptionPdf;
 import com.hms.clinical.application.PrescriptionPdf.Content;
 import com.hms.clinical.application.PrescriptionPdf.Line;
-import com.lowagie.text.pdf.PdfReader;
-import com.lowagie.text.pdf.parser.PdfTextExtractor;
+import com.hms.support.PdfText;
 import java.util.List;
 import java.util.regex.Pattern;
 import org.junit.jupiter.api.Test;
@@ -24,25 +23,11 @@ class PrescriptionPdfTest {
                         new Line("Ibuprofen", null, null, null, "2", "BD", 5, null)));
     }
 
-    private static String text(byte[] pdf) throws Exception {
-        PdfReader reader = new PdfReader(pdf);
-        try {
-            PdfTextExtractor extractor = new PdfTextExtractor(reader);
-            StringBuilder all = new StringBuilder();
-            for (int page = 1; page <= reader.getNumberOfPages(); page++) {
-                all.append(extractor.getTextFromPage(page)).append('\n');
-            }
-            return all.toString();
-        } finally {
-            reader.close();
-        }
-    }
-
     @Test
     void issuedPdfCarriesFixtureLinesAndNoUuid() throws Exception {
         byte[] pdf = PrescriptionPdf.render(content(false));
         assertThat(new String(pdf, 0, 5, java.nio.charset.StandardCharsets.ISO_8859_1)).isEqualTo("%PDF-");
-        String text = text(pdf);
+        String text = PdfText.of(pdf);
         assertThat(text).contains("Synthetic Care Clinic", "1 Test Road, Sampletown 560001", "Prescription",
                 "Asha Testpatient", "HMS-000042", "Dr Rohan Sampledoctor", "KMC-12345", "20 Nov 2026",
                 "Paracetamol", "500 mg", "Tablet", "Oral", "TID", "After food", "Ibuprofen", "BD");
@@ -52,6 +37,6 @@ class PrescriptionPdfTest {
 
     @Test
     void supersededPdfShowsWatermarkText() throws Exception {
-        assertThat(text(PrescriptionPdf.render(content(true)))).contains("SUPERSEDED", "Paracetamol");
+        assertThat(PdfText.of(PrescriptionPdf.render(content(true)))).contains("SUPERSEDED", "Paracetamol");
     }
 }

@@ -9,6 +9,9 @@ import com.hms.shared.tenancy.OrganizationPrincipal;
 import com.hms.shared.web.idempotency.IdempotencyService;
 import java.time.Instant;
 import java.util.UUID;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -43,6 +46,17 @@ class PaymentController {
                 request.mode(), request.referenceNo(), idempotencyKey,
                 PaymentService.createRequestHash(id, request.amount(), request.mode(), request.referenceNo()));
         return ResponseEntity.status(result.status()).body(result.body());
+    }
+
+    /** [E7-5] The receipt PDF of a payment. */
+    @GetMapping(value = "/api/v1/payments/{id}/receipt", produces = MediaType.APPLICATION_PDF_VALUE)
+    @PreAuthorize("hasAuthority('payment:read')")
+    ResponseEntity<byte[]> receipt(@AuthenticationPrincipal OrganizationPrincipal actor, @PathVariable UUID id) {
+        PaymentService.ReceiptFile file = payments.receipt(actor, id);
+        return ResponseEntity.ok().contentType(MediaType.APPLICATION_PDF)
+                .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.inline().filename(file.filename())
+                        .build().toString())
+                .body(file.bytes());
     }
 
     @GetMapping("/api/v1/payments")

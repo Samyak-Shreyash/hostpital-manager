@@ -47,6 +47,11 @@ public final class InvoiceFlowFixture {
     }
 
     public UUID draftWithItem(String amount) throws Exception {
+        return draftWithItem(amount, "0");
+    }
+
+    /** A DRAFT with one catalog-free line of {@code amount} taxed at {@code taxRate} percent. */
+    public UUID draftWithItem(String amount, String taxRate) throws Exception {
         UUID encounter = insertEncounter();
         String body = mockMvc.perform(biller.apply(post(INVOICES)).contentType(JSON).content(
                 "{\"type\":\"OPD\",\"patientId\":\"" + patient + "\",\"encounterId\":\"" + encounter + "\"}"))
@@ -54,7 +59,7 @@ public final class InvoiceFlowFixture {
         UUID id = UUID.fromString(JsonPath.read(body, "$.id"));
         mockMvc.perform(biller.apply(put(INVOICES + "/" + id + "/items")).contentType(JSON)
                 .content("{\"version\":0,\"items\":[{\"description\":\"Synthetic charge\",\"quantity\":\"1\","
-                        + "\"unitPrice\":\"" + amount + "\",\"taxRate\":\"0\"}]}"))
+                        + "\"unitPrice\":\"" + amount + "\",\"taxRate\":\"" + taxRate + "\"}]}"))
                 .andExpect(status().isOk());
         return id;
     }

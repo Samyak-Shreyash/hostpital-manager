@@ -2,6 +2,7 @@ package com.hms.clinical.application;
 
 import com.hms.shared.pdf.PdfDocumentBuilder;
 import com.hms.shared.pdf.PdfDocumentBuilder.KeyValue;
+import com.hms.shared.pdf.PdfDocumentBuilder.Options;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -25,11 +26,8 @@ public final class PrescriptionPdf {
     }
 
     public static byte[] render(Content c) {
-        PdfDocumentBuilder pdf = new PdfDocumentBuilder("Prescription")
-                .footer("Computer-generated prescription");
-        if (c.superseded()) {
-            pdf.watermark("SUPERSEDED"); // before any content so that every page carries it
-        }
+        PdfDocumentBuilder pdf = new PdfDocumentBuilder("Prescription",
+                new Options(c.superseded() ? "SUPERSEDED" : null, "Computer-generated prescription"));
         pdf.header(c.organizationName(), c.organizationAddress())
                 .heading("Prescription")
                 .keyValues(List.of(new KeyValue("Patient", c.patientName()), new KeyValue("UHID", c.uhid()),

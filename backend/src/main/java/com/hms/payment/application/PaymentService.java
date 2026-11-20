@@ -4,9 +4,12 @@ import com.hms.audit.api.AuditEntry;
 import com.hms.audit.api.AuditOutcome;
 import com.hms.audit.api.AuditRecorder;
 import com.hms.billing.api.InvoiceBalancePort;
+import com.hms.billing.api.InvoiceLookup;
 import com.hms.billing.api.InvoiceBalancePort.InvoiceBalance;
 import com.hms.organization.api.OrganizationDirectory;
 import com.hms.organization.api.OrganizationSummary;
+import com.hms.patient.api.PatientDirectory;
+import com.hms.patient.api.PatientDirectory.PatientBrief;
 import com.hms.payment.domain.Payment;
 import com.hms.payment.infrastructure.PaymentRepository;
 import com.hms.payment.infrastructure.PaymentRepository.ListFilter;
@@ -15,6 +18,7 @@ import com.hms.shared.PageResult;
 import com.hms.shared.domain.BusinessRuleException;
 import com.hms.shared.domain.ConflictException;
 import com.hms.shared.domain.Money;
+import com.hms.shared.domain.NotFoundException;
 import com.hms.shared.id.UuidV7Generator;
 import com.hms.shared.numbering.DocumentNumberAllocator;
 import com.hms.shared.numbering.FinancialYear;
@@ -24,6 +28,7 @@ import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -57,10 +62,15 @@ public class PaymentService {
     private final AuditRecorder audit;
     private final UuidV7Generator ids;
     private final Clock clock;
+    private final InvoiceLookup invoiceLookup;
+    private final PatientDirectory patients;
 
     public PaymentService(PaymentRepository repository, InvoiceBalancePort invoices,
             OrganizationDirectory organizations, DocumentNumberAllocator numbers, IdempotencyService idempotency,
-            AuditRecorder audit, UuidV7Generator ids, Clock clock) {
+            AuditRecorder audit, UuidV7Generator ids, Clock clock, InvoiceLookup invoiceLookup,
+            PatientDirectory patients) {
+        this.invoiceLookup = invoiceLookup;
+        this.patients = patients;
         this.repository = repository;
         this.invoices = invoices;
         this.organizations = organizations;
@@ -138,6 +148,39 @@ public class PaymentService {
         List<PaymentView> items = repository.list(org, filter, size, (long) page * size).stream()
                 .map(PaymentView::of).toList();
         return new PageResult<>(items, page, size, repository.count(org, filter));
+    }
+
+    /** A printable receipt: its bytes and a business-key based file name. */
+    public record ReceiptFile(byte[] bytes, String filename) {
+    }
+
+    /**
+     * The receipt PDF of a payment ([E7-5]); unknown or other-organization ids are 404. Audited, field names only.
+     * The invoice number comes from billing.api; patient name and UHID from patient.api.
+     */
+    @Transactional
+    public ReceiptFile receipt(OrganizationPrincipal actor, UUID id) {
+        UUID org = actor.organizationId();
+        PaymentRow payment = repository.find(org, id).orElseThrow(PaymentService::receiptNotFound);
+        InvoiceLookup.InvoiceRef invoice = invoiceLookup.find(org, payment.invoiceId())
+                .orElseThrow(PaymentService::receiptNotFound);
+        OrganizationSummary organization = organizations.find(org).orElseThrow(PaymentService::receiptNotFound);
+        PatientBrief patient = patients.briefs(org, List.of(invoice.patientId())).get(invoice.patientId());
+        if (patient == null) {
+            throw receiptNotFound();
+        }
+        String date = DateTimeFormatter.ofPattern("dd MMM yyyy").withZone(ZoneId.of(organization.timezone()))
+                .format(payment.receivedAt());
+        byte[] bytes = ReceiptPdf.render(new ReceiptPdf.Content(organization.name(), organization.address(),
+                payment.receiptNo(), invoice.invoiceNo(), date, patient.name(), patient.uhid(),
+                payment.amount().toString(), payment.mode(), payment.referenceNo()));
+        audit.record(new AuditEntry(org, actor.userId(), "RECEIPT_PDF_GENERATED", ENTITY, id, AuditOutcome.SUCCESS,
+                List.of("receiptNo", "invoiceId")));
+        return new ReceiptFile(bytes, "receipt-" + payment.receiptNo().replace('/', '-') + ".pdf");
+    }
+
+    private static NotFoundException receiptNotFound() {
+        return new NotFoundException("Payment not found.");
     }
 
     private static void validate(Money amount, String mode, String referenceNo) {

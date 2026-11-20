@@ -21,7 +21,7 @@ import java.util.List;
 
 /**
  * A small A4 document helper (ADR-0017): header with organization name and address, headings, a key-value block,
- * a table, an optional diagonal watermark and a footer with page numbers. Fonts are the built-in Helvetica family
+ * a table, an optional diagonal watermark and a footer with page numbers (both given up front as {@link Options}). Fonts are the built-in Helvetica family
  * (Latin text only). Callers pass already-formatted strings; never put internal ids or secrets into a document.
  */
 public final class PdfDocumentBuilder {
@@ -41,10 +41,28 @@ public final class PdfDocumentBuilder {
     private final ByteArrayOutputStream out = new ByteArrayOutputStream();
     private final Document document = new Document(PageSize.A4, 40, 40, 40, 50);
     private final PdfWriter writer;
-    private String watermark;
-    private String footer = "";
+    private final String watermark;
+    private final String footer;
+
+    /**
+     * Page decorations, fixed when the document is created: the page events run as each page ends, so a value set
+     * after content has started would silently be missing from page 1 (hence no setters).
+     *
+     * @param watermark large diagonal text on every page, under the content; null for none
+     * @param footer    text before the page number; null or empty for the page number alone
+     */
+    public record Options(String watermark, String footer) {
+
+        public static final Options NONE = new Options(null, null);
+    }
 
     public PdfDocumentBuilder(String title) {
+        this(title, Options.NONE);
+    }
+
+    public PdfDocumentBuilder(String title, Options options) {
+        this.watermark = options.watermark();
+        this.footer = options.footer() == null ? "" : options.footer();
         try {
             writer = PdfWriter.getInstance(document, out);
         } catch (DocumentException e) {
@@ -118,17 +136,6 @@ public final class PdfDocumentBuilder {
         return this;
     }
 
-    /** Large diagonal text on every page, under the content. */
-    public PdfDocumentBuilder watermark(String text) {
-        this.watermark = text;
-        return this;
-    }
-
-    public PdfDocumentBuilder footer(String text) {
-        this.footer = text == null ? "" : text;
-        return this;
-    }
-
     public byte[] build() {
         document.close();
         return out.toByteArray();
@@ -162,7 +169,7 @@ public final class PdfDocumentBuilder {
         }
     }
 
-    /** Watermark and footer; the watermark text is fixed when the first page ends (set it before adding content). */
+    /** Watermark and footer, drawn as each page ends. */
     private final class PageDecorations extends PdfPageEventHelper {
         @Override
         public void onEndPage(PdfWriter w, Document d) {

@@ -281,6 +281,11 @@ class OrganizationIsolationIT extends PostgresIT {
             Map.entry("POST /api/v1/invoices/{id}/credit-notes", new CrossOrgCase(org -> post(
                     "/api/v1/invoices/{id}/credit-notes", org.creditInvoiceId()).contentType(MediaType.APPLICATION_JSON)
                     .content("{\"amount\":\"1.00\",\"reason\":\"Synthetic\"}"))),
+            // [E7-5] Invoice PDF of the ISSUED payment fixture; receipt of the refund fixture's payment.
+            Map.entry("GET /api/v1/invoices/{id}/pdf",
+                    new CrossOrgCase(org -> get("/api/v1/invoices/{id}/pdf", org.payInvoiceId()))),
+            Map.entry("GET /api/v1/payments/{id}/receipt",
+                    new CrossOrgCase(org -> get("/api/v1/payments/{id}/receipt", org.refundPaymentId()))),
             Map.entry("GET /api/v1/queue", new CrossOrgCase(org -> get("/api/v1/queue")
                     .param("doctorId", org.practitionerId().toString()))),
             Map.entry("GET /api/v1/doctors/{id}",
