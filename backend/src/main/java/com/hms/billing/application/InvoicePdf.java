@@ -3,6 +3,8 @@ package com.hms.billing.application;
 import com.hms.shared.pdf.PdfDocumentBuilder;
 import com.hms.shared.pdf.PdfDocumentBuilder.KeyValue;
 import com.hms.shared.pdf.PdfDocumentBuilder.Options;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -45,12 +47,25 @@ public final class InvoicePdf {
         pdf.table(List.of("#", "Description", "Qty", "Unit price", "Discount", "Tax", "Total"), rows,
                 new float[] {0.5f, 3.5f, 0.8f, 1.4f, 1.2f, 1.2f, 1.4f});
         pdf.heading("Summary")
-                .table(List.of("Item", "Amount"),
-                        List.of(List.of("Subtotal", c.subtotal()), List.of("Discount", c.discountTotal()),
-                                List.of("Tax", c.taxTotal()), List.of("Total", c.total()),
-                                List.of("Credit notes", c.credited()), List.of("Paid", c.paid()),
-                                List.of("Refunded", c.refunded()), List.of("Outstanding", c.outstanding())),
-                        new float[] {3f, 1.5f});
+                .table(List.of("Item", "Amount"), summaryRows(c), new float[] {3f, 1.5f});
         return pdf.build();
+    }
+
+    /**
+     * The summary table. Outstanding is never printed below 0.00: an over-settled invoice (raw outstanding negative)
+     * prints Outstanding 0.00 plus a separate "Credit balance" line with the absolute amount.
+     */
+    static List<List<String>> summaryRows(Content c) {
+        List<List<String>> rows = new ArrayList<>(List.of(List.of("Subtotal", c.subtotal()),
+                List.of("Discount", c.discountTotal()), List.of("Tax", c.taxTotal()), List.of("Total", c.total()),
+                List.of("Credit notes", c.credited()), List.of("Paid", c.paid()), List.of("Refunded", c.refunded())));
+        BigDecimal outstanding = new BigDecimal(c.outstanding());
+        if (outstanding.signum() < 0) {
+            rows.add(List.of("Outstanding", "0.00"));
+            rows.add(List.of("Credit balance", outstanding.negate().setScale(2, RoundingMode.HALF_UP).toPlainString()));
+        } else {
+            rows.add(List.of("Outstanding", c.outstanding()));
+        }
+        return rows;
     }
 }
