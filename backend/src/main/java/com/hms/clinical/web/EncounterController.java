@@ -12,6 +12,7 @@ import com.hms.clinical.web.EncounterRequests.TextRequest;
 import com.hms.identity.api.Permissions;
 import com.hms.shared.PageResult;
 import com.hms.shared.tenancy.OrganizationPrincipal;
+import java.util.List;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -62,14 +63,26 @@ class EncounterController {
 
     /**
      * Vitals are also recorded by nursing roles that hold {@code observation:write} without {@code encounter:update}:
-     * for them the treating-practitioner rule does not apply.
+     * for them the treating-practitioner rule does not apply. Without {@code encounter:read} the response is the
+     * reduced {@link ObservationsResult} (what the caller just wrote), never the rest of the clinical record; with it,
+     * the full {@link EncounterView}. No read audit is written for the reduced body.
      */
     @PutMapping("/encounters/{id}/observations")
     @PreAuthorize("hasAuthority('observation:write')")
-    EncounterView observations(@AuthenticationPrincipal OrganizationPrincipal actor, Authentication authentication,
+    Object observations(@AuthenticationPrincipal OrganizationPrincipal actor, Authentication authentication,
             @PathVariable UUID id, @RequestBody ObservationsRequest request) {
         boolean support = mayEditAny(authentication) || !has(authentication, Permissions.ENCOUNTER_UPDATE);
-        return encounters.replaceObservations(actor, id, request.version(), request.observations(), support);
+        EncounterView view = encounters.replaceObservations(actor, id, request.version(), request.observations(),
+                support);
+        if (has(authentication, Permissions.ENCOUNTER_READ)) {
+            return view;
+        }
+        return new ObservationsResult(view.id(), view.version(), view.observations(), view.warnings());
+    }
+
+    /** Reduced PUT observations body for callers without {@code encounter:read}. */
+    record ObservationsResult(UUID id, long version, List<EncounterView.Observation> observations,
+            List<EncounterView.Warning> warnings) {
     }
 
     @PutMapping("/encounters/{id}/notes/{kind}")

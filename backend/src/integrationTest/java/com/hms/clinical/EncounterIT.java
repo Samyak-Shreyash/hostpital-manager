@@ -182,9 +182,20 @@ class EncounterIT extends PostgresIT {
         putSection(reader, id, "notes/SYMPTOMS", "{\"version\":0,\"text\":\"t\"}").andExpect(status().isForbidden());
         mockMvc.perform(reader.apply(get(URL + "/" + id))).andExpect(status().isOk());
         mockMvc.perform(nurse.apply(get(URL + "/" + id))).andExpect(status().isForbidden());
-        putSection(nurse, id, "observations", "{\"version\":0,\"observations\":[{\"kind\":\"PULSE\",\"value\":\"72\","
-                + "\"unit\":\"bpm\"}]}").andExpect(status().isOk());
-        putSection(reader, id, "observations", "{\"version\":1,\"observations\":[]}").andExpect(status().isForbidden());
+        putSection(doctor, id, "notes/SYMPTOMS", "{\"version\":0,\"text\":\"Synthetic symptoms\"}").andExpect(status().isOk());
+        // Without encounter:read the nurse gets only what was written, never the rest of the record.
+        putSection(nurse, id, "observations", "{\"version\":1,\"observations\":[{\"kind\":\"PULSE\",\"value\":\"72\","
+                + "\"unit\":\"bpm\"}]}").andExpect(status().isOk())
+                .andExpect(jsonPath("$.id", is(id.toString()))).andExpect(jsonPath("$.version", is(2)))
+                .andExpect(jsonPath("$.observations", hasSize(1))).andExpect(jsonPath("$.warnings", hasSize(0)))
+                .andExpect(jsonPath("$.notes").doesNotExist()).andExpect(jsonPath("$.diagnoses").doesNotExist())
+                .andExpect(jsonPath("$.treatmentPlan").doesNotExist()).andExpect(jsonPath("$.followUp").doesNotExist())
+                .andExpect(jsonPath("$.chiefComplaint").doesNotExist()).andExpect(jsonPath("$.patient").doesNotExist());
+        // A caller with encounter:read still gets the full view.
+        putSection(doctor, id, "observations", "{\"version\":2,\"observations\":[]}").andExpect(status().isOk())
+                .andExpect(jsonPath("$.notes", hasSize(1))).andExpect(jsonPath("$.patient.uhid").exists())
+                .andExpect(jsonPath("$.diagnoses").exists());
+        putSection(reader, id, "observations", "{\"version\":3,\"observations\":[]}").andExpect(status().isForbidden());
     }
 
     @Test
