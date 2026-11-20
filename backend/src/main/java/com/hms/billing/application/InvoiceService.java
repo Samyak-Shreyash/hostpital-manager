@@ -11,6 +11,7 @@ import com.hms.billing.domain.Invoice;
 import com.hms.billing.domain.InvoiceCalculator;
 import com.hms.billing.domain.InvoiceCalculator.LineTotals;
 import com.hms.billing.domain.InvoiceLine;
+import com.hms.billing.infrastructure.CreditNoteRepository;
 import com.hms.billing.infrastructure.InvoiceRepository;
 import com.hms.billing.infrastructure.InvoiceRepository.InvoiceRow;
 import com.hms.billing.infrastructure.InvoiceRepository.ItemRow;
@@ -88,11 +89,13 @@ public class InvoiceService implements InvoiceBalancePort {
     private final DocumentNumberAllocator numbers;
     private final IdempotencyService idempotency;
     private final ApplicationEventPublisher events;
+    private final CreditNoteRepository creditNotes;
 
     public InvoiceService(InvoiceRepository repository, ServiceCatalogRepository catalog, ServicePriceLookup prices,
             EncounterQuery encounters, PatientDirectory patients, AuditRecorder audit, UuidV7Generator ids,
             Clock clock, OrganizationDirectory organizations, DocumentNumberAllocator numbers,
-            IdempotencyService idempotency, ApplicationEventPublisher events) {
+            IdempotencyService idempotency, ApplicationEventPublisher events, CreditNoteRepository creditNotes) {
+        this.creditNotes = creditNotes;
         this.organizations = organizations;
         this.numbers = numbers;
         this.idempotency = idempotency;
@@ -305,7 +308,7 @@ public class InvoiceService implements InvoiceBalancePort {
     @Transactional(propagation = Propagation.MANDATORY)
     public InvoiceBalance lockForPayment(UUID organizationId, UUID invoiceId) {
         InvoiceRow row = repository.lock(organizationId, invoiceId).orElseThrow(InvoiceService::notFound);
-        return new InvoiceBalance(row.status(), row.total());
+        return new InvoiceBalance(row.status(), row.total(), creditNotes.creditedOn(organizationId, invoiceId));
     }
 
     @Override

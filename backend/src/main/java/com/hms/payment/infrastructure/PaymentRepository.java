@@ -52,11 +52,23 @@ public class PaymentRepository {
     }
 
     /**
-     * The sum refunded against the invoice's payments. Zero until refunds exist: [E7-4] replaces this with the SUM over
-     * its refund table (joined to payment by invoice), read under the same invoice row lock.
+     * The sum of effective refunds (RECORDED at creation, or APPROVED later; V33) against the invoice's payments; call
+     * while holding the invoice row lock. Pending and rejected refunds do not count.
      */
     public Money refundedOn(UUID org, UUID invoiceId) {
-        return Money.ZERO;
+        return Money.of(jdbc.sql("""
+                SELECT coalesce(sum(r.amount), 0) FROM hms.refund r
+                JOIN hms.payment p ON p.organization_id = r.organization_id AND p.id = r.payment_id
+                LEFT JOIN hms.refund_decision d ON d.organization_id = r.organization_id AND d.refund_id = r.id
+                WHERE p.organization_id = ? AND p.invoice_id = ?
+                  AND (r.initial_status = 'RECORDED' OR d.decision = 'APPROVED')""").params(org, invoiceId)
+                .query(java.math.BigDecimal.class).single());
+    }
+
+    /** The payment's invoice and amount, or empty for an unknown or other-organization id. */
+    public java.util.Optional<PaymentRow> find(UUID org, UUID id) {
+        return jdbc.sql("SELECT " + COLUMNS + " FROM hms.payment WHERE organization_id = ? AND id = ?")
+                .params(org, id).query(PaymentRepository::map).optional();
     }
 
     public List<PaymentRow> list(UUID org, ListFilter f, int limit, long offset) {
