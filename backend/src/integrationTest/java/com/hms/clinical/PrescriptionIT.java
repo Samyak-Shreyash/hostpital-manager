@@ -311,6 +311,17 @@ class PrescriptionIT extends PostgresIT {
     }
 
     @Test
+    void itemGuardFailsClosedWhenTheParentPrescriptionIsNotFound() throws Exception {
+        // V35: a missing (or RLS-invisible) parent is refused, not waved through to the FK check.
+        UUID rx = issuedPrescription();
+        assertThat(sqlState(rx, """
+                INSERT INTO hms.prescription_item (id, organization_id, prescription_id, position, drug_name, dose,
+                    frequency, duration_days, created_at) SELECT gen_random_uuid(), organization_id,
+                    gen_random_uuid(), 1, 'X', '1', 'OD', 1, now() FROM hms.prescription WHERE id = ?"""))
+                .isEqualTo("HM003");
+    }
+
+    @Test
     void pdfOfAnIssuedPrescriptionHasBusinessDataNoUuidAndIsAudited() throws Exception {
         String orgName = fx.inOrg(org, () -> {
             jdbc.sql("UPDATE hms.organization SET address = '7 Synthetic Lane, Testville' WHERE id = ?")

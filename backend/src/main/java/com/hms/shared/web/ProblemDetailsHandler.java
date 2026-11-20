@@ -38,7 +38,8 @@ public class ProblemDetailsHandler extends ResponseEntityExceptionHandler {
 
     static final String TYPE_BASE = "https://hms.example/problems/";
     private static final String PRIMARY_SPECIALTY_SQLSTATE = "HM002";
-    private static final String ENCOUNTER_FINALIZED_SQLSTATE = "HM001";
+    private static final String ENCOUNTER_FINALIZED_SQLSTATE = "HM005";
+    private static final String IMMUTABLE_ROW_SQLSTATE = "HM001";
     private static final String PRESCRIPTION_IMMUTABLE_SQLSTATE = "HM003";
     private static final String INVOICE_IMMUTABLE_SQLSTATE = "HM004";
     private static final Logger log = LoggerFactory.getLogger(ProblemDetailsHandler.class);
@@ -103,7 +104,7 @@ public class ProblemDetailsHandler extends ResponseEntityExceptionHandler {
                     "A doctor must have exactly one primary specialty.");
         }
         if (hasSqlState(ex, ENCOUNTER_FINALIZED_SQLSTATE)) {
-            // The V27 guard (a finalized encounter is immutable) caught what the service check did not.
+            // The V27/V35 guard (a finalized encounter is immutable) caught what the service check did not.
             return problem(HttpStatus.CONFLICT, "ENCOUNTER_FINALIZED", "The encounter is finalized; add an addendum.");
         }
         if (hasSqlState(ex, PRESCRIPTION_IMMUTABLE_SQLSTATE)) {
@@ -115,6 +116,11 @@ public class ProblemDetailsHandler extends ResponseEntityExceptionHandler {
             // The V29 guard (only a draft invoice is editable; issued amounts are frozen) caught what the service did not.
             log.warn("Invoice guard refused a change");
             return problem(HttpStatus.CONFLICT, "INVOICE_IMMUTABLE", "The invoice cannot be changed in its status.");
+        }
+        if (hasSqlState(ex, IMMUTABLE_ROW_SQLSTATE)) {
+            // hms.reject_modification() (audit, idempotency, payment, refund, credit note) or the service-price guard.
+            log.warn("Immutable-row guard refused a change");
+            return problem(HttpStatus.CONFLICT, "IMMUTABLE_RECORD", "The record is immutable and cannot be changed.");
         }
         log.error("Unhandled exception", ex);
         return problem(HttpStatus.INTERNAL_SERVER_ERROR, "INTERNAL_ERROR", "An unexpected error occurred.");

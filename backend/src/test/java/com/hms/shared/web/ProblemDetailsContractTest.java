@@ -130,6 +130,16 @@ class ProblemDetailsContractTest {
                 .andExpect(jsonPath("$.requestId", not(containsString("bad"))));
     }
 
+    @Test
+    void genericImmutableRowSqlStateIsImmutableRecordAndEncounterGuardHasItsOwnCode() throws Exception {
+        perform(get("/fail/sqlstate/HM001"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("IMMUTABLE_RECORD"));
+        perform(get("/fail/sqlstate/HM005"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("ENCOUNTER_FINALIZED"));
+    }
+
     private ResultActions perform(org.springframework.test.web.servlet.RequestBuilder request) throws Exception {
         if (request instanceof org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder builder) {
             builder.header(CorrelationIdFilter.HEADER, REQUEST_ID);
@@ -142,6 +152,12 @@ class ProblemDetailsContractTest {
 
     @RestController
     static class FailingController {
+
+        @GetMapping("/fail/sqlstate/{state}")
+        void sqlState(@org.springframework.web.bind.annotation.PathVariable("state") String state) {
+            throw new org.springframework.dao.DataIntegrityViolationException("guard",
+                    new java.sql.SQLException("guard", state));
+        }
 
         @GetMapping("/fail/not-found")
         void notFound() {

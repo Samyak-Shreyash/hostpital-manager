@@ -219,21 +219,50 @@ class EncounterFinalizeIT extends PostgresIT {
                 "UPDATE hms.encounter SET status = 'OPEN', finalized_at = NULL, finalized_by = NULL WHERE id = ?",
                 "DELETE FROM hms.encounter WHERE id = ?"};
         for (String sql : statements) {
-            assertThat(sqlState(id, sql)).as(sql).isEqualTo("HM001");
+            assertThat(sqlState(id, sql)).as(sql).isEqualTo("HM005");
         }
         // INSERTs: a new vital or non-addendum note on a finalized encounter is refused.
-        assertThat(sqlState(id, insertNote("SYMPTOMS"))).isEqualTo("HM001");
+        assertThat(sqlState(id, insertNote("SYMPTOMS"))).isEqualTo("HM005");
         assertThat(sqlState(id, """
                 INSERT INTO hms.encounter_observation (id, organization_id, encounter_id, kind, value, unit,
                     recorded_by, created_at) SELECT gen_random_uuid(), organization_id, id, 'SPO2', 98, '%',
-                    created_by, now() FROM hms.encounter WHERE id = ?""")).isEqualTo("HM001");
+                    created_by, now() FROM hms.encounter WHERE id = ?""")).isEqualTo("HM005");
         // An ADDENDUM may still be inserted, but never changed or removed.
         assertThat(sqlState(id, insertNote("ADDENDUM"))).isNull();
         assertThat(sqlState(id,
                 "UPDATE hms.clinical_note SET text = 'tampered' WHERE encounter_id = ? AND kind = 'ADDENDUM'"))
-                .isEqualTo("HM001");
+                .isEqualTo("HM005");
         assertThat(sqlState(id, "DELETE FROM hms.clinical_note WHERE encounter_id = ? AND kind = 'ADDENDUM'"))
-                .isEqualTo("HM001");
+                .isEqualTo("HM005");
+    }
+
+    @Test
+    void observationAndDiagnosisIdsAreUuidV7() throws Exception {
+        UUID id = startAdHoc(doctor);
+        putSection(doctor, id, "observations",
+                "{\"version\":0,\"observations\":[{\"kind\":\"PULSE\",\"value\":\"72\",\"unit\":\"bpm\"}]}")
+                .andExpect(status().isOk());
+        putSection(doctor, id, "diagnoses",
+                "{\"version\":1,\"diagnoses\":[{\"description\":\"Synthetic dx\",\"primary\":true}]}")
+                .andExpect(status().isOk());
+        java.util.List<UUID> rowIds = fx.inOrg(org, () -> jdbc.sql("SELECT id FROM hms.encounter_observation"
+                + " WHERE encounter_id = ? UNION ALL SELECT id FROM hms.encounter_diagnosis WHERE encounter_id = ?")
+                .params(id, id).query(UUID.class).list());
+        assertThat(rowIds).hasSize(2).allSatisfy(rowId -> assertThat(rowId.version()).isEqualTo(7));
+    }
+
+    @Test
+    void childGuardFailsClosedWhenTheParentEncounterIsNotFound() throws Exception {
+        // V35: a child row whose parent encounter is missing (or RLS-invisible) is refused, even an ADDENDUM.
+        UUID id = startAdHoc(doctor);
+        assertThat(sqlState(id, """
+                INSERT INTO hms.encounter_observation (id, organization_id, encounter_id, kind, value, unit,
+                    recorded_by, created_at) SELECT gen_random_uuid(), organization_id, gen_random_uuid(), 'SPO2',
+                    98, '%', created_by, now() FROM hms.encounter WHERE id = ?""")).isEqualTo("HM005");
+        assertThat(sqlState(id, """
+                INSERT INTO hms.clinical_note (id, organization_id, encounter_id, kind, text, author_id, created_at)
+                SELECT gen_random_uuid(), organization_id, gen_random_uuid(), 'ADDENDUM', 'Synthetic direct',
+                    created_by, now() FROM hms.encounter WHERE id = ?""")).isEqualTo("HM005");
     }
 
     // --- helpers ---------------------------------------------------------------------------------------------
