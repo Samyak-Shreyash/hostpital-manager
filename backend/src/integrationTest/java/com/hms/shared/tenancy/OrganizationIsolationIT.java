@@ -267,6 +267,20 @@ class OrganizationIsolationIT extends PostgresIT {
                     "/api/v1/invoices/{id}/payments", org.payInvoiceId())
                     .header("Idempotency-Key", "iso-" + UUID.randomUUID()).contentType(MediaType.APPLICATION_JSON)
                     .content("{\"amount\":\"1.00\",\"mode\":\"CASH\"}"))),
+            // [E7-4] Refund 1.00 of a 100.00 payment (RECORDED); approve / reject two pending 1500.00 refunds of a
+            // 5000.00 payment requested by another user; credit 1.00 on an ISSUED 100.00 invoice.
+            Map.entry("POST /api/v1/payments/{id}/refunds", new CrossOrgCase(org -> post(
+                    "/api/v1/payments/{id}/refunds", org.refundPaymentId())
+                    .header("Idempotency-Key", "iso-" + UUID.randomUUID()).contentType(MediaType.APPLICATION_JSON)
+                    .content("{\"amount\":\"1.00\",\"mode\":\"CASH\",\"reason\":\"Synthetic\"}"))),
+            Map.entry("POST /api/v1/refunds/{id}/approve",
+                    new CrossOrgCase(org -> post("/api/v1/refunds/{id}/approve", org.approveRefundId()))),
+            Map.entry("POST /api/v1/refunds/{id}/reject", new CrossOrgCase(org -> post(
+                    "/api/v1/refunds/{id}/reject", org.rejectRefundId()).contentType(MediaType.APPLICATION_JSON)
+                    .content("{\"reason\":\"Synthetic\"}"))),
+            Map.entry("POST /api/v1/invoices/{id}/credit-notes", new CrossOrgCase(org -> post(
+                    "/api/v1/invoices/{id}/credit-notes", org.creditInvoiceId()).contentType(MediaType.APPLICATION_JSON)
+                    .content("{\"amount\":\"1.00\",\"reason\":\"Synthetic\"}"))),
             Map.entry("GET /api/v1/queue", new CrossOrgCase(org -> get("/api/v1/queue")
                     .param("doctorId", org.practitionerId().toString()))),
             Map.entry("GET /api/v1/doctors/{id}",
@@ -317,7 +331,8 @@ class OrganizationIsolationIT extends PostgresIT {
             UUID diagnosesEncounterId, UUID planEncounterId, UUID followUpEncounterId, UUID finalizeEncounterId,
             UUID addendumEncounterId, UUID putPrescriptionId, UUID issuePrescriptionId, UUID revisePrescriptionId,
             UUID getPrescriptionId, UUID getInvoiceId, UUID putInvoiceId, UUID discardInvoiceId,
-            UUID discountInvoiceId, UUID issueInvoiceId, UUID payInvoiceId) {
+            UUID discountInvoiceId, UUID issueInvoiceId, UUID payInvoiceId, UUID refundPaymentId, UUID approveRefundId,
+            UUID rejectRefundId, UUID creditInvoiceId) {
     }
 
     /**
@@ -501,7 +516,8 @@ class OrganizationIsolationIT extends PostgresIT {
                 "patient_contact", "practitioner", "practitioner_specialty", "practitioner_department", "staff",
                 "practitioner_availability", "availability_exception", "appointment", "queue_token_counter", "encounter", "encounter_observation",
                 "clinical_note", "encounter_diagnosis", "treatment_plan", "follow_up", "prescription", "prescription_item",
-                "invoice", "invoice_item", "idempotency_record", "payment");
+                "invoice", "invoice_item", "idempotency_record", "payment", "refund", "refund_decision",
+                "credit_note");
         assertThat(new TreeSet<>(rlsTables())).isEqualTo(expected);
     }
 
@@ -581,6 +597,13 @@ class OrganizationIsolationIT extends PostgresIT {
         UUID discountInvoice = UUID.randomUUID();
         UUID issueInvoice = UUID.randomUUID();
         UUID payInvoice = UUID.randomUUID();
+        UUID refundInvoice = UUID.randomUUID();
+        UUID pendingInvoice = UUID.randomUUID();
+        UUID creditInvoice = UUID.randomUUID();
+        UUID refundPayment = UUID.randomUUID();
+        UUID pendingPayment = UUID.randomUUID();
+        UUID approveRefund = UUID.randomUUID();
+        UUID rejectRefund = UUID.randomUUID();
         inOrg(organizationId, () -> {
             jdbc.sql("""
                     INSERT INTO hms.department (id, organization_id, code, name, created_at, updated_at)
@@ -686,7 +709,7 @@ class OrganizationIsolationIT extends PostgresIT {
             }
             // [E7-1] One DRAFT invoice per endpoint, each on its own encounter (one live invoice per encounter).
             for (UUID invoice : List.of(getInvoice, putInvoice, discardInvoice, discountInvoice, issueInvoice,
-                    payInvoice)) {
+                    payInvoice, refundInvoice, pendingInvoice, creditInvoice)) {
                 UUID invoiceEncounter = UUID.randomUUID();
                 jdbc.sql("""
                         INSERT INTO hms.encounter (id, organization_id, patient_id, practitioner_id, started_at,
@@ -710,6 +733,31 @@ class OrganizationIsolationIT extends PostgresIT {
                     UPDATE hms.invoice SET status = 'ISSUED', invoice_no = 'FIXTURE/000001', issued_at = now(),
                         issued_by = ?, subtotal = 100, total = 100 WHERE id = ?""")
                     .params(practitionerUserId, payInvoice).update();
+            // [E7-4] Refund / credit-note fixtures (numbers outside the sequences the control calls allocate).
+            Object[][] issued = {{refundInvoice, "FIXTURE/000002", 100}, {pendingInvoice, "FIXTURE/000003", 5000},
+                    {creditInvoice, "FIXTURE/000004", 100}};
+            for (Object[] inv : issued) {
+                jdbc.sql("""
+                        UPDATE hms.invoice SET status = 'ISSUED', invoice_no = ?, issued_at = now(), issued_by = ?,
+                            subtotal = ?, total = ? WHERE id = ?""")
+                        .params(inv[1], practitionerUserId, inv[2], inv[2], inv[0]).update();
+            }
+            for (Object[] pay : new Object[][] {{refundPayment, refundInvoice, 100, "RCT-1999-00/000001"},
+                    {pendingPayment, pendingInvoice, 5000, "RCT-1999-00/000002"}}) {
+                jdbc.sql("UPDATE hms.invoice SET status = 'PAID' WHERE id = ?").params(pay[1]).update();
+                jdbc.sql("""
+                        INSERT INTO hms.payment (id, organization_id, invoice_id, amount, mode, receipt_no,
+                            received_at, received_by, created_at) VALUES (?, ?, ?, ?, 'CASH', ?, now(), ?, now())""")
+                        .params(pay[0], organizationId, pay[1], pay[2], pay[3], practitionerUserId).update();
+            }
+            for (Object[] refund : new Object[][] {{approveRefund, "RF-1999-00/000001"},
+                    {rejectRefund, "RF-1999-00/000002"}}) {
+                jdbc.sql("""
+                        INSERT INTO hms.refund (id, organization_id, payment_id, amount, mode, reason, refund_no,
+                            initial_status, requested_at, requested_by, created_at)
+                        VALUES (?, ?, ?, 1500, 'CASH', 'Synthetic', ?, 'PENDING_APPROVAL', now(), ?, now())""")
+                        .params(refund[0], organizationId, pendingPayment, refund[1], practitionerUserId).update();
+            }
             jdbc.sql("""
                     INSERT INTO hms.practitioner_availability (id, organization_id, practitioner_id, weekday,
                         start_time, end_time, slot_minutes, created_at)
@@ -725,7 +773,7 @@ class OrganizationIsolationIT extends PostgresIT {
                 cancelAppointmentId, noShowAppointmentId, checkInAppointmentId, encounterId,
                 notesEncounterId, diagnosesEncounterId, planEncounterId, followUpEncounterId, finalizeEncounterId,
                 addendumEncounterId, putRx, issueRx, reviseRx, getRx, getInvoice, putInvoice, discardInvoice,
-                discountInvoice, issueInvoice, payInvoice);
+                discountInvoice, issueInvoice, payInvoice, refundPayment, approveRefund, rejectRefund, creditInvoice);
     }
 
     private UUID insertUser(UUID organizationId) {

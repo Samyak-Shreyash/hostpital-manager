@@ -96,7 +96,7 @@ public class PaymentService {
         }
         Money paid = repository.paidOn(org, invoiceId);
         Money refunded = repository.refundedOn(org, invoiceId);
-        Money outstanding = Payment.outstanding(balance.total(), paid, refunded);
+        Money outstanding = Payment.outstanding(balance.payable(), paid, refunded);
         if (amount.compareTo(outstanding) > 0) {
             throw new ConflictException("EXCEEDS_OUTSTANDING", "Outstanding is " + outstanding + ".");
         }
@@ -110,7 +110,7 @@ public class PaymentService {
                 actor.userId());
         repository.insert(org, row);
         Money newPaid = paid.plus(amount);
-        String invoiceStatus = Payment.invoiceStatus(balance.total(), newPaid, refunded);
+        String invoiceStatus = Payment.invoiceStatus(balance.payable(), newPaid, refunded);
         invoices.applyPaymentStatus(org, invoiceId, invoiceStatus);
         List<String> fields = new ArrayList<>(List.of("invoiceId", "amount", "mode", "referenceNo", "receiptNo",
                 "receivedAt", "receivedBy"));
@@ -120,7 +120,7 @@ public class PaymentService {
         audit.record(new AuditEntry(org, actor.userId(), "PAYMENT_RECORDED", ENTITY, row.id(), AuditOutcome.SUCCESS,
                 fields));
         return new RecordedPayment(row.id(), invoiceId, amount, mode, referenceNo, receiptNo, now, actor.userId(),
-                Payment.outstanding(balance.total(), newPaid, refunded), invoiceStatus);
+                Payment.outstanding(balance.payable(), newPaid, refunded), invoiceStatus);
     }
 
     @Transactional(readOnly = true)

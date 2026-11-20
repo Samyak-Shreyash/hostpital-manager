@@ -38,6 +38,9 @@ hms:
   field-encryption:
     keys: ${HMS_FIELD_ENCRYPTION_KEYS:}
     abha-hmac-key: ${HMS_ABHA_HMAC_KEY:}
+  billing:
+    # [E7-4] Refunds above this amount wait for a different user with refund:approve (plan ruling R4).
+    refund-approval-threshold: ${HMS_REFUND_APPROVAL_THRESHOLD:1000.00}
 
 management:
   endpoints:
