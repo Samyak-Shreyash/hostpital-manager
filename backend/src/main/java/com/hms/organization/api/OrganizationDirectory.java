@@ -10,6 +10,9 @@ public interface OrganizationDirectory {
 
     Optional<OrganizationSummary> find(UUID organizationId);
 
+    /** Ids of all ACTIVE organizations, for system jobs that run per organization without a user session. */
+    java.util.List<UUID> activeOrganizationIds();
+
     /** The organization's patient duplicate thresholds; the defaults when the organization is unknown. */
     DuplicateThresholds duplicateThresholds(UUID organizationId);
 
