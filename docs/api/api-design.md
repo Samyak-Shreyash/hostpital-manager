@@ -287,6 +287,11 @@ Rules: ≥1 item; drugName, dose, frequency, durationDays (1–365) mandatory; a
 - `GET /prescriptions/{id}/pdf` (`prescription:read`): `200 application/pdf` (`Content-Disposition: inline`, file name `prescription-<UHID>-v<versionNo>.pdf`). Only an `ISSUED` or `SUPERSEDED` prescription is printable; a `DRAFT` is `409 INVALID_STATE_TRANSITION`; unknown or other-org id `404`. Content: organization name and address, patient name and UHID, doctor name and registration no. (council in brackets), issue date (organization time zone), one row per item, and the text `SUPERSEDED` as a diagonal watermark on a superseded one. Internal ids are never printed; the data comes through the `organization`, `patient` and `practitioner` api ports.
 - Audit `PRESCRIPTION_PDF_GENERATED` (fields `status`, `versionNo`), same transaction; no clinical values.
 
+**Implemented `[E6-6]`: consultation UI.**
+- Route `/consult/:id` (`encounter:read`). Queue rows: `Start consult` (checked-in, `encounter:create`, `POST /encounters {appointmentId}`) and `Resume consult` (in consultation, `encounter:read`; finds the OPEN encounter of that appointment through `GET /patients/{id}/encounters`).
+- Sections and the permission each save needs: vitals `observation:write`, notes/diagnoses/plan/follow-up `encounter:update`, prescription `prescription:create` (draft, items) and `prescription:issue` (issue, revise), finalize `encounter:finalize`, addendum `encounter:addendum`, PDF link `prescription:read`. Plausibility `warnings[]` are shown non-blocking; hard limits (`422`) show the message; prescription `422` field errors (`items[i].field`) show beside the field; issue is blocked in the UI until `allergyWarnings` are acknowledged (`acknowledgeAllergyWarnings:true`). A `403` on a write is shown as the treating-practitioner rule. FINALIZED: all inputs read-only, addenda stay possible.
+- Gap: the encounter representation carries no prescription id and there is no list of an encounter's prescriptions, so the UI remembers the live prescription id per browser tab (`sessionStorage`); in a new tab an existing prescription is not found (a second create is `409`). A `prescriptionId`/`prescriptions[]` on `GET /encounters/{id}` would close it.
+
 ## 10. Wards, beds, bed assignments
 | Method & path | Permission |
 |---|---|

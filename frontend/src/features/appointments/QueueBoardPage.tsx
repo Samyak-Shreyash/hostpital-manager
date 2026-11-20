@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { appointmentKeys, getQueue } from '../../api/appointments'
 import { inputClass } from '../../components/ui'
 import { errorMessage } from '../auth/messages'
+import { StartConsult } from '../consultation/StartConsult'
 import { DoctorSelect, STATUS_LABELS } from './shared'
 
 /** How often the board re-reads the live queue (api-design.md section 7: polling, no push). */
@@ -37,13 +38,14 @@ export function QueueBoardPage() {
       {queue.data && queue.data.items.length > 0 && (
         <ul aria-label="Queue" className="space-y-2">
           {queue.data.items.map((e) => (
-            <li key={e.appointmentId} className="flex items-center gap-4 rounded bg-white p-3 shadow">
+            <li key={e.appointmentId} className="flex flex-wrap items-center gap-4 rounded bg-white p-3 shadow">
               <span aria-label="Token" className="w-12 text-center text-2xl font-semibold">{e.tokenNo}</span>
               <span className="flex-1">
                 <span className="font-medium">{e.patient.name ?? 'Patient'}</span>{' '}
                 <span className="text-sm text-slate-600">{e.patient.uhid}</span>
               </span>
               <span className="rounded bg-slate-200 px-2 py-0.5 text-xs">{STATUS_LABELS[e.status]}</span>
+              <StartConsult entry={e} />
             </li>
           ))}
         </ul>
