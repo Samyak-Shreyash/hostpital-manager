@@ -5,6 +5,7 @@ import { clinicalKeys, getEncounter, type Encounter } from '../../api/clinical'
 import { errorMessage } from '../auth/messages'
 import { useCan } from '../auth/useSession'
 import { DiagnosesSection, NotesSection, PlanSection, VitalsSection } from './ClinicalSections'
+import { ConsultBilling } from '../billing/ConsultBilling'
 import { AddendaSection, FinalizeSection } from './FinalizeSections'
 import { PatientTimeline } from './PatientTimeline'
 import { PrescriptionSection } from './PrescriptionSection'
@@ -53,6 +54,7 @@ export function ConsultPage() {
           <PrescriptionSection encounter={data} onReload={onReload} />
           <FinalizeSection encounter={data} onSaved={onSaved} onReload={onReload} />
           <AddendaSection encounter={data} onSaved={onSaved} onReload={onReload} />
+          <ConsultBilling encounter={data} />
           <PatientTimeline patientId={data.patient.id} currentId={data.id} />
         </div>
       )}

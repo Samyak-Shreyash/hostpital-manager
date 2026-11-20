@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.matchesPattern;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -234,6 +235,24 @@ class InvoiceIssueIT extends PostgresIT {
                 + " WHERE organization_id = ? AND document_type = 'INVOICE'").param(org).query(Long.class).single()))
                 .isEqualTo(2L);
         assertThat(sqlState("UPDATE hms.idempotency_record SET response_status = 500")).isNotNull();
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void listFiltersBySeveralStatusesSeparatedByCommas() throws Exception {
+        UUID draft = draftWithItem();
+        UUID issued = draftWithItem();
+        issue(cashier, issued, "k-" + UUID.randomUUID()).andExpect(status().isOk());
+        String all = mockMvc.perform(cashier.apply(get(INVOICES)).param("status", "DRAFT,ISSUED"))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        assertThat((List<String>) JsonPath.read(all, "$.items[*].id")).contains(draft.toString(),
+                issued.toString());
+        String onlyIssued = mockMvc.perform(cashier.apply(get(INVOICES)).param("status", "ISSUED,PARTIALLY_PAID"))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        assertThat((List<String>) JsonPath.read(onlyIssued, "$.items[*].id")).contains(issued.toString())
+                .doesNotContain(draft.toString());
+        mockMvc.perform(cashier.apply(get(INVOICES)).param("status", "ISSUED,BOGUS"))
+                .andExpect(status().isUnprocessableContent());
     }
 
     // --- helpers ---
