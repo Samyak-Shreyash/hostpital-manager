@@ -34,7 +34,7 @@ Base path `/api/v1`. Full OpenAPI is generated from code (springdoc); this docum
 | 401 | UNAUTHENTICATED, INVALID_CREDENTIALS, SESSION_EXPIRED |
 | 403 | FORBIDDEN (missing permission), ACCOUNT_INACTIVE, PASSWORD_CHANGE_REQUIRED |
 | 404 | NOT_FOUND (also for cross-org) |
-| 409 | CONCURRENT_MODIFICATION, SLOT_CONFLICT, BED_NOT_AVAILABLE, PATIENT_ALREADY_ADMITTED, INVOICE_IMMUTABLE, EXCEEDS_OUTSTANDING, ENCOUNTER_FINALIZED, INVALID_STATE_TRANSITION, DUPLICATE_SUSPECTED |
+| 409 | CONCURRENT_MODIFICATION, SLOT_CONFLICT, BED_NOT_AVAILABLE, PATIENT_ALREADY_ADMITTED, INVOICE_IMMUTABLE, IMMUTABLE_RECORD, EXCEEDS_OUTSTANDING, ENCOUNTER_FINALIZED, INVALID_STATE_TRANSITION, DUPLICATE_SUSPECTED |
 | 422 | VALIDATION_ERROR, BUSINESS_RULE_VIOLATION |
 | 423 | ACCOUNT_LOCKED |
 | 429 | RATE_LIMITED |
@@ -256,7 +256,7 @@ Implemented `[E6-1]` (everything in the table above except `finalize` and `adden
 **Implemented `[E6-2]`: finalize, addenda, database immutability.**
 - `POST /encounters/{id}/finalize` `{version}` (`encounter:finalize`; treating practitioner or `encounter:update-any`): `200` with the full encounter, `status:"FINALIZED"`, `finalizedAt` set, `version` bumped. Order of checks: `404` (unknown or other-org id), `403` (not the treating practitioner), `409 ENCOUNTER_FINALIZED` (already finalized), `409 CONCURRENT_MODIFICATION` (stale version), `422` (no version). In one transaction it marks the appointment `COMPLETED` through `AppointmentLifecycle.markCompleted` (ad hoc encounters have no appointment and skip this; an appointment that is not `IN_CONSULTATION` is `409 INVALID_STATE_TRANSITION` and nothing is finalized), audits `ENCOUNTER_FINALIZED` (`status`, `finalizedAt`) and publishes the Spring event `clinical.api.EncounterFinalized` (ids and timestamp only).
 - `POST /encounters/{id}/addenda` `{text}` (`encounter:addendum`; same treating-practitioner rule): `201` with the full encounter, the addendum appended to `notes` with `kind:"ADDENDUM"`. Only a FINALIZED encounter accepts one (else `409 INVALID_STATE_TRANSITION`); text 1-10000 (`422`). The encounter `version` does not change (the row is immutable). Addenda accumulate and are never edited or removed. Audit `ENCOUNTER_ADDENDUM_ADDED` (field `addendum`, never the text).
-- Every edit endpoint of this section on a FINALIZED encounter answers `409 ENCOUNTER_FINALIZED`; the database enforces the same (V27, `database-design.md` section 20h): SQLSTATE `HM001` from the guard is mapped to `409 ENCOUNTER_FINALIZED` by `ProblemDetailsHandler`.
+- Every edit endpoint of this section on a FINALIZED encounter answers `409 ENCOUNTER_FINALIZED`; the database enforces the same (V27/V35, `database-design.md` section 20h): SQLSTATE `HM005` from the guard is mapped to `409 ENCOUNTER_FINALIZED` by `ProblemDetailsHandler`.
 
 ## 9. Prescriptions
 | Method & path | Permission |
