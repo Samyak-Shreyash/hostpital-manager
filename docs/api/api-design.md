@@ -269,6 +269,16 @@ PUT /prescriptions/{id}
 ```
 Rules: ≥1 item; drugName, dose, frequency, durationDays (1–365) mandatory; allergy match produces `allergyWarnings` (non-blocking; issuing requires `acknowledgeAllergyWarnings=true`).
 
+**Implemented `[E6-3]`: prescriptions with allergy warnings.** (`GET /prescriptions/{id}/pdf` is not part of this issue.)
+- `POST /encounters/{id}/prescriptions` (`prescription:create`): `201` with an empty `DRAFT` (`versionNo` 1, `version` 0). Allowed on an `OPEN` or a `FINALIZED` encounter. An encounter has at most one live (DRAFT or ISSUED) prescription: a second one is `409 INVALID_STATE_TRANSITION` (revise instead). Audit `PRESCRIPTION_CREATED`.
+- `PUT /prescriptions/{id}` `{version, items}` (`prescription:create`): replaces the whole item list of a DRAFT, `200`, `version` bumped. Order of checks: `422` (no version), `404`, `403`, `409 INVALID_STATE_TRANSITION` (not a DRAFT), `422 VALIDATION_ERROR` with `errors:[{field,code,message}]` (BR-C3: `drugName`, `dose`, `frequency`, `durationDays` 1-365 required; 1-50 items; field names like `items[0].dose`; the message never echoes the text), `409 CONCURRENT_MODIFICATION`. Audit `PRESCRIPTION_ITEMS_UPDATED` (field `items`).
+- `POST /prescriptions/{id}/issue` `{version, acknowledgeAllergyWarnings?}` (`prescription:issue`): DRAFT to ISSUED (`issuedAt`, `issuedBy`). No items is `422 VALIDATION_ERROR`; with allergy warnings and without `acknowledgeAllergyWarnings:true`, `422 ALLERGY_NOT_ACKNOWLEDGED`. A non-DRAFT is `409 INVALID_STATE_TRANSITION`. Audit `PRESCRIPTION_ISSUED` (`status`, `issuedAt`, `issuedBy`, plus `acknowledgeAllergyWarnings` when warnings existed).
+- `POST /prescriptions/{id}/revise` (`prescription:issue`, no body): only an ISSUED prescription (else `409 INVALID_STATE_TRANSITION`); it becomes `SUPERSEDED` and a new `DRAFT` copy is returned (`201`, `versionNo` + 1, `supersedesId`, items copied). The old one stays readable. Audit `PRESCRIPTION_REVISED` against the new id.
+- `GET /prescriptions/{id}` (`prescription:read`): any holder, `PRESCRIPTION_VIEWED` audited. Response: `id, encounterId, patientId, status, versionNo, supersedesId, issuedAt, issuedBy, version, items[], allergyWarnings[]`.
+- Write rule (as encounters): the treating practitioner of the encounter, or a holder of `encounter:update-any`; others get `403`. Unknown or other-org ids are `404`.
+- Allergy warnings (`PUT`, `GET`, `issue`): the patient's active allergies (entries entered in error excluded) come from `patient.api.PatientAllergies.activeAllergies`; a warning is `{substance, severity}`, raised when the lower-cased `drugName` and the substance contain one another; one per substance, in recording order. Never audited.
+- Database: V28 refuses changes to an issued prescription and its items (SQLSTATE `HM003`, mapped to `409 INVALID_STATE_TRANSITION`); see `database-design.md` section 20i.
+
 ## 10. Wards, beds, bed assignments
 | Method & path | Permission |
 |---|---|

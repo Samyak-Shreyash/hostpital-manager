@@ -3,6 +3,7 @@ package com.hms.patient.application;
 import com.hms.audit.api.AuditEntry;
 import com.hms.audit.api.AuditOutcome;
 import com.hms.audit.api.AuditRecorder;
+import com.hms.patient.api.PatientAllergies;
 import com.hms.patient.application.ClinicalEntryViews.AllergyView;
 import com.hms.patient.application.ClinicalEntryViews.HistoryView;
 import com.hms.patient.infrastructure.ClinicalEntryRepository;
@@ -27,7 +28,7 @@ import org.springframework.transaction.annotation.Transactional;
  * {@code ENTERED_IN_ERROR} once. Content is clinical free text: audit records field names and entry ids only.
  */
 @Service
-public class ClinicalEntryService {
+public class ClinicalEntryService implements PatientAllergies {
 
     static final Set<String> SEVERITIES = Set.of("MILD", "MODERATE", "SEVERE");
     static final int MAX_SUBJECT = 200;
@@ -85,6 +86,15 @@ public class ClinicalEntryService {
                 patientId, AuditOutcome.SUCCESS));
         return entries.list(actor.organizationId(), patientId, ClinicalEntryRepository.ALLERGY).stream()
                 .map(ClinicalEntryService::allergy).toList();
+    }
+
+    /** The allergy port for other modules (prescription warnings, [E6-3]): active entries only, not audited here. */
+    @Override
+    @Transactional(readOnly = true)
+    public List<AllergyInfo> activeAllergies(UUID organizationId, UUID patientId) {
+        return entries.list(organizationId, patientId, ClinicalEntryRepository.ALLERGY).stream()
+                .filter(r -> ClinicalEntryRepository.ACTIVE.equals(r.status()))
+                .map(r -> new AllergyInfo(r.subject(), r.severity())).toList();
     }
 
     @Transactional
