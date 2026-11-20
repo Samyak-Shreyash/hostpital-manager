@@ -87,7 +87,7 @@ export function DayCalendarPage() {
 
       {result && (
         <p role="status" aria-label="Check-in result" className="mb-4 rounded bg-green-50 p-3 text-green-900">
-          {result.label}: <strong>Token {result.appointment.tokenNo}</strong> <PatientName patientId={result.appointment.patientId} />
+          {result.label}: <strong>Token {result.appointment.tokenNo}</strong> <PatientName patient={result.appointment.patient} />
         </p>
       )}
       <MutationProblem error={actionError} what="appointment" onReload={reloadAll} />
@@ -139,7 +139,7 @@ function AppointmentRow({ appointment: a, zone, canCheckIn, canUpdate, canCancel
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <span className="mr-2 font-medium">{formatTime(a.startAt, zone)}–{formatTime(a.endAt, zone)}</span>
-          <PatientName patientId={a.patientId} />
+          <PatientName patient={a.patient} />
           <span className="ml-2 rounded bg-slate-200 px-2 py-0.5 text-xs">{STATUS_LABELS[a.status]}</span>
           {a.type === 'WALK_IN' && <span className="ml-1 rounded bg-blue-100 px-2 py-0.5 text-xs">Walk-in</span>}
           {a.tokenNo !== null && <span className="ml-2">Token {a.tokenNo}</span>}

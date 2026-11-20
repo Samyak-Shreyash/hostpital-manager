@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
-import type { AppointmentStatus } from '../../api/appointments'
-import { getPatient, patientKeys, searchPatients, type PatientSummary } from '../../api/patients'
+import type { AppointmentStatus, PatientBrief } from '../../api/appointments'
+import { searchPatients, type PatientSummary } from '../../api/patients'
 import { listDoctors, practitionerKeys, type Doctor } from '../../api/practitioners'
 import { inputClass, secondaryButton } from '../../components/ui'
 import { errorMessage } from '../auth/messages'
@@ -47,12 +47,10 @@ export function DoctorSelect({ value, onChange }: { value: string; onChange: (id
   )
 }
 
-/** Name and UHID of a patient known by id; falls back to a neutral label when it cannot be read. Never the id. */
-export function PatientName({ patientId }: { patientId: string }) {
-  const canRead = useCan('patient:read')
-  const patient = useQuery({ queryKey: patientKeys.detail(patientId), queryFn: () => getPatient(patientId), enabled: canRead, staleTime: 60_000 })
-  if (!patient.data) return <span className="text-slate-600">Patient</span>
-  return <span><span className="font-medium">{patient.data.fullName}</span> <span className="text-slate-600">{patient.data.uhid}</span></span>
+/** Name and UHID from the server's patient brief; never the id, and no patient detail read. */
+export function PatientName({ patient }: { patient: PatientBrief }) {
+  if (!patient.name) return <span className="text-slate-600">Patient</span>
+  return <span><span className="font-medium">{patient.name}</span> <span className="text-slate-600">{patient.uhid}</span></span>
 }
 
 /** Search by name (3+ characters) and pick one patient; reports the choice up, shows it back as name and UHID. */

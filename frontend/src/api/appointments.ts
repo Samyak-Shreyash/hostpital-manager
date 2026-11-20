@@ -4,6 +4,13 @@ import type { Page } from './types'
 /** api-design.md section 7. Ids are opaque strings; people see names, UHIDs and queue tokens. */
 export type AppointmentStatus = 'SCHEDULED' | 'CHECKED_IN' | 'IN_CONSULTATION' | 'COMPLETED' | 'CANCELLED' | 'NO_SHOW' | 'RESCHEDULED'
 
+/** UHID and name only, resolved by the server (no patient-read audit); null parts when the patient is unreadable. */
+export interface PatientBrief {
+  id: string
+  uhid: string | null
+  name: string | null
+}
+
 export interface Appointment {
   id: string
   patientId: string
@@ -24,6 +31,7 @@ export interface Appointment {
   cancelledAt: string | null
   tokenNo: number | null
   tokenDate: string | null
+  patient: PatientBrief
 }
 
 export interface BookBody {
@@ -37,7 +45,7 @@ export interface BookBody {
 
 export interface QueueEntry {
   appointmentId: string
-  patient: { id: string; uhid: string | null; name: string | null }
+  patient: PatientBrief
   tokenNo: number
   status: AppointmentStatus
 }

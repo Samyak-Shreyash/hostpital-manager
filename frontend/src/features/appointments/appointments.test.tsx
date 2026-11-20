@@ -9,11 +9,6 @@ const DOCTOR = {
   createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z',
 }
 const DOCTORS = { items: [DOCTOR], page: 0, size: 100, totalItems: 1 }
-const PATIENT = {
-  id: 'p-1', uhid: 'DEMO-000001', fullName: 'Asha Testpatient', sex: 'F', dateOfBirth: '1990-05-10', dobEstimated: false,
-  phone: '+919800000001', abhaLast4: null, address: null, emergencyContact: null, status: 'ACTIVE', version: 0,
-  createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z',
-}
 const PATIENT_HIT = { id: 'p-1', uhid: 'DEMO-000001', fullName: 'Asha Testpatient', sex: 'F', dateOfBirth: '1990-05-10', phoneMasked: '+91******0001', abhaLast4: null, status: 'ACTIVE' }
 const DATE = '2026-11-20'
 // 04:00Z = 09:30 and 04:15Z = 09:45 in Asia/Kolkata.
@@ -28,6 +23,7 @@ const APPT: Appointment = {
   id: 'a-1', patientId: 'p-1', doctorId: 'd-1', startAt: '2026-11-20T04:15:00Z', endAt: '2026-11-20T04:30:00Z', durationMinutes: 15,
   type: 'SCHEDULED', status: 'SCHEDULED', reason: 'Fever', outsideAvailability: false, version: 2, createdAt: '', updatedAt: '',
   rescheduledFromId: null, cancelReason: null, cancelledAt: null, tokenNo: null, tokenDate: null,
+  patient: { id: 'p-1', uhid: 'DEMO-000001', name: 'Asha Testpatient' },
 }
 const LIST = (items: Appointment[]) => json(200, { items, page: 0, size: 100, totalItems: items.length })
 const FRONT_DESK = ['appointment:read', 'appointment:create', 'appointment:update', 'appointment:cancel', 'appointment:check-in', 'practitioner:read', 'patient:search', 'patient:read']
@@ -39,7 +35,6 @@ function dayRoutes(permissions: string[], extra: Routes = {}) {
     'GET /api/v1/doctors?status=ACTIVE&size=100': json(200, DOCTORS),
     [`GET /api/v1/doctors/d-1/slots?from=${DATE}&to=${DATE}`]: json(200, SLOTS),
     [`GET /api/v1/appointments?doctorId=d-1&date=${DATE}&size=100`]: LIST([APPT]),
-    'GET /api/v1/patients/p-1': json(200, PATIENT),
     'GET /api/v1/patients?q=Asha&size=10': json(200, { items: [PATIENT_HIT], page: 0, size: 10, totalItems: 1 }),
     ...extra,
   })
@@ -63,14 +58,15 @@ async function pickPatient() {
 }
 
 describe('day calendar', () => {
-  it('overlays appointments on the free slots in the facility timezone, never showing ids', async () => {
-    dayRoutes(FRONT_DESK)
+  it('overlays appointments on the free slots in the facility timezone, never showing ids or reading patients', async () => {
+    const { calls } = dayRoutes(FRONT_DESK)
     await openDay()
     expect(screen.getByRole('button', { name: 'Book 10:00' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Book 09:45' })).not.toBeInTheDocument()
     const row = (await screen.findByText('Asha Testpatient')).closest('li')!
     expect(row).toHaveTextContent('09:45')
     expect(row).toHaveTextContent('Scheduled')
+    expect(calls.some((c) => c.key.startsWith('GET /api/v1/patients/'))).toBe(false)
     expect(document.body).not.toHaveTextContent('a-1')
     expect(document.body).not.toHaveTextContent('d-1')
   })
@@ -174,6 +170,7 @@ describe('day calendar', () => {
     fireEvent.change(await screen.findByLabelText('Date'), { target: { value: DATE } })
     await screen.findByRole('option', { name: 'Dr. Test Example' })
     fireEvent.change(screen.getByLabelText('Doctor'), { target: { value: 'd-1' } })
+    expect(await screen.findByText('Asha Testpatient')).toBeInTheDocument()
     await screen.findByText('Scheduled')
     expect(screen.queryByRole('button', { name: /^Book/ })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Walk-in' })).not.toBeInTheDocument()

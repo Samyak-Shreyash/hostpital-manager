@@ -13,6 +13,7 @@ const appointment = {
   id: 'a-1', patientId: 'p-1', doctorId: 'd-1', startAt: '2026-11-20T04:00:00Z', endAt: '2026-11-20T04:15:00Z', durationMinutes: 15,
   type: 'SCHEDULED', status: 'SCHEDULED', reason: 'Fever', outsideAvailability: false, version: 0, rescheduledFromId: null,
   cancelReason: null, cancelledAt: null, tokenNo: null, tokenDate: null,
+  patient: { id: 'p-1', uhid: 'DEMO-000001', name: 'Asha Testpatient' },
 }
 
 test('book a slot, then check the patient in and see the token (API mocked)', async ({ page }) => {
@@ -32,7 +33,6 @@ test('book a slot, then check the patient in and see the token (API mocked)', as
       return respond(200, { practitionerId: 'd-1', timezone: 'Asia/Kolkata', from: DATE, to: DATE, slots })
     }
     if (path === '/api/v1/patients' && method === 'GET') return respond(200, { items: [patient], page: 0, size: 10, totalItems: 1 })
-    if (path === '/api/v1/patients/p-1') return respond(200, patient)
     if (path === '/api/v1/appointments' && method === 'POST') { booked = true; return respond(201, appointment) }
     if (path === '/api/v1/appointments' && method === 'GET') {
       const status = checkedIn ? 'CHECKED_IN' : 'SCHEDULED'

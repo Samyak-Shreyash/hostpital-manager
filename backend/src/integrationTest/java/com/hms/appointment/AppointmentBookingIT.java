@@ -106,11 +106,15 @@ class AppointmentBookingIT extends PostgresIT {
                 .andExpect(jsonPath("$.status", is("SCHEDULED")))
                 .andExpect(jsonPath("$.outsideAvailability", is(false)))
                 .andExpect(jsonPath("$.version", is(0)))
+                .andExpect(jsonPath("$.patient.id", is(patient.toString())))
+                .andExpect(jsonPath("$.patient.uhid", is("HMS-000001")))
+                .andExpect(jsonPath("$.patient.name", is("Test Booking Patient")))
                 .andReturn().getResponse().getContentAsString();
         UUID id = UUID.fromString(JsonPath.read(body, "$.id"));
 
         mockMvc.perform(desk.apply(get(URL + "/" + id))).andExpect(status().isOk())
-                .andExpect(jsonPath("$.reason", is("Synthetic complaint text")));
+                .andExpect(jsonPath("$.reason", is("Synthetic complaint text")))
+                .andExpect(jsonPath("$.patient.uhid", is("HMS-000001")));
         assertThat(fx.auditActions(id)).containsExactly("APPOINTMENT_BOOKED", "APPOINTMENT_VIEWED");
         List<String> rows = jdbc.sql("SELECT row_to_json(a)::text FROM hms.audit_event a WHERE entity_id = ?")
                 .param(id).query(String.class).list();
