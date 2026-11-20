@@ -86,13 +86,19 @@ flowchart LR
   ADM --> PRC
   ADM --> BED
   ADM --> CLN
+  CLN --> ORG
   BIL[billing] --> PAT
   BIL --> ORG
+  BIL --> CLN
   ADM -.implements ChargeSource port of.-> BIL
   PAY[payment] --> BIL
-  RPT[reporting] -.read-only SQL views.-> DB[(PostgreSQL)]
+  PAY --> ORG
+  PAY --> PAT
+  PAY -.implements InvoicePaymentTotals port of.-> BIL
+  BIL -.reconciliation SQL view V34.-> DB[(PostgreSQL)]
+  RPT[reporting] -.read-only SQL views.-> DB
 ```
-All modules may publish audit events through `audit`'s public `AuditRecorder` interface (omitted arrows for readability). Billing does **not** depend on admission/clinical: it reacts to events (`PatientDischarged`, `EncounterFinalized`) and receives charge lines via its own API. Billing owns a small `ChargeSource` port; admission implements it to supply room-day charges (dependency inversion — the dotted arrow means admission depends on billing's `api` package, never the reverse). Reporting reads SQL views, not other modules' repositories; views are owned and versioned by reporting (documented exception to the "no arbitrary access" rule, ADR-0001). Boundary enforcement: ArchUnit rules in the `architectureTest` source set, run in CI (ADR-0001, accepted; Spring Modulith deferred).
+All modules may publish audit events through `audit`'s public `AuditRecorder` interface (omitted arrows for readability). Billing does **not** depend on admission; from clinical it uses only `clinical.api.EncounterQuery` (an OPD invoice checks its encounter belongs to the patient) and otherwise reacts to events (`PatientDischarged`, `EncounterFinalized`) and receives charge lines via its own API. Payment depends on `billing.api` (`InvoiceBalancePort`, `InvoiceLookup`), `organization.api` and `patient.api` (receipt header and patient brief), and implements billing's `InvoicePaymentTotals` port so billing can show paid/refunded totals without importing payment. Clinical uses `appointment.api` (`AppointmentLifecycle`), `practitioner.api`, `patient.api` and `organization.api`. The reconciliation read model is the SQL view `hms.invoice_reconciliation_v` (V34) over invoices, credit notes, payments and refunds, read by billing's `ReconciliationRepository`: a second documented exception to the "no cross-module tables" rule, like reporting's views. All modules also use `identity.api` (`Permissions`) and `audit.api`. Billing owns a small `ChargeSource` port; admission implements it to supply room-day charges (dependency inversion — the dotted arrow means admission depends on billing's `api` package, never the reverse). Reporting reads SQL views, not other modules' repositories; views are owned and versioned by reporting (documented exception to the "no arbitrary access" rule, ADR-0001). Boundary enforcement: ArchUnit rules in the `architectureTest` source set, run in CI (ADR-0001, accepted; Spring Modulith deferred).
 
 ## 5. Layering inside a module
 ```

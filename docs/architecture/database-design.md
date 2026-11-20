@@ -11,7 +11,7 @@
 | Roles and grants (section 3) | Implemented (`V1__baseline.sql`, `infra/docker/db-init/01-roles.sh`) | `[E0-6]` |
 | Extensions (section 5) | Implemented | `[E0-6]` |
 | `document_sequence` (section 6) | Table implemented; `DocumentNumberAllocator` comes with its first consumer | `[E0-6]` |
-| `hms.reject_modification()` (section 7) | Implemented; `HM001` → `409` mapping comes with its first consumer | `[E0-6]` |
+| `hms.reject_modification()` (section 7) | Implemented; `HM001` → `409 IMMUTABLE_RECORD` (generic) | `[E0-6]` |
 | Same-org composite FKs (section 4) | Planned (first used by V4 RBAC tables, section 13) | `[E1-6]` and each module |
 | RLS policies | Planned; mechanism confirmed by `[E1-2]` spike (ADR-0010) | `[E1-2]`, `[E1-6]` |
 
@@ -148,9 +148,18 @@ REVOKE ALL ON FUNCTION hms.reject_modification() FROM PUBLIC;
 - **Append-only tables** attach it unconditionally:
   `CREATE TRIGGER trg_<table>_immutable BEFORE UPDATE OR DELETE ON hms.<table> FOR EACH ROW EXECUTE FUNCTION hms.reject_modification();`
   plus `BEFORE TRUNCATE ... FOR EACH STATEMENT` for the same function.
-- **State-dependent immutability** (issued invoice and its items, finalized encounter children) uses a `WHEN (...)` clause on the trigger or a small table-specific function written by that module's migration; it raises the same `HM001`.
+- **State-dependent immutability** (issued invoice and its items, finalized encounter children) uses a `WHEN (...)` clause on the trigger or a small table-specific function written by that module's migration; it raises its own SQLSTATE so the error code is unambiguous (see the SQLSTATE table below).
 - No `SECURITY DEFINER`: the function needs no privileges, it only raises. Triggers fire for every role including `hms_owner`, so a manual `UPDATE` by an operator is also rejected — corrections go through credit notes/refunds/addenda.
-- **Error mapping:** SQLSTATE `HM001` is translated in the shared web layer (`ProblemDetailsHandler`) to `409` with a module-specific `code` (e.g. `INVOICE_IMMUTABLE`, PRD BIL-4). Reaching the trigger means an application state check was missed, so it is also logged at `WARN` (no row values — table name and operation only).
+- **Error mapping:** each guard SQLSTATE is translated in the shared web layer (`ProblemDetailsHandler`):
+
+  | SQLSTATE | Raised by | Response |
+  |---|---|---|
+  | `HM001` | `hms.reject_modification()` (audit, idempotency record, payment, refund, credit note) and the service-price guard (V9) | `409 IMMUTABLE_RECORD` (generic) |
+  | `HM002` | deferred primary-specialty trigger (V18) | `422 PRIMARY_SPECIALTY_REQUIRED` |
+  | `HM003` | prescription and item guards (V28, V35) | `409 INVALID_STATE_TRANSITION` |
+  | `HM004` | invoice and item guards (V29, V31) | `409 INVOICE_IMMUTABLE` |
+  | `HM005` | finalized-encounter guard (V35; V27 used `HM001`) | `409 ENCOUNTER_FINALIZED` |
+ Reaching the trigger means an application state check was missed, so it is also logged at `WARN` (no row values — table name and operation only).
 
 ## 8. Baseline migration (`V1__baseline.sql`) and order
 V1 contains, in order: extensions (section 5) → schema privileges and default privileges (section 3) → `hms.reject_modification()` (section 7) → `hms.document_sequence` (section 6). It creates no business tables.
@@ -317,23 +326,23 @@ ADR-0007, PRD AUD-1/2/4, invariant I8. Written only through `audit.api.AuditReco
 - Role templates: removes `encounter:update-any` from built-in DOCTOR roles, grants DOCTOR `observation:write` (idempotent, per organization under RLS, as V21).
 
 ### 20h. Finalized-encounter guard (`V27__encounter_immutability.sql`, `[E6-2]`)
-- One trigger function, `hms.guard_finalized_encounter()`, replaces the V26 `tg_encounter_immutable` trigger and function (dropped in V27; V26 itself is untouched). It raises SQLSTATE `HM001` (mapped to `409 ENCOUNTER_FINALIZED`).
+- One trigger function, `hms.guard_finalized_encounter()`, replaces the V26 `tg_encounter_immutable` trigger and function (dropped in V27; V26 itself is untouched). It raised SQLSTATE `HM001` in V27; V35 moves it to its own `HM005` (mapped to `409 ENCOUNTER_FINALIZED`) because `HM001` is the generic immutable-row code, and makes it fail closed: a child row whose parent encounter is not found (missing or RLS-invisible) is refused, including an ADDENDUM.
 - On `encounter` (`BEFORE UPDATE OR DELETE`): rejected once `OLD.status = 'FINALIZED'`. The `OPEN` to `FINALIZED` update (setting `finalized_at/by`, `version`) is the last one the row accepts.
 - On `encounter_observation`, `clinical_note`, `encounter_diagnosis`, `treatment_plan`, `follow_up` (`BEFORE INSERT OR UPDATE OR DELETE`): rejected while the parent encounter is `FINALIZED`. This includes the `replaced_at` update the service uses to replace a set, so history rows cannot be re-flagged either. The one exception is the INSERT of a `clinical_note` of kind `ADDENDUM`; an existing addendum is itself immutable.
 - The parent status is read under the caller's RLS context (the child row is only visible when the organization context matches the parent's). Rows are also protected by the missing DELETE grant for `hms_app` (ADR-0015); the trigger additionally binds `hms_owner`.
-- Tests: `EncounterFinalizeIT.directSqlUpdateOnFinalizedEncounterIsRejected` runs UPDATE, DELETE and INSERT statements on a direct `hms_owner` connection and expects `HM001`.
+- Tests: `EncounterFinalizeIT.directSqlUpdateOnFinalizedEncounterIsRejected` runs UPDATE, DELETE and INSERT statements on a direct `hms_owner` connection and expects `HM005`; `childGuardFailsClosedWhenTheParentEncounterIsNotFound` covers the missing parent.
 
 ### 20i. Prescriptions (`V28__prescription.sql`, `[E6-3]`)
 - `prescription` (`encounter_id`, `patient_id`, `status` DRAFT/ISSUED/SUPERSEDED, `version_no` >= 1, `supersedes_id`, `issued_at`, `issued_by`, `version`, audit columns). Composite same-org FKs to `encounter`, `patient` and (self) `supersedes_id`; `ck_prescription_issued` ties `issued_at/by` to status. Partial unique indexes: one `ISSUED` per `(organization_id, encounter_id)` (the brief) and one `DRAFT` per encounter, so an encounter has at most one live prescription and a revision replaces rather than adds. It is allowed on `OPEN` and `FINALIZED` encounters (the V27 encounter guard is not attached to these tables).
 - `prescription_item` (`position`, `drug_name` 1-200, optional `strength/form/route` <= 100, `dose` and `frequency` 1-100 required, `duration_days` 1-365 required, optional `instructions` <= 1000). `UNIQUE (prescription_id, position)`. Free text is PHI and never audited. `hms_app` gets an explicit `DELETE` on this table only: a DRAFT's item list is replaced as a whole.
-- Triggers raise SQLSTATE `HM003` (distinct from `HM001`, the finalized-encounter guard), mapped by `ProblemDetailsHandler` to `409 INVALID_STATE_TRANSITION`. `hms.guard_prescription()` on `prescription` (`BEFORE UPDATE OR DELETE`): no DELETE; `DRAFT` may stay `DRAFT` or become `ISSUED`; `ISSUED` may only become `SUPERSEDED` with every business column unchanged (`version`/`updated_at` may move); `SUPERSEDED` is final. `hms.guard_prescription_item()` on `prescription_item` (`BEFORE INSERT OR UPDATE OR DELETE`): refused unless the parent is `DRAFT`.
+- Triggers raise SQLSTATE `HM003` (distinct from the generic `HM001`), mapped by `ProblemDetailsHandler` to `409 INVALID_STATE_TRANSITION`. `hms.guard_prescription()` on `prescription` (`BEFORE UPDATE OR DELETE`): no DELETE; `DRAFT` may stay `DRAFT` or become `ISSUED`; `ISSUED` may only become `SUPERSEDED` with every business column unchanged (`version`/`updated_at` may move); `SUPERSEDED` is final. `hms.guard_prescription_item()` on `prescription_item` (`BEFORE INSERT OR UPDATE OR DELETE`): refused unless the parent is `DRAFT`; since V35 also refused when the parent is not found (fail closed).
 - Both tables: forced RLS with `org_isolation`. No new permissions: `prescription:create|read|issue` exist since V4 and the built-in `DOCTOR` template holds `prescription:*`.
 - Tests: `PrescriptionIT.databaseRefusesChangesToAnIssuedPrescriptionExceptSupersede` (direct `hms_owner` statements expect `HM003`); `OrganizationIsolationIT` covers the new tables for RLS.
 
 ### 20j. Invoices (`V29__invoice.sql`, `[E7-1]`)
 - `invoice` (`type` OPD/IPD, `patient_id`, `encounter_id` (OPD) or `admission_id` (IPD, `ck_invoice_source`), `status` DRAFT/ISSUED/PARTIALLY_PAID/PAID/CANCELLED/DISCARDED, `invoice_no`, `issued_at`, `issued_by`, `subtotal`, `discount_total`, `tax_total`, `total` (all `NUMERIC(14,2)` >= 0), `version`, audit columns). Composite same-org FKs to `patient` and `encounter`; `admission_id` gets its FK when `admission` exists. `ck_invoice_issued` ties `invoice_no/issued_at/issued_by` to the issued statuses; `UNIQUE (organization_id, invoice_no)` (numbering is `[E7-3]`). Partial unique index `uq_invoice_encounter_live`: one invoice per encounter that is not DISCARDED or CANCELLED (no double billing of a visit).
 - `invoice_item` (`position`, optional `service_id` (composite FK to `service_catalog_item`), `description` 1-200, `quantity NUMERIC(10,2)` 0.01-9999, `unit_price` (a snapshot: a later catalog price never changes the line), `discount` <= `gross`, `discount_reason`, `tax_rate NUMERIC(5,2)` 0-100, stored line amounts `gross`, `taxable`, `tax`, `total`). CHECKs: money >= 0, `taxable = gross - discount`, `total = taxable + tax`. Rounding is HALF_UP per line in the application (`InvoiceCalculator`); invoice totals are the sums of the stored line amounts (ADR-0012). `hms_app` gets an explicit `DELETE` on `invoice_item` only (a DRAFT's items are replaced as a whole).
-- Triggers raise SQLSTATE `HM004`, mapped by `ProblemDetailsHandler` to `409 INVOICE_IMMUTABLE` (section 7 names `HM001`; that code was already taken by the encounter guard, so each guard has its own SQLSTATE). `hms.guard_invoice()` (`BEFORE UPDATE OR DELETE`): no DELETE; DRAFT -> DRAFT/DISCARDED/ISSUED; ISSUED/PARTIALLY_PAID/PAID may move among themselves or to CANCELLED only with every business column (amounts, number, issue data, references) unchanged; DISCARDED and CANCELLED are final. `hms.guard_invoice_item()` (`BEFORE INSERT OR UPDATE OR DELETE`): refused unless the parent is DRAFT.
+- Triggers raise SQLSTATE `HM004`, mapped by `ProblemDetailsHandler` to `409 INVOICE_IMMUTABLE` (each state guard has its own SQLSTATE; `HM001` is the generic immutable-row code). `hms.guard_invoice()` (`BEFORE UPDATE OR DELETE`): no DELETE; DRAFT -> DRAFT/DISCARDED/ISSUED; ISSUED/PARTIALLY_PAID/PAID may move among themselves or to CANCELLED only with every business column (amounts, number, issue data, references) unchanged; DISCARDED and CANCELLED are final. `hms.guard_invoice_item()` (`BEFORE INSERT OR UPDATE OR DELETE`): refused unless the parent is DRAFT.
 - Both tables: forced RLS with `org_isolation`. No new permissions: `invoice:create|read|update|issue|credit|price-override` exist since V4 and the built-in `ACCOUNTANT` template holds `invoice:*`.
 - Tests: `InvoiceDraftIT` (guard SQLSTATEs, price snapshot, balance port), `InvoiceCalculatorTest`, `OrganizationIsolationIT`.
 
