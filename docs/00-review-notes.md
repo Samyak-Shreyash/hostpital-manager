@@ -53,7 +53,7 @@ Legal review flags (for `[E10-8]`, not decided here): ABHA retention and masking
 
 | ID | Question | Raised in | Blocks | Default until answered |
 |---|---|---|---|---|
-| Q1 | Bed-day charging rule (midnight census, same-day admit/discharge) | PRD BR-B6 | `[E8-5]` | [A] charge per midnight occupied, admission day charged, discharge day not, minimum 1 day; configurable per org |
+| Q1 | Bed-day charging rule (midnight census, same-day admit/discharge) | PRD BR-B6 | `[E8-5]` | [A] charge per midnight occupied, admission day charged, discharge day not, minimum 1 day; configurable per org. Implemented as [A] in `[E8-5]` (ruling R2: same-day = 1 day, each date at the bed held at the following midnight; no per-org switch yet); pilot sign-off still required |
 | Q2 | GST treatment of services (most clinical services exempt) | PRD BIL-10 | `[E7-1]` | Capture line tax rate/amount; GST fields optional |
 | Q4 | Hosting provider and backup tooling (managed PG vs pgBackRest) | `docs/adr/README.md` candidates, PRD A8 | `[E0-8]`, `[E10-2]` | Decided by `[E10-1]` |
 | Q5 | PDF generation library | ADR candidates | `[E6-5]`, `[E7-5]` | Decided by `[E6-4]` |

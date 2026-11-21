@@ -351,6 +351,8 @@ class OrganizationIsolationIT extends PostgresIT {
                     .content("{\"version\":0}"))),
             Map.entry("GET /api/v1/admissions/{id}/bed-assignments",
                     new CrossOrgCase(org -> get("/api/v1/admissions/{id}/bed-assignments", org.admissionId()))),
+            Map.entry("GET /api/v1/admissions/{id}/charges-preview",
+                    new CrossOrgCase(org -> get("/api/v1/admissions/{id}/charges-preview", org.admissionId()))),
             Map.entry("POST /api/v1/admissions/{id}/bed-assignments/transfer", new CrossOrgCase(org -> post(
                     "/api/v1/admissions/{id}/bed-assignments/transfer", org.admissionId())
                     .contentType(MediaType.APPLICATION_JSON)
@@ -661,8 +663,14 @@ class OrganizationIsolationIT extends PostgresIT {
                     INSERT INTO hms.service_catalog_item (id, organization_id, code, name, created_at, updated_at)
                     VALUES (?, ?, 'CONSULT', 'Consultation', now(), now())""")
                     .params(serviceId, organizationId).update();
+            // A price, so the charges preview of the admission (bed rate = this service) can be computed.
             jdbc.sql("""
-                    INSERT INTO hms.ward (id, organization_id, code, name, created_at, updated_at)
+                    INSERT INTO hms.service_price (id, organization_id, service_id, amount, effective_from,
+                        created_by, created_at)
+                    VALUES (?, ?, ?, 1000.00, TIMESTAMPTZ '2000-01-01 00:00:00Z', ?, now())""")
+                    .params(UUID.randomUUID(), organizationId, serviceId, UUID.randomUUID()).update();
+            jdbc.sql("""
+                    INSERT INTO hms.ward(id, organization_id, code, name, created_at, updated_at)
                     VALUES (?, ?, 'GENWARD', 'General Ward', now(), now())""")
                     .params(wardId, organizationId).update();
             jdbc.sql("""

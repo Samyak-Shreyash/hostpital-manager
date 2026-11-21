@@ -1,5 +1,7 @@
 package com.hms.admission.web;
 
+import com.hms.admission.application.AdmissionChargeSource;
+import com.hms.admission.application.AdmissionChargeSource.ChargesPreview;
 import com.hms.admission.application.AdmissionService;
 import com.hms.admission.application.AdmissionService.AdmitCommand;
 import com.hms.admission.application.AdmissionService.TransferView;
@@ -7,6 +9,7 @@ import com.hms.admission.application.AdmissionView;
 import com.hms.bedmanagement.api.BedAllocation.AssignmentView;
 import com.hms.shared.PageResult;
 import com.hms.shared.tenancy.OrganizationPrincipal;
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
@@ -28,9 +31,11 @@ import org.springframework.web.bind.annotation.RestController;
 class AdmissionController {
 
     private final AdmissionService admissions;
+    private final AdmissionChargeSource charges;
 
-    AdmissionController(AdmissionService admissions) {
+    AdmissionController(AdmissionService admissions, AdmissionChargeSource charges) {
         this.admissions = admissions;
+        this.charges = charges;
     }
 
     @PostMapping
@@ -82,6 +87,14 @@ class AdmissionController {
     TransferView transfer(@AuthenticationPrincipal OrganizationPrincipal actor, @PathVariable UUID id,
             @RequestBody TransferRequest request) {
         return admissions.transfer(actor, id, request.toBedId(), request.reason());
+    }
+
+    /** [E8-5] Room-day charges so far (BR-B6 rule [A]); {@code asOf} defaults to now. */
+    @GetMapping("/{id}/charges-preview")
+    @PreAuthorize("hasAuthority('invoice:read')")
+    ChargesPreview chargesPreview(@AuthenticationPrincipal OrganizationPrincipal actor, @PathVariable UUID id,
+            @RequestParam(required = false) Instant asOf) {
+        return charges.preview(actor, id, asOf);
     }
 
     /** {@code reason} is required (1 to 500 characters); stored on the new assignment, never audited. */
