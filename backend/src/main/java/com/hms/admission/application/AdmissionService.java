@@ -9,6 +9,7 @@ import com.hms.audit.api.AuditEntry;
 import com.hms.audit.api.AuditOutcome;
 import com.hms.audit.api.AuditRecorder;
 import com.hms.bedmanagement.api.BedAllocation;
+import com.hms.billing.api.InvoiceLookup;
 import com.hms.bedmanagement.api.BedAllocation.AssignmentView;
 import com.hms.clinical.api.EncounterQuery;
 import com.hms.clinical.api.EncounterQuery.EncounterSummary;
@@ -85,11 +86,13 @@ public class AdmissionService {
     private final UuidV7Generator ids;
     private final Clock clock;
     private final TransactionTemplate transactions;
+    private final InvoiceLookup invoices;
 
     public AdmissionService(AdmissionRepository admissions, BedAllocation beds, PatientDirectory patients,
             PractitionerDirectory practitioners, PractitionerAvailability practitionerStatus, EncounterQuery encounters,
             OrganizationDirectory organizations, DocumentNumberAllocator numbers, AuditRecorder audit,
-            UuidV7Generator ids, Clock clock, PlatformTransactionManager transactionManager) {
+            UuidV7Generator ids, Clock clock, PlatformTransactionManager transactionManager, InvoiceLookup invoices) {
+        this.invoices = invoices;
         this.admissions = admissions;
         this.beds = beds;
         this.patients = patients;
@@ -190,8 +193,8 @@ public class AdmissionService {
 
     /**
      * ADMITTED to CANCELLED (an admission made in error), releasing the bed now. Locks the bed before the admission
-     * row (lock order) through {@link #underBedLock}. A cancel with a live IPD invoice is refused once IPD invoices
-     * exist ([E8-6]).
+     * row (lock order) through {@link #underBedLock}. A cancel with a live IPD invoice is refused ([E8-6],
+     * {@code 409 INVALID_STATE_TRANSITION}); billing's check holds the admission's invoicing lock to the commit.
      */
     public AdmissionView cancel(OrganizationPrincipal actor, UUID id, Long version) {
         UUID org = actor.organizationId();
@@ -204,6 +207,10 @@ public class AdmissionService {
             if (!current.canTransitionTo(AdmissionStatus.CANCELLED)) {
                 throw new ConflictException("INVALID_STATE_TRANSITION",
                         "An admission that is " + current + " cannot be cancelled.");
+            }
+            if (invoices.hasLiveIpdInvoice(org, id)) {
+                throw new ConflictException("INVALID_STATE_TRANSITION",
+                        "The admission has a live IPD invoice; discard or cancel it first.");
             }
             Instant now = now();
             beds.release(org, id, now);

@@ -3,6 +3,9 @@ package com.hms.billing.application;
 import com.hms.audit.api.AuditEntry;
 import com.hms.audit.api.AuditOutcome;
 import com.hms.audit.api.AuditRecorder;
+import com.hms.billing.api.ChargeSource;
+import com.hms.billing.api.ChargeSource.AdmissionInfo;
+import com.hms.billing.api.ChargeSource.ChargeLine;
 import com.hms.billing.api.InvoiceBalancePort;
 import com.hms.billing.api.InvoiceIssued;
 import com.hms.billing.api.ServicePrice;
@@ -40,6 +43,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -90,11 +94,14 @@ public class InvoiceService implements InvoiceBalancePort {
     private final IdempotencyService idempotency;
     private final ApplicationEventPublisher events;
     private final CreditNoteRepository creditNotes;
+    private final ChargeSource charges;
 
     public InvoiceService(InvoiceRepository repository, ServiceCatalogRepository catalog, ServicePriceLookup prices,
             EncounterQuery encounters, PatientDirectory patients, AuditRecorder audit, UuidV7Generator ids,
             Clock clock, OrganizationDirectory organizations, DocumentNumberAllocator numbers,
-            IdempotencyService idempotency, ApplicationEventPublisher events, CreditNoteRepository creditNotes) {
+            IdempotencyService idempotency, ApplicationEventPublisher events, CreditNoteRepository creditNotes,
+            ChargeSource charges) {
+        this.charges = charges;
         this.creditNotes = creditNotes;
         this.organizations = organizations;
         this.numbers = numbers;
@@ -110,12 +117,19 @@ public class InvoiceService implements InvoiceBalancePort {
         this.clock = clock;
     }
 
-    /** A new empty OPD draft; the encounter must exist in the organization and belong to the patient. */
+    /**
+     * A new draft: OPD (empty, for an encounter of the patient; the encounter must exist in the organization) or IPD
+     * ({@link #createIpdDraft}). {@code admissionId} and {@code kind} are for IPD only.
+     */
     @Transactional
-    public InvoiceView createDraft(OrganizationPrincipal actor, String type, UUID patientId, UUID encounterId) {
+    public InvoiceView createDraft(OrganizationPrincipal actor, String type, UUID patientId, UUID encounterId,
+            UUID admissionId, String kind) {
+        if ("IPD".equals(type)) {
+            return createIpdDraft(actor, patientId, admissionId, kind);
+        }
         UUID org = actor.organizationId();
         if (!"OPD".equals(type)) {
-            throw invalid("type", "Only OPD invoices can be created from an encounter; IPD comes with admissions.");
+            throw invalid("type", "type must be OPD or IPD.");
         }
         if (patientId == null) {
             throw invalid("patientId", "patientId is required.");
@@ -138,6 +152,76 @@ public class InvoiceService implements InvoiceBalancePort {
         }
         audit.record(new AuditEntry(org, actor.userId(), "INVOICE_CREATED", ENTITY, id, AuditOutcome.SUCCESS,
                 List.of("type", "patientId", "encounterId", "status")));
+        return view(org, repository.find(org, id).orElseThrow(), true);
+    }
+
+    /**
+     * [E8-6] An IPD draft (ruling R4) whose first items are the admission's room-charge lines from
+     * {@link ChargeSource}, unit prices snapshot. INTERIM needs the admission ADMITTED or DISCHARGE_INITIATED and
+     * charges up to now; FINAL needs DISCHARGE_INITIATED and charges up to the planned discharge, at most one live
+     * FINAL per admission ({@code 409 DUPLICATE_FINAL_INVOICE}). Only dates after the latest
+     * {@code roomChargesThrough} of the admission's live IPD invoices are charged; drafts of one admission are
+     * serialised by a transaction advisory lock (billing never locks the admission row). An INTERIM with no
+     * chargeable day is {@code 422 BUSINESS_RULE_VIOLATION}.
+     */
+    private InvoiceView createIpdDraft(OrganizationPrincipal actor, UUID patientId, UUID admissionId, String kind) {
+        UUID org = actor.organizationId();
+        List<Map<String, String>> errors = new ArrayList<>();
+        if (patientId == null) {
+            errors.add(error("patientId", "REQUIRED", "patientId is required."));
+        }
+        if (admissionId == null) {
+            errors.add(error("admissionId", "REQUIRED", "admissionId is required for an IPD invoice."));
+        }
+        if (!Invoice.INTERIM.equals(kind) && !Invoice.FINAL.equals(kind)) {
+            errors.add(error("kind", "INVALID", "kind must be INTERIM or FINAL for an IPD invoice."));
+        }
+        if (!errors.isEmpty()) {
+            throw fieldErrors(errors);
+        }
+        repository.lockAdmissionInvoicing(org, admissionId);
+        AdmissionInfo admission = charges.admission(org, admissionId)
+                .orElseThrow(() -> new NotFoundException("Admission not found."));
+        if (!admission.patientId().equals(patientId)) {
+            throw invalid("patientId", "The admission belongs to another patient.");
+        }
+        boolean fin = Invoice.FINAL.equals(kind);
+        boolean allowed = fin ? "DISCHARGE_INITIATED".equals(admission.status())
+                : "ADMITTED".equals(admission.status()) || "DISCHARGE_INITIATED".equals(admission.status());
+        if (!allowed) {
+            throw new ConflictException("INVALID_STATE_TRANSITION", fin
+                    ? "A final invoice needs the admission in DISCHARGE_INITIATED."
+                    : "An interim invoice needs an active admission.");
+        }
+        Instant now = clock.instant();
+        Instant endAt = fin ? admission.chargeEndAt() : now;
+        if (endAt == null) {
+            throw new BusinessRuleException("BUSINESS_RULE_VIOLATION", "The admission has no planned discharge time.");
+        }
+        LocalDate after = repository.roomChargesThrough(org, admissionId);
+        List<ChargeLine> room = charges.roomCharges(org, admissionId, after, endAt);
+        if (room.isEmpty() && !fin) {
+            throw new BusinessRuleException("BUSINESS_RULE_VIOLATION", "There are no room days to charge yet.");
+        }
+        UUID id = ids.next();
+        if (!repository.insertIpdDraft(id, org, patientId, admissionId, kind, actor.userId(), now)) {
+            throw new ConflictException("DUPLICATE_FINAL_INVOICE",
+                    "The admission already has a final invoice; discard it or use it.");
+        }
+        if (!room.isEmpty()) {
+            List<InvoiceLine> lines = room.stream().map(c -> InvoiceLine.of(c.serviceId(), c.description(),
+                    BigDecimal.valueOf(c.quantity()).setScale(2), c.unitPrice(), Money.ZERO, null,
+                    BigDecimal.ZERO.setScale(2))).toList();
+            repository.replaceItems(org, id, lines, Collections.nCopies(lines.size(), InvoiceRepository.ROOM),
+                    InvoiceCalculator.totals(lines.stream().map(InvoiceLine::totals).toList()), now);
+            repository.setRoomChargesThrough(org, id, room.stream().map(ChargeLine::to)
+                    .max(LocalDate::compareTo).orElseThrow());
+        } else if (after != null) {
+            repository.setRoomChargesThrough(org, id, after);
+        }
+        audit.record(new AuditEntry(org, actor.userId(), "INVOICE_CREATED", ENTITY, id, AuditOutcome.SUCCESS,
+                List.of("type", "patientId", "admissionId", "kind", "status", "items", "roomChargesThrough",
+                        "total")));
         return view(org, repository.find(org, id).orElseThrow(), true);
     }
 
@@ -177,10 +261,17 @@ public class InvoiceService implements InvoiceBalancePort {
         InvoiceRow row = repository.lock(org, id).orElseThrow(InvoiceService::notFound);
         requireDraft(row);
         Instant now = clock.instant();
-        List<InvoiceLine> lines = lines(org, inputs, now, mayOverridePrice, mayDiscount);
+        List<ItemRow> roomRows = repository.items(org, id).stream().filter(ItemRow::room).toList();
+        List<InvoiceLine> lines = new ArrayList<>(roomRows.stream().map(ItemRow::line).toList());
+        List<ItemInput> others = withoutRoomLines(inputs, roomRows);
+        if (roomRows.isEmpty() || !others.isEmpty()) {
+            lines.addAll(lines(org, others, now, mayOverridePrice, mayDiscount));
+        }
+        List<String> kinds = new ArrayList<>(Collections.nCopies(roomRows.size(), InvoiceRepository.ROOM));
+        kinds.addAll(Collections.nCopies(lines.size() - roomRows.size(), InvoiceRepository.STANDARD));
         requireCurrent(row, version);
-        repository.replaceItems(org, id, lines, InvoiceCalculator.totals(lines.stream().map(InvoiceLine::totals)
-                .toList()), now);
+        repository.replaceItems(org, id, lines, kinds, InvoiceCalculator.totals(lines.stream()
+                .map(InvoiceLine::totals).toList()), now);
         audit.record(new AuditEntry(org, actor.userId(), "INVOICE_ITEMS_UPDATED", ENTITY, id, AuditOutcome.SUCCESS,
                 List.of("items", "subtotal", "discountTotal", "taxTotal", "total")));
         if (lines.stream().anyMatch(l -> positive(l.discount()))) {
@@ -210,7 +301,8 @@ public class InvoiceService implements InvoiceBalancePort {
             throw fieldErrors(errors);
         }
         requireCurrent(row, version);
-        List<InvoiceLine> current = repository.items(org, id).stream().map(ItemRow::line).toList();
+        List<ItemRow> currentRows = repository.items(org, id);
+        List<InvoiceLine> current = currentRows.stream().map(ItemRow::line).toList();
         if (current.isEmpty()) {
             throw new BusinessRuleException("BUSINESS_RULE_VIOLATION", "The invoice has no items to discount.");
         }
@@ -220,10 +312,53 @@ public class InvoiceService implements InvoiceBalancePort {
             lines.add(InvoiceLine.of(l.serviceId(), l.description(), l.quantity(), l.unitPrice(), discount,
                     positive(discount) ? reason : null, l.taxRate()));
         }
-        repository.replaceItems(org, id, lines, InvoiceCalculator.totals(lines.stream().map(InvoiceLine::totals)
-                .toList()), clock.instant());
+        repository.replaceItems(org, id, lines, currentRows.stream().map(ItemRow::kind).toList(),
+                InvoiceCalculator.totals(lines.stream().map(InvoiceLine::totals).toList()), clock.instant());
         auditDiscount(org, actor, id);
         return view(org, repository.find(org, id).orElseThrow(), true);
+    }
+
+    /**
+     * [E8-6] Room-charge lines of an IPD draft are kept as generated: every stored ROOM line must appear in the
+     * request unchanged (service, description, quantity, unit price, discount, tax rate) and is matched off; the
+     * remaining inputs are ordinary lines. A room line changed or left out is {@code 422 VALIDATION_ERROR}.
+     */
+    private static List<ItemInput> withoutRoomLines(List<ItemInput> inputs, List<ItemRow> roomRows) {
+        if (roomRows.isEmpty()) {
+            return inputs;
+        }
+        if (inputs == null || inputs.size() > MAX_ITEMS) {
+            throw fieldErrors(List.of(error("items", "SIZE", "items needs 1 to " + MAX_ITEMS + " entries.")));
+        }
+        List<ItemInput> rest = new ArrayList<>(inputs);
+        for (ItemRow room : roomRows) {
+            InvoiceLine l = room.line();
+            ItemInput match = rest.stream().filter(in -> in != null && sameAsRoom(in, l)).findFirst().orElse(null);
+            if (match == null) {
+                throw fieldErrors(List.of(error("items", "ROOM_LINE_REQUIRED",
+                        "Room-charge lines must be kept unchanged.")));
+            }
+            rest.remove(match);
+        }
+        return rest;
+    }
+
+    private static boolean sameAsRoom(ItemInput in, InvoiceLine l) {
+        return l.serviceId().equals(in.serviceId())
+                && in.description() != null && l.description().equals(in.description().strip())
+                && sameDecimal(in.quantity(), l.quantity())
+                && (in.unitPrice() == null || in.unitPrice().equals(l.unitPrice()))
+                && (in.discount() == null ? !positive(l.discount()) : in.discount().equals(l.discount()))
+                && (in.taxRate() == null || in.taxRate().isBlank() ? l.taxRate().signum() == 0
+                        : sameDecimal(in.taxRate(), l.taxRate()));
+    }
+
+    private static boolean sameDecimal(String text, BigDecimal value) {
+        try {
+            return text != null && new BigDecimal(text.strip()).compareTo(value) == 0;
+        } catch (NumberFormatException e) {
+            return false;
+        }
     }
 
     /** Field names only; the reason is free text and never goes to the audit trail. */
@@ -503,7 +638,8 @@ public class InvoiceService implements InvoiceBalancePort {
                 .toList() : List.of();
         return new InvoiceView(r.id(), r.type(), r.patientId(), r.encounterId(), r.admissionId(), r.status(),
                 r.invoiceNo(), r.issuedAt(), r.subtotal().toString(), r.discountTotal().toString(),
-                r.taxTotal().toString(), r.total().toString(), r.version(), items, r.createdAt(), r.updatedAt());
+                r.taxTotal().toString(), r.total().toString(), r.version(), items, r.createdAt(), r.updatedAt(), r.kind(),
+                r.roomChargesThrough());
     }
 
     private static InvoiceView.Item item(ItemRow row) {
@@ -511,7 +647,8 @@ public class InvoiceService implements InvoiceBalancePort {
         LineTotals t = l.totals();
         return new InvoiceView.Item(row.id(), l.serviceId(), l.description(), l.quantity().toPlainString(),
                 l.unitPrice().toString(), t.discount().toString(), l.discountReason(), l.taxRate().toPlainString(),
-                t.gross().toString(), t.taxable().toString(), t.tax().toString(), t.total().toString());
+                t.gross().toString(), t.taxable().toString(), t.tax().toString(), t.total().toString(),
+                row.kind());
     }
 
     private static Map<String, String> error(String field, String code, String message) {

@@ -30,12 +30,13 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
-/** Invoices (api-design.md section 12). [E7-1]: OPD drafts, list, read, replace items, discard; [E7-2] issue. */
+/** Invoices (api-design.md section 12). [E7-1]: OPD drafts, [E8-6] IPD drafts, list, read, replace items, discard; [E7-2] issue. */
 @RestController
 @RequestMapping("/api/v1/invoices")
 class InvoiceController {
 
-    record CreateRequest(String type, UUID patientId, UUID encounterId) {
+    /** OPD: {@code encounterId}; IPD ([E8-6]): {@code admissionId} and {@code kind} INTERIM or FINAL. */
+    record CreateRequest(String type, UUID patientId, UUID encounterId, UUID admissionId, String kind) {
     }
 
     record ItemsRequest(Long version, List<ItemInput> items) {
@@ -59,7 +60,8 @@ class InvoiceController {
     @PreAuthorize("hasAuthority('invoice:create')")
     @ResponseStatus(HttpStatus.CREATED)
     InvoiceView create(@AuthenticationPrincipal OrganizationPrincipal actor, @RequestBody CreateRequest request) {
-        return invoices.createDraft(actor, request.type(), request.patientId(), request.encounterId());
+        return invoices.createDraft(actor, request.type(), request.patientId(), request.encounterId(),
+                request.admissionId(), request.kind());
     }
 
     @GetMapping

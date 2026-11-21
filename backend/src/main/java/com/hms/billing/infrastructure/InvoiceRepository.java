@@ -9,6 +9,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -21,9 +22,10 @@ import org.springframework.stereotype.Repository;
 public class InvoiceRepository {
 
     private static final String COLUMNS = "id, type, patient_id, encounter_id, admission_id, status, invoice_no,"
-            + " issued_at, subtotal, discount_total, tax_total, total, version, created_at, updated_at";
+            + " issued_at, subtotal, discount_total, tax_total, total, version, created_at, updated_at, kind,"
+            + " room_charges_through";
     private static final String ITEM_COLUMNS = "id, service_id, description, quantity, unit_price, discount,"
-            + " discount_reason, tax_rate, gross, taxable, tax, total";
+            + " discount_reason, tax_rate, gross, taxable, tax, total, kind";
     private static final String FILTER = " WHERE organization_id = :org"
             + " AND (CAST(:patient AS uuid) IS NULL OR patient_id = :patient)"
             + " AND (CAST(:status AS text) IS NULL OR status = ANY(string_to_array(:status, ',')))"
@@ -32,11 +34,19 @@ public class InvoiceRepository {
 
     public record InvoiceRow(UUID id, String type, UUID patientId, UUID encounterId, UUID admissionId, String status,
             String invoiceNo, Instant issuedAt, Money subtotal, Money discountTotal, Money taxTotal, Money total,
-            long version, Instant createdAt, Instant updatedAt) {
+            long version, Instant createdAt, Instant updatedAt, String kind, LocalDate roomChargesThrough) {
     }
 
-    public record ItemRow(UUID id, InvoiceLine line) {
+    /** {@code kind} is {@link #ROOM} for a room-charge line generated from the admission ([E8-6]), else STANDARD. */
+    public record ItemRow(UUID id, InvoiceLine line, String kind) {
+
+        public boolean room() {
+            return ROOM.equals(kind);
+        }
     }
+
+    public static final String ROOM = "ROOM";
+    public static final String STANDARD = "STANDARD";
 
     public record ListFilter(UUID patientId, String status, Instant from, Instant to) {
     }
@@ -62,6 +72,50 @@ public class InvoiceRepository {
         } catch (DuplicateKeyException e) {
             return false;
         }
+    }
+
+    /** @return false when the admission already has a live FINAL invoice (the partial unique index decides) */
+    public boolean insertIpdDraft(UUID id, UUID org, UUID patientId, UUID admissionId, String kind,
+            UUID createdBy, Instant now) {
+        try {
+            jdbc.sql("""
+                    INSERT INTO hms.invoice (id, organization_id, type, patient_id, admission_id, kind, created_by,
+                        created_at, updated_at)
+                    VALUES (?, ?, 'IPD', ?, ?, ?, ?, ?, ?)
+                    """).params(id, org, patientId, admissionId, kind, createdBy, Timestamp.from(now),
+                    Timestamp.from(now)).update();
+            return true;
+        } catch (DuplicateKeyException e) {
+            return false;
+        }
+    }
+
+    /** Records the last room-charged date of a DRAFT IPD invoice. */
+    public void setRoomChargesThrough(UUID org, UUID id, LocalDate through) {
+        jdbc.sql("UPDATE hms.invoice SET room_charges_through = ? WHERE organization_id = ? AND id = ?")
+                .params(through, org, id).update();
+    }
+
+    /**
+     * Transaction-scoped advisory lock serialising IPD invoice drafts of one admission (and the admission's cancel
+     * check), so two drafts never charge the same days. Billing never locks the admission row.
+     */
+    public void lockAdmissionInvoicing(UUID org, UUID admissionId) {
+        jdbc.sql("SELECT 1 FROM (SELECT pg_advisory_xact_lock(hashtext(?))) l")
+                .param("ipd-invoice:" + admissionId).query(Integer.class).single();
+    }
+
+    /** The latest {@code room_charges_through} among the admission's live IPD invoices, or null. */
+    public LocalDate roomChargesThrough(UUID org, UUID admissionId) {
+        return jdbc.sql("SELECT max(room_charges_through) FROM hms.invoice WHERE organization_id = ?"
+                + " AND admission_id = ? AND type = 'IPD' AND status NOT IN ('DISCARDED', 'CANCELLED')")
+                .params(org, admissionId).query((rs, n) -> rs.getObject(1, LocalDate.class)).list().getFirst();
+    }
+
+    public boolean hasLiveIpdInvoice(UUID org, UUID admissionId) {
+        return jdbc.sql("SELECT EXISTS (SELECT 1 FROM hms.invoice WHERE organization_id = ? AND admission_id = ?"
+                + " AND type = 'IPD' AND status NOT IN ('DISCARDED', 'CANCELLED'))")
+                .params(org, admissionId).query(Boolean.class).single();
     }
 
     public Optional<InvoiceRow> find(UUID org, UUID id) {
@@ -99,6 +153,12 @@ public class InvoiceRepository {
 
     /** Replaces every item of a DRAFT and stores the new totals, bumping the version. */
     public void replaceItems(UUID org, UUID invoiceId, List<InvoiceLine> lines, InvoiceTotals totals, Instant now) {
+        replaceItems(org, invoiceId, lines, java.util.Collections.nCopies(lines.size(), STANDARD), totals, now);
+    }
+
+    /** As above with each line's kind ({@link #ROOM} or {@link #STANDARD}), position for position. */
+    public void replaceItems(UUID org, UUID invoiceId, List<InvoiceLine> lines, List<String> kinds,
+            InvoiceTotals totals, Instant now) {
         jdbc.sql("DELETE FROM hms.invoice_item WHERE organization_id = ? AND invoice_id = ?")
                 .params(org, invoiceId).update();
         for (int i = 0; i < lines.size(); i++) {
@@ -107,12 +167,12 @@ public class InvoiceRepository {
             jdbc.sql("""
                     INSERT INTO hms.invoice_item (id, organization_id, invoice_id, position, service_id, description,
                         quantity, unit_price, discount, discount_reason, tax_rate, gross, taxable, tax, total,
-                        created_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        created_at, kind)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """).params(ids.next(), org, invoiceId, i, l.serviceId(), l.description(), l.quantity(),
                     l.unitPrice().amount(), t.discount().amount(), l.discountReason(), l.taxRate(),
                     t.gross().amount(), t.taxable().amount(), t.tax().amount(), t.total().amount(),
-                    Timestamp.from(now)).update();
+                    Timestamp.from(now), kinds.get(i)).update();
         }
         jdbc.sql("""
                 UPDATE hms.invoice SET subtotal = ?, discount_total = ?, tax_total = ?, total = ?,
@@ -144,7 +204,8 @@ public class InvoiceRepository {
                 rs.getObject("patient_id", UUID.class), rs.getObject("encounter_id", UUID.class),
                 rs.getObject("admission_id", UUID.class), rs.getString("status"), rs.getString("invoice_no"),
                 instant(rs, "issued_at"), money(rs, "subtotal"), money(rs, "discount_total"), money(rs, "tax_total"),
-                money(rs, "total"), rs.getLong("version"), instant(rs, "created_at"), instant(rs, "updated_at"));
+                money(rs, "total"), rs.getLong("version"), instant(rs, "created_at"), instant(rs, "updated_at"),
+                rs.getString("kind"), rs.getObject("room_charges_through", LocalDate.class));
     }
 
     private static ItemRow mapItem(ResultSet rs, int row) throws SQLException {
@@ -152,7 +213,7 @@ public class InvoiceRepository {
                 money(rs, "tax"), money(rs, "total"));
         return new ItemRow(rs.getObject("id", UUID.class), new InvoiceLine(rs.getObject("service_id", UUID.class),
                 rs.getString("description"), rs.getBigDecimal("quantity"), money(rs, "unit_price"),
-                totals.discount(), rs.getString("discount_reason"), rs.getBigDecimal("tax_rate"), totals));
+                totals.discount(), rs.getString("discount_reason"), rs.getBigDecimal("tax_rate"), totals), rs.getString("kind"));
     }
 
     private static Money money(ResultSet rs, String column) throws SQLException {
