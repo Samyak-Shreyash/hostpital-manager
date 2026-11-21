@@ -264,6 +264,9 @@ public class InvoiceService implements InvoiceBalancePort {
         List<ItemRow> roomRows = repository.items(org, id).stream().filter(ItemRow::room).toList();
         List<InvoiceLine> lines = new ArrayList<>(roomRows.stream().map(ItemRow::line).toList());
         List<ItemInput> others = withoutRoomLines(inputs, roomRows);
+        if (roomRows.size() + others.size() > MAX_ITEMS) {
+            throw fieldErrors(List.of(error("items", "SIZE", "items needs 1 to " + MAX_ITEMS + " entries.")));
+        }
         if (roomRows.isEmpty() || !others.isEmpty()) {
             lines.addAll(lines(org, others, now, mayOverridePrice, mayDiscount));
         }
@@ -376,6 +379,7 @@ public class InvoiceService implements InvoiceBalancePort {
     public InvoiceView discard(OrganizationPrincipal actor, UUID id, Long version) {
         UUID org = actor.organizationId();
         requireVersion(version);
+        repository.requireNoLaterIpdCoverage(org, id); // advisory lock before the invoice row
         InvoiceRow row = repository.lock(org, id).orElseThrow(InvoiceService::notFound);
         requireDraft(row);
         requireCurrent(row, version);

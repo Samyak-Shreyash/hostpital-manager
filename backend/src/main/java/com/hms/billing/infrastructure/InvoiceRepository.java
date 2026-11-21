@@ -112,6 +112,35 @@ public class InvoiceRepository {
                 .params(org, admissionId).query((rs, n) -> rs.getObject(1, LocalDate.class)).list().getFirst();
     }
 
+    /**
+     * [E8-6] Whether another live IPD invoice of the admission charges room days after {@code through}: then
+     * removing this invoice from coverage would leave its days unbilled for good.
+     */
+    public boolean hasLaterLiveIpdInvoice(UUID org, UUID admissionId, UUID invoiceId, LocalDate through) {
+        return through != null && jdbc.sql("SELECT EXISTS (SELECT 1 FROM hms.invoice WHERE organization_id = ?"
+                + " AND admission_id = ? AND id <> ? AND type = 'IPD' AND status NOT IN ('DISCARDED', 'CANCELLED')"
+                + " AND room_charges_through > ?)").params(org, admissionId, invoiceId, through)
+                .query(Boolean.class).single();
+    }
+
+    /**
+     * [E8-6] Locks an IPD invoice's admission invoicing (advisory lock, taken before the invoice row) and refuses
+     * with {@code 409 INVALID_STATE_TRANSITION} when a later live IPD invoice exists. Call before
+     * {@link #lock} when the invoice is about to leave room-day coverage (discard, full credit).
+     */
+    public void requireNoLaterIpdCoverage(UUID org, UUID invoiceId) {
+        InvoiceRow row = find(org, invoiceId).orElse(null);
+        if (row == null || row.admissionId() == null) {
+            return;
+        }
+        lockAdmissionInvoicing(org, row.admissionId());
+        if (hasLaterLiveIpdInvoice(org, row.admissionId(), invoiceId, row.roomChargesThrough())) {
+            throw new com.hms.shared.domain.ConflictException("INVALID_STATE_TRANSITION",
+                    "A later IPD invoice of the admission charges subsequent room days; it must be discarded or"
+                            + " cancelled first.");
+        }
+    }
+
     public boolean hasLiveIpdInvoice(UUID org, UUID admissionId) {
         return jdbc.sql("SELECT EXISTS (SELECT 1 FROM hms.invoice WHERE organization_id = ? AND admission_id = ?"
                 + " AND type = 'IPD' AND status NOT IN ('DISCARDED', 'CANCELLED'))")

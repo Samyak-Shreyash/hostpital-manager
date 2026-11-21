@@ -71,6 +71,9 @@ public class CreditNoteService {
     public CreditNoteView issue(OrganizationPrincipal actor, UUID invoiceId, Money amount, String reason) {
         validate(amount, reason);
         UUID org = actor.organizationId();
+        // [E8-6] An IPD invoice: the admission's invoicing advisory lock comes before the invoice row.
+        invoices.find(org, invoiceId).map(InvoiceRow::admissionId)
+                .ifPresent(admission -> invoices.lockAdmissionInvoicing(org, admission));
         InvoiceRow invoice = invoices.lock(org, invoiceId)
                 .orElseThrow(() -> new NotFoundException("Invoice not found."));
         if (!CREDITABLE.contains(invoice.status())) {
@@ -83,6 +86,12 @@ public class CreditNoteService {
             throw new BusinessRuleException("CREDIT_EXCEEDS_TOTAL",
                     "Credit notes may not exceed the invoice total; creditable is "
                             + invoice.total().minus(credited) + ".");
+        }
+        if (newCredited.compareTo(invoice.total()) == 0 && Invoice.ISSUED.equals(invoice.status())
+                && invoice.admissionId() != null && invoices.hasLaterLiveIpdInvoice(org, invoice.admissionId(),
+                        invoiceId, invoice.roomChargesThrough())) {
+            throw new ConflictException("INVALID_STATE_TRANSITION",
+                    "A later IPD invoice of the admission charges subsequent room days; cancel it first.");
         }
         Instant now = clock.instant();
         ZoneId zone = organizations.find(org).map(OrganizationSummary::timezone).map(ZoneId::of)
