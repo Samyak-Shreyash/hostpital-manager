@@ -15,6 +15,9 @@ public final class Invoice {
     public static final String PAID = "PAID";
     public static final String CANCELLED = "CANCELLED";
     public static final String DISCARDED = "DISCARDED";
+    /** IPD invoice kinds ([E8-6], ruling R4). */
+    public static final String INTERIM = "INTERIM";
+    public static final String FINAL = "FINAL";
 
     public static final Set<String> STATUSES = Set.of(DRAFT, ISSUED, PARTIALLY_PAID, PAID, CANCELLED, DISCARDED);
     /** The statuses a payment or refund may move an issued invoice between. */

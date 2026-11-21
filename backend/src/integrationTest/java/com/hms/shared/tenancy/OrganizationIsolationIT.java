@@ -80,7 +80,8 @@ class OrganizationIsolationIT extends PostgresIT {
             "POST /api/v1/appointments", // ids in the body; cross-org patient/doctor covered by AppointmentBookingIT
             "GET /api/v1/invoices", // list scoped by the principal; other-org patientId matches nothing
             "GET /api/v1/payments", // list scoped by the principal ([E7-3])
-            "POST /api/v1/invoices", // ids in the body; cross-org patient/encounter answer 404, InvoiceDraftIT
+            "POST /api/v1/invoices", // ids in the body; cross-org patient/encounter/admission answer 404,
+            // InvoiceDraftIT and IpdInvoiceIT
             "POST /api/v1/encounters", // ids in the body; cross-org appointment/patient answer 404/422, EncounterIT
             "POST /api/v1/appointments/walk-in", // ids in the body; cross-org patient/doctor answer 422, QueueTokenIT
             "POST /api/v1/auth/logout",

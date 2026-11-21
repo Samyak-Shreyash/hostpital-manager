@@ -60,6 +60,13 @@ public class InvoicePdfService implements InvoiceLookup {
         this.audit = audit;
     }
 
+    @Override
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.MANDATORY)
+    public boolean hasLiveIpdInvoice(UUID organizationId, UUID admissionId) {
+        repository.lockAdmissionInvoicing(organizationId, admissionId);
+        return repository.hasLiveIpdInvoice(organizationId, admissionId);
+    }
+
     @Transactional
     public PdfFile pdf(OrganizationPrincipal actor, UUID id) {
         UUID org = actor.organizationId();

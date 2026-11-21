@@ -61,7 +61,8 @@ class AdmissionServiceRetryTest {
         service = new AdmissionService(admissions, beds, mock(PatientDirectory.class),
                 mock(PractitionerDirectory.class), mock(PractitionerAvailability.class), mock(EncounterQuery.class),
                 mock(OrganizationDirectory.class), mock(DocumentNumberAllocator.class), mock(AuditRecorder.class),
-                mock(UuidV7Generator.class), Clock.fixed(Instant.parse("2026-11-21T00:00:00Z"), ZoneOffset.UTC), tm);
+                mock(UuidV7Generator.class), Clock.fixed(Instant.parse("2026-11-21T00:00:00Z"), ZoneOffset.UTC), tm,
+                mock(com.hms.billing.api.InvoiceLookup.class));
         actor = mock(OrganizationPrincipal.class);
         when(actor.organizationId()).thenReturn(org);
         when(actor.userId()).thenReturn(UUID.randomUUID());
