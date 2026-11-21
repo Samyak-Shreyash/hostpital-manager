@@ -118,7 +118,9 @@ class SeedServiceIT extends PostgresIT {
 
         assertThat(count("SELECT count(*) FROM hms.department")).isEqualTo(6);
         assertThat(count("SELECT count(*) FROM hms.specialty")).isEqualTo(6);
-        assertThat(count("SELECT count(*) FROM hms.service_price")).isEqualTo(12);
+        assertThat(count("SELECT count(*) FROM hms.service_price")).isEqualTo(14); // 12 + 2 room-rate services
+        assertThat(count("SELECT count(*) FROM hms.ward")).isEqualTo(2);
+        assertThat(count("SELECT count(*) FROM hms.bed")).isEqualTo(12);
         assertThat(count("SELECT count(*) FROM hms.practitioner")).isEqualTo(5);
         assertThat(count("SELECT count(*) FROM hms.practitioner_specialty WHERE is_primary")).isEqualTo(5);
         assertThat(count("SELECT count(*) FROM hms.staff")).isEqualTo(5);
