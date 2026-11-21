@@ -27,6 +27,7 @@ public class WardService {
 
     static final int MAX_PAGE_SIZE = 100;
     static final String ENTITY = "WARD";
+    static final String GENERAL = "GENERAL";
 
     private final WardRepository wards;
     private final OrganizationDirectory organizations;
@@ -57,25 +58,27 @@ public class WardService {
     }
 
     @Transactional
-    public WardView create(OrganizationPrincipal actor, String code, String name, UUID departmentId) {
+    public WardView create(OrganizationPrincipal actor, String code, String name, UUID departmentId,
+            String careType) {
         UUID org = actor.organizationId();
         checkDepartment(org, departmentId);
         UUID id = ids.next();
         Instant now = now();
-        if (!wards.insert(id, org, code, name.trim(), departmentId, now)) {
+        if (!wards.insert(id, org, code, name.trim(), departmentId,
+                careType == null ? GENERAL : careType, now)) {
             throw new ConflictException("DUPLICATE_WARD_CODE", "Ward code already exists.");
         }
         audit.record(new AuditEntry(org, actor.userId(), "WARD_CREATED", ENTITY, id, AuditOutcome.SUCCESS,
-                List.of("code", "name", "departmentId", "status")));
+                List.of("code", "name", "departmentId", "status", "careType")));
         return view(wards.find(org, id).orElseThrow());
     }
 
     /** Partial update; {@code version} must match. {@code null} leaves a field alone. Code is immutable. */
     @Transactional
     public WardView update(OrganizationPrincipal actor, UUID id, long version, String name, UUID departmentId,
-            String status) {
-        if (name == null && departmentId == null && status == null) {
-            throw new BusinessRuleException("VALIDATION_ERROR", "Provide name, departmentId and/or status.");
+            String status, String careType) {
+        if (name == null && departmentId == null && status == null && careType == null) {
+            throw new BusinessRuleException("VALIDATION_ERROR", "Provide name, departmentId, status and/or careType.");
         }
         UUID org = actor.organizationId();
         WardRow current = wards.find(org, id).orElseThrow(WardService::notFound);
@@ -99,10 +102,15 @@ public class WardService {
             newStatus = status;
             changed.add("status");
         }
+        String newCareType = current.careType();
+        if (careType != null && !careType.equals(current.careType())) {
+            newCareType = careType;
+            changed.add("careType");
+        }
         if (changed.isEmpty()) {
             return view(current);
         }
-        if (!wards.update(org, id, version, newName, newDepartment, newStatus, now())) {
+        if (!wards.update(org, id, version, newName, newDepartment, newStatus, newCareType, now())) {
             throw concurrentModification();
         }
         audit.record(new AuditEntry(org, actor.userId(), "WARD_UPDATED", ENTITY, id, AuditOutcome.SUCCESS, changed));
@@ -133,7 +141,7 @@ public class WardService {
     }
 
     private static WardView view(WardRow r) {
-        return new WardView(r.id(), r.code(), r.name(), r.departmentId(), r.status(), r.version(), r.createdAt(),
-                r.updatedAt());
+        return new WardView(r.id(), r.code(), r.name(), r.departmentId(), r.status(), r.careType(), r.version(),
+                r.createdAt(), r.updatedAt());
     }
 }

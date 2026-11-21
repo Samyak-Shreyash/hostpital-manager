@@ -1,6 +1,7 @@
 package com.hms.billing.api;
 
 import com.hms.shared.domain.Money;
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
@@ -19,8 +20,8 @@ public interface ChargeSource {
 
     /**
      * Room-day lines (BR-B6 rule [A], ruling R2) for the admission's bed-days up to {@code endAt}, skipping dates on
-     * or before {@code afterDate} (null: from the admission date). One line per bed, consecutive date run and unit
-     * price. A charged date with no valid bed price is {@code 422 BUSINESS_RULE_VIOLATION} naming the bed. An
+     * or before {@code afterDate} (null: from the admission date). One line per bed, consecutive date run, unit
+     * price and tax rate. A charged date with no valid bed price is {@code 422 BUSINESS_RULE_VIOLATION} naming the bed. An
      * unknown admission is {@code 404}.
      * {@code endAt} is required (null is {@code 422 VALIDATION_ERROR}; {@link AdmissionInfo#chargeEndAt} may be null,
      * callers must supply an end) and is capped at the discharge instant; a CANCELLED admission yields no lines.
@@ -31,7 +32,8 @@ public interface ChargeSource {
     record AdmissionInfo(UUID id, UUID patientId, String status, Instant admittedAt, Instant chargeEndAt) {
     }
 
+    /** {@code taxRate}: GST percent on this room line (0.00 or 5.00), decided by the supplier's tax rule. */
     record ChargeLine(UUID serviceId, String description, int quantity, Money unitPrice, LocalDate from,
-            LocalDate to) {
+            LocalDate to, BigDecimal taxRate) {
     }
 }

@@ -170,6 +170,8 @@ class ChargesPreviewIT extends PostgresIT {
                 .andExpect(jsonPath("$.lines[0].quantity", is(1)))
                 .andExpect(jsonPath("$.lines[0].unitPrice", is("1500.00")))
                 .andExpect(jsonPath("$.lines[0].amount", is("1500.00")))
+                .andExpect(jsonPath("$.lines[0].taxRate", is("0.00")))
+                .andExpect(jsonPath("$.lines[0].tax", is("0.00")))
                 .andExpect(jsonPath("$.lines[0].from", is("2026-11-21")))
                 .andExpect(jsonPath("$.lines[1].quantity", is(2)))
                 .andExpect(jsonPath("$.lines[1].unitPrice", is("2500.00")))

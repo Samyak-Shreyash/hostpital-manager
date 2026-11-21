@@ -48,6 +48,6 @@ public interface BedAllocation {
     }
 
     record AssignmentView(UUID id, UUID bedId, String bedNo, String wardName, UUID dailyRateServiceId,
-            Instant assignedAt, Instant releasedAt, String reason) {
+            Instant assignedAt, Instant releasedAt, String reason, boolean criticalCare) {
     }
 }
