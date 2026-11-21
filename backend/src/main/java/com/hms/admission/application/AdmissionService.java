@@ -42,6 +42,7 @@ import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /**
@@ -271,9 +272,16 @@ public class AdmissionService {
      * locks the admission row and re-reads the open assignment. If that is no longer the one read first, the
      * transaction rolls back and the whole attempt is retried once in a fresh transaction (so no lock is ever taken
      * out of order); a second miss is {@code 409 CONCURRENT_MODIFICATION}.
+     *
+     * <p>Must be called with no transaction open: the template uses REQUIRED propagation, so inside an outer
+     * transaction a miss would mark that transaction rollback-only and the retry would not be fresh. Callers
+     * (including a later discharge flow) must therefore not be {@code @Transactional}; this fails fast otherwise.
      */
     private <T> T underBedLock(UUID org, UUID id, Function<AssignmentView, UUID> extraBed, Runnable afterBedLocks,
             LockedWork<T> work) {
+        if (TransactionSynchronizationManager.isActualTransactionActive()) {
+            throw new IllegalStateException("underBedLock must run outside a transaction");
+        }
         for (int attempt = 0; ; attempt++) {
             try {
                 return transactions.execute(status -> {
