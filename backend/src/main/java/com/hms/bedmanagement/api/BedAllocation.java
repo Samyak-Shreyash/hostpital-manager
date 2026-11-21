@@ -25,7 +25,12 @@ public interface BedAllocation {
     void lockBeds(UUID organizationId, List<UUID> bedIds);
 
     /** Opens an assignment; the caller holds the bed lock. A second open assignment of the bed is 409. */
-    AssignmentView open(UUID organizationId, UUID bedId, UUID admissionId, Instant at);
+    default AssignmentView open(UUID organizationId, UUID bedId, UUID admissionId, Instant at) {
+        return open(organizationId, bedId, admissionId, at, null);
+    }
+
+    /** As {@link #open(UUID, UUID, UUID, Instant)}, recording why (a transfer); {@code reason} may be null. */
+    AssignmentView open(UUID organizationId, UUID bedId, UUID admissionId, Instant at, String reason);
 
     /** Releases the open assignment of the admission at {@code at}; {@code 409} when there is none. */
     AssignmentView release(UUID organizationId, UUID admissionId, Instant at);

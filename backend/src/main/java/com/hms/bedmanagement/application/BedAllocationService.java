@@ -54,9 +54,9 @@ public class BedAllocationService implements BedAllocation {
     }
 
     @Override
-    public AssignmentView open(UUID organizationId, UUID bedId, UUID admissionId, Instant at) {
+    public AssignmentView open(UUID organizationId, UUID bedId, UUID admissionId, Instant at, String reason) {
         UUID id = ids.next();
-        if (!assignments.insert(id, organizationId, bedId, admissionId, at)) {
+        if (!assignments.insert(id, organizationId, bedId, admissionId, at, reason)) {
             throw notAvailable();
         }
         return assignments.find(organizationId, id).orElseThrow();

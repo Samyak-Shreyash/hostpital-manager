@@ -43,18 +43,19 @@ public class AdmissionRepository {
     }
 
     /**
-     * Inserts an ADMITTED admission without its number (assigned last, in the same transaction). False when the
+     * Inserts an ADMITTED admission with its number (allocated just before; the insert takes no row lock others
+     * wait on, so the sequence lock stays the last one that matters). False when the
      * patient already has an active admission: the partial unique index (I3) decides, so concurrent admits are safe.
      */
-    public boolean insert(UUID id, UUID org, UUID patientId, UUID doctorId, UUID sourceEncounterId, String diagnosis,
+    public boolean insert(UUID id, UUID org, String admissionNo, UUID patientId, UUID doctorId, UUID sourceEncounterId, String diagnosis,
             Instant admittedAt, UUID createdBy) {
         try {
             jdbc.sql("""
-                    INSERT INTO hms.admission (id, organization_id, patient_id, admitting_doctor_id,
+                    INSERT INTO hms.admission (id, organization_id, admission_no, patient_id, admitting_doctor_id,
                         source_encounter_id, admission_diagnosis, status, admitted_at, created_by, created_at,
                         updated_at)
-                    VALUES (?, ?, ?, ?, ?, ?, 'ADMITTED', ?, ?, ?, ?)
-                    """).params(id, org, patientId, doctorId, sourceEncounterId, diagnosis, Timestamp.from(admittedAt),
+                    VALUES (?, ?, ?, ?, ?, ?, ?, 'ADMITTED', ?, ?, ?, ?)
+                    """).params(id, org, admissionNo, patientId, doctorId, sourceEncounterId, diagnosis, Timestamp.from(admittedAt),
                     createdBy, Timestamp.from(admittedAt), Timestamp.from(admittedAt)).update();
             return true;
         } catch (DuplicateKeyException e) {
@@ -63,11 +64,6 @@ public class AdmissionRepository {
             }
             throw e;
         }
-    }
-
-    public void assignNumber(UUID org, UUID id, String admissionNo) {
-        jdbc.sql("UPDATE hms.admission SET admission_no = ? WHERE organization_id = ? AND id = ?")
-                .params(admissionNo, org, id).update();
     }
 
     public Optional<AdmissionRow> find(UUID org, UUID id) {

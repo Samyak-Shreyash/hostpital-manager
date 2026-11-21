@@ -34,19 +34,23 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.function.Function;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * Admissions ([E8-2], [E8-3]; api-design.md section 11). An admission always starts in a bed (ruling R5).
  *
  * <p>Admit runs in one transaction in the M4 lock order: validate patient, doctor and source encounter, lock the bed
  * ({@link BedAllocation#lockAvailable}), insert the admission (I3 partial unique index: {@code 409
- * PATIENT_ALREADY_ADMITTED}), open the assignment (I1: {@code 409 BED_NOT_AVAILABLE}) and allocate the admission
- * number last. The diagnosis is clinical free text: its value is never audited or logged.
+ * PATIENT_ALREADY_ADMITTED}) with its number (allocated just before the insert; the sequence row is the last lock
+ * taken) and open the assignment (I1: {@code 409 BED_NOT_AVAILABLE}). The diagnosis is clinical free text: its value is never audited or logged.
  */
 @Service
 public class AdmissionService {
@@ -57,6 +61,12 @@ public class AdmissionService {
     static final int MAX_PAGE_SIZE = 100;
     private static final Set<String> STATUSES = Arrays.stream(AdmissionStatus.values()).map(Enum::name)
             .collect(Collectors.toUnmodifiableSet());
+
+    static final int MAX_REASON_LENGTH = 500;
+
+    /** Result of a transfer: the new open assignment and the one it closed (same instant). */
+    public record TransferView(AssignmentView currentAssignment, AssignmentView previousAssignment) {
+    }
 
     public record AdmitCommand(UUID patientId, UUID admittingDoctorId, UUID bedId, String admissionDiagnosis,
             UUID sourceEncounterId) {
@@ -73,11 +83,12 @@ public class AdmissionService {
     private final AuditRecorder audit;
     private final UuidV7Generator ids;
     private final Clock clock;
+    private final TransactionTemplate transactions;
 
     public AdmissionService(AdmissionRepository admissions, BedAllocation beds, PatientDirectory patients,
             PractitionerDirectory practitioners, PractitionerAvailability practitionerStatus, EncounterQuery encounters,
             OrganizationDirectory organizations, DocumentNumberAllocator numbers, AuditRecorder audit,
-            UuidV7Generator ids, Clock clock) {
+            UuidV7Generator ids, Clock clock, PlatformTransactionManager transactionManager) {
         this.admissions = admissions;
         this.beds = beds;
         this.patients = patients;
@@ -89,6 +100,7 @@ public class AdmissionService {
         this.audit = audit;
         this.ids = ids;
         this.clock = clock;
+        this.transactions = new TransactionTemplate(transactionManager);
     }
 
     private Instant now() {
@@ -122,12 +134,12 @@ public class AdmissionService {
         beds.lockAvailable(org, cmd.bedId());
         UUID id = ids.next();
         Instant now = now();
-        if (!admissions.insert(id, org, cmd.patientId(), cmd.admittingDoctorId(), cmd.sourceEncounterId(), diagnosis,
-                now, actor.userId())) {
+        String admissionNo = admissionNo(org, now);
+        if (!admissions.insert(id, org, admissionNo, cmd.patientId(), cmd.admittingDoctorId(),
+                cmd.sourceEncounterId(), diagnosis, now, actor.userId())) {
             throw new ConflictException("PATIENT_ALREADY_ADMITTED", "The patient already has an active admission.");
         }
         beds.open(org, cmd.bedId(), id, now);
-        admissions.assignNumber(org, id, admissionNo(org, now));
 
         List<String> fields = new ArrayList<>(List.of("patientId", "admittingDoctorId", "admissionDiagnosis",
                 "admittedAt", "status"));
@@ -177,36 +189,121 @@ public class AdmissionService {
 
     /**
      * ADMITTED to CANCELLED (an admission made in error), releasing the bed now. Locks the bed before the admission
-     * row (lock order). A cancel with a live IPD invoice is refused once IPD invoices exist ([E8-6]).
+     * row (lock order) through {@link #underBedLock}. A cancel with a live IPD invoice is refused once IPD invoices
+     * exist ([E8-6]).
      */
-    @Transactional
     public AdmissionView cancel(OrganizationPrincipal actor, UUID id, Long version) {
         UUID org = actor.organizationId();
         if (version == null) {
             throw invalid("version is required.");
         }
-        admissions.find(org, id).orElseThrow(AdmissionService::notFound);
-        AssignmentView held = beds.current(org, List.of(id)).get(id);
-        if (held != null) {
-            beds.lockBeds(org, List.of(held.bedId()));
+        return underBedLock(org, id, held -> null, () -> { }, (row, held) -> {
+            requireVersion(row, version);
+            AdmissionStatus current = AdmissionStatus.valueOf(row.status());
+            if (!current.canTransitionTo(AdmissionStatus.CANCELLED)) {
+                throw new ConflictException("INVALID_STATE_TRANSITION",
+                        "An admission that is " + current + " cannot be cancelled.");
+            }
+            Instant now = now();
+            beds.release(org, id, now);
+            if (!admissions.updateStatus(org, id, version, AdmissionStatus.CANCELLED.name(), now)) {
+                throw concurrentModification();
+            }
+            audit.record(new AuditEntry(org, actor.userId(), "ADMISSION_CANCELLED", ENTITY, id,
+                    AuditOutcome.SUCCESS, List.of("status")));
+            audit.record(new AuditEntry(org, actor.userId(), "BED_RELEASED", ENTITY, id, AuditOutcome.SUCCESS,
+                    List.of("bedId", "releasedAt")));
+            return view(org, admissions.find(org, id).orElseThrow());
+        });
+    }
+
+    /**
+     * Moves an active admission to another bed ([E8-4]): locks both beds in ascending id order, checks the target is
+     * available ({@code 409 BED_NOT_AVAILABLE}), locks the admission row (ADMITTED or DISCHARGE_INITIATED, else
+     * {@code 409 INVALID_STATE_TRANSITION}), then closes the old assignment and opens the new one at the same
+     * instant. The reason is stored on the new assignment and never audited.
+     */
+    public TransferView transfer(OrganizationPrincipal actor, UUID id, UUID toBedId, String reason) {
+        UUID org = actor.organizationId();
+        if (toBedId == null) {
+            throw invalid("toBedId is required.");
         }
-        AdmissionRow row = admissions.lock(org, id).orElseThrow(AdmissionService::notFound);
-        requireVersion(row, version);
-        AdmissionStatus current = AdmissionStatus.valueOf(row.status());
-        if (!current.canTransitionTo(AdmissionStatus.CANCELLED)) {
-            throw new ConflictException("INVALID_STATE_TRANSITION",
-                    "An admission that is " + current + " cannot be cancelled.");
+        String why = reason == null ? "" : reason.strip();
+        if (why.isEmpty() || why.length() > MAX_REASON_LENGTH) {
+            throw invalid("reason is required (1 to " + MAX_REASON_LENGTH + " characters).");
         }
-        Instant now = now();
-        beds.release(org, id, now);
-        if (!admissions.updateStatus(org, id, version, AdmissionStatus.CANCELLED.name(), now)) {
-            throw concurrentModification();
+        return underBedLock(org, id, held -> {
+            if (held != null && held.bedId().equals(toBedId)) {
+                throw invalid("toBedId is the bed the admission already holds.");
+            }
+            return toBedId;
+        }, () -> beds.lockAvailable(org, toBedId), (row, held) -> {
+            AdmissionStatus current = AdmissionStatus.valueOf(row.status());
+            if (!current.isActive() || held == null) {
+                throw new ConflictException("INVALID_STATE_TRANSITION",
+                        "An admission that is " + current + " cannot change beds.");
+            }
+            Instant now = now();
+            AssignmentView previous = beds.release(org, id, now);
+            AssignmentView next = beds.open(org, toBedId, id, now, why);
+            audit.record(new AuditEntry(org, actor.userId(), "BED_TRANSFERRED", ENTITY, id, AuditOutcome.SUCCESS,
+                    List.of("fromBedId", "toBedId", "releasedAt", "assignedAt")));
+            return new TransferView(next, previous);
+        });
+    }
+
+    /** Work done while holding the bed lock(s) and the admission row lock. */
+    @FunctionalInterface
+    private interface LockedWork<T> {
+        T run(AdmissionRow row, AssignmentView held);
+    }
+
+    /** The admission's open assignment changed between the unlocked read and the locks. */
+    private static final class StaleHold extends RuntimeException {
+        StaleHold() {
+            super(null, null, false, false);
         }
-        audit.record(new AuditEntry(org, actor.userId(), "ADMISSION_CANCELLED", ENTITY, id, AuditOutcome.SUCCESS,
-                List.of("status")));
-        audit.record(new AuditEntry(org, actor.userId(), "BED_RELEASED", ENTITY, id, AuditOutcome.SUCCESS,
-                List.of("bedId", "releasedAt")));
-        return view(org, admissions.find(org, id).orElseThrow());
+    }
+
+    /**
+     * Shared by cancel and transfer. In a new transaction: reads the admission's open assignment (unlocked), locks
+     * its bed plus {@code extraBed.apply(held)} (when not null) in ascending id order, runs {@code afterBedLocks},
+     * locks the admission row and re-reads the open assignment. If that is no longer the one read first, the
+     * transaction rolls back and the whole attempt is retried once in a fresh transaction (so no lock is ever taken
+     * out of order); a second miss is {@code 409 CONCURRENT_MODIFICATION}.
+     */
+    private <T> T underBedLock(UUID org, UUID id, Function<AssignmentView, UUID> extraBed, Runnable afterBedLocks,
+            LockedWork<T> work) {
+        for (int attempt = 0; ; attempt++) {
+            try {
+                return transactions.execute(status -> {
+                    admissions.find(org, id).orElseThrow(AdmissionService::notFound);
+                    AssignmentView held = beds.current(org, List.of(id)).get(id);
+                    List<UUID> toLock = new ArrayList<>();
+                    if (held != null) {
+                        toLock.add(held.bedId());
+                    }
+                    UUID extra = extraBed.apply(held);
+                    if (extra != null) {
+                        toLock.add(extra);
+                    }
+                    if (!toLock.isEmpty()) {
+                        beds.lockBeds(org, toLock);
+                    }
+                    afterBedLocks.run();
+                    AdmissionRow row = admissions.lock(org, id).orElseThrow(AdmissionService::notFound);
+                    AssignmentView still = beds.current(org, List.of(id)).get(id);
+                    if (!Objects.equals(held == null ? null : held.id(), still == null ? null : still.id())) {
+                        throw new StaleHold();
+                    }
+                    return work.run(row, held);
+                });
+            } catch (StaleHold e) {
+                if (attempt >= 1) {
+                    throw concurrentModification();
+                }
+            }
+        }
     }
 
     /** Reading an admission is audited like a patient view: it ties a patient to an inpatient stay. */

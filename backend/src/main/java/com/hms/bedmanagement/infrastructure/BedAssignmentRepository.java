@@ -74,12 +74,13 @@ public class BedAssignmentRepository {
     }
 
     /** False when the bed already has an open assignment (I1); the partial unique index decides. */
-    public boolean insert(UUID id, UUID org, UUID bedId, UUID admissionId, Instant at) {
+    public boolean insert(UUID id, UUID org, UUID bedId, UUID admissionId, Instant at, String reason) {
         try {
             jdbc.sql("""
-                    INSERT INTO hms.bed_assignment (id, organization_id, bed_id, admission_id, assigned_at)
-                    VALUES (?, ?, ?, ?, ?)
-                    """).params(id, org, bedId, admissionId, Timestamp.from(at)).update();
+                    INSERT INTO hms.bed_assignment (id, organization_id, bed_id, admission_id, assigned_at,
+                        reason)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    """).params(id, org, bedId, admissionId, Timestamp.from(at), reason).update();
             return true;
         } catch (DuplicateKeyException e) {
             if (String.valueOf(e.getMostSpecificCause().getMessage()).contains("uq_bed_assignment_bed_open")) {
