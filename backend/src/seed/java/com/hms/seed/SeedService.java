@@ -3,6 +3,8 @@ package com.hms.seed;
 import com.hms.audit.api.AuditEntry;
 import com.hms.audit.api.AuditOutcome;
 import com.hms.audit.api.AuditRecorder;
+import com.hms.bedmanagement.application.BedService;
+import com.hms.bedmanagement.application.WardService;
 import com.hms.billing.application.ServiceCatalogService;
 import com.hms.billing.application.ServiceView;
 import com.hms.identity.api.AuthenticatedPrincipal;
@@ -100,6 +102,14 @@ public class SeedService {
             new String[] {"INJECTION", "Injection administration", "100.00"},
             new String[] {"PHYSIO", "Physiotherapy session", "400.00"},
             new String[] {"VACCINE_ADMIN", "Vaccine administration", "200.00"});
+    private static final List<String[]> ROOM_SERVICES = List.of(
+            new String[] {"ROOM_GENERAL", "General ward bed, per day", "800.00"},
+            new String[] {"ROOM_PRIVATE", "Private room, per day", "2500.00"});
+    /** Ward code, name, bed number prefix, bed class, rate service code. */
+    private static final List<String[]> WARDS = List.of(
+            new String[] {"GENWARD", "General Ward", "G", "GENERAL", "ROOM_GENERAL"},
+            new String[] {"PVTWARD", "Private Ward", "P", "PRIVATE", "ROOM_PRIVATE"});
+    private static final int BEDS_PER_WARD = 6;
     private static final int DOCTORS = 5;
     /** Staff: role code (also the staff type) per record. */
     private static final List<String> STAFF_ROLES = List.of("RECEPTIONIST", "RECEPTIONIST", "NURSE", "NURSE",
@@ -113,6 +123,8 @@ public class SeedService {
     private final FirstOrganizationBootstrap bootstrap;
     private final CatalogService catalog;
     private final ServiceCatalogService services;
+    private final WardService wardService;
+    private final BedService bedService;
     private final UserManagementService users;
     private final PractitionerService practitioners;
     private final StaffService staff;
@@ -126,7 +138,8 @@ public class SeedService {
 
     SeedService(Environment environment, OrganizationContext context, TransactionTemplate tx, JdbcClient jdbc,
             JdbcTemplate jdbcTemplate, FirstOrganizationBootstrap bootstrap, CatalogService catalog,
-            ServiceCatalogService services, UserManagementService users, PractitionerService practitioners,
+            ServiceCatalogService services, WardService wardService, BedService bedService,
+            UserManagementService users, PractitionerService practitioners,
             StaffService staff, AvailabilityService availability, PatientService patients,
             ClinicalEntryService clinicalEntries, AuditRecorder audit, DocumentNumberAllocator numbers,
             UuidV7Generator ids, Clock clock) {
@@ -138,6 +151,8 @@ public class SeedService {
         this.bootstrap = bootstrap;
         this.catalog = catalog;
         this.services = services;
+        this.wardService = wardService;
+        this.bedService = bedService;
         this.users = users;
         this.practitioners = practitioners;
         this.staff = staff;
@@ -161,6 +176,7 @@ public class SeedService {
         int departments = seedCatalog(org, admin, CatalogKind.DEPARTMENT, DEPARTMENTS, departmentIds);
         int specialties = seedCatalog(org, admin, CatalogKind.SPECIALTY, SPECIALTIES, specialtyIds);
         int serviceCount = seedServices(org, admin);
+        seedWards(org, admin);
         PeopleResult people = seedPeople(org, admin, departmentIds, specialtyIds);
         PatientResult patientResult = seedPatients(org, admin, options.patients(), options.servicePatients());
 
@@ -255,10 +271,14 @@ public class SeedService {
     }
 
     private int seedServices(UUID org, AuthenticatedPrincipal admin) {
+        return seedServices(org, admin, SERVICES);
+    }
+
+    private int seedServices(UUID org, AuthenticatedPrincipal admin, List<String[]> wanted) {
         Map<String, ServiceView> existing = new HashMap<>();
         asOrg(org, () -> services.list(admin, null, 0, 100)).items().forEach(s -> existing.put(s.code(), s));
         int created = 0;
-        for (String[] item : SERVICES) {
+        for (String[] item : wanted) {
             ServiceView view = existing.get(item[0]);
             if (view == null) {
                 view = asOrg(org, () -> services.create(admin, item[0], item[1]));
@@ -270,6 +290,30 @@ public class SeedService {
             }
         }
         return created;
+    }
+
+    /** Two wards of six beds ([E8-1]); room-rate services are created on the way. Idempotent. Not in the summary. */
+    private void seedWards(UUID org, AuthenticatedPrincipal admin) {
+        seedServices(org, admin, ROOM_SERVICES);
+        Map<String, UUID> rates = new HashMap<>();
+        asOrg(org, () -> services.list(admin, null, 0, 100)).items().forEach(s -> rates.put(s.code(), s.id()));
+        Map<String, UUID> existingWards = new HashMap<>();
+        asOrg(org, () -> wardService.list(admin, null, 0, 100)).items().forEach(w -> existingWards.put(w.code(), w.id()));
+        for (String[] ward : WARDS) {
+            UUID wardId = existingWards.get(ward[0]);
+            if (wardId == null) {
+                wardId = asOrg(org, () -> wardService.create(admin, ward[0], ward[1], null)).id();
+            }
+            UUID id = wardId;
+            Set<String> present = new HashSet<>();
+            asOrg(org, () -> bedService.list(admin, id, null, 0, 100)).items().forEach(b -> present.add(b.bedNo()));
+            for (int n = 1; n <= BEDS_PER_WARD; n++) {
+                String bedNo = ward[2] + "-" + n;
+                if (!present.contains(bedNo)) {
+                    asOrg(org, () -> bedService.create(admin, id, bedNo, ward[3], rates.get(ward[4])));
+                }
+            }
+        }
     }
 
     // --- users, doctors, staff, availability ----------------------------------------------------------------------

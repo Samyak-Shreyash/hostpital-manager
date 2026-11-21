@@ -100,6 +100,9 @@ class OrganizationIsolationIT extends PostgresIT {
             "POST /api/v1/specialties",
             "GET /api/v1/services",
             "POST /api/v1/services",
+            "GET /api/v1/wards", // list scoped by the principal
+            "POST /api/v1/wards", // department id in the body: cross-org ones answer 422, WardBedIT
+            "GET /api/v1/beds/availability", // scoped by the principal; an other-org wardId answers 404, WardBedIT
             "POST /api/v1/patients",
             "GET /api/v1/doctors", // list scoped by the principal
             "POST /api/v1/doctors", // referenced ids in the body: cross-org ones answer 422, PractitionerRegistrationIT
@@ -137,6 +140,9 @@ class OrganizationIsolationIT extends PostgresIT {
             .atZone(java.time.ZoneId.of("Asia/Kolkata")).toInstant();
 
     private static final String PRICE_BODY = "{\"amount\":\"500.00\"}";
+
+    private static final String WARD_PATCH_BODY = "{\"version\":0,\"name\":\"Renamed Ward\"}";
+    private static final String BED_PATCH_BODY = "{\"version\":0,\"bedClass\":\"PRIVATE\"}";
 
     private static final Map<String, CrossOrgCase> CROSS_ORG_CASES = Map.ofEntries(
             Map.entry("GET " + PROBE, new CrossOrgCase(org -> get(PROBE, org.roleId()))),
@@ -323,7 +329,16 @@ class OrganizationIsolationIT extends PostgresIT {
                     new CrossOrgCase(org -> get("/api/v1/services/{id}/prices", org.serviceId()))),
             Map.entry("POST /api/v1/services/{id}/prices", new CrossOrgCase(org -> post(
                     "/api/v1/services/{id}/prices", org.serviceId()).contentType(MediaType.APPLICATION_JSON)
-                    .content(PRICE_BODY))));
+                    .content(PRICE_BODY))),
+            Map.entry("PATCH /api/v1/wards/{id}", new CrossOrgCase(org -> patch("/api/v1/wards/{id}", org.wardId())
+                    .contentType(MediaType.APPLICATION_JSON).content(WARD_PATCH_BODY))),
+            Map.entry("GET /api/v1/wards/{id}/beds",
+                    new CrossOrgCase(org -> get("/api/v1/wards/{id}/beds", org.wardId()))),
+            Map.entry("POST /api/v1/wards/{id}/beds", new CrossOrgCase(org -> post("/api/v1/wards/{id}/beds",
+                    org.wardId()).contentType(MediaType.APPLICATION_JSON)
+                    .content("{\"bedNo\":\"X-1\",\"dailyRateServiceId\":\"" + org.serviceId() + "\"}"))),
+            Map.entry("PATCH /api/v1/beds/{id}", new CrossOrgCase(org -> patch("/api/v1/beds/{id}", org.bedId())
+                    .contentType(MediaType.APPLICATION_JSON).content(BED_PATCH_BODY))));
 
     record CrossOrgCase(Function<OrgFixture, MockHttpServletRequestBuilder> request) {
     }
@@ -337,7 +352,7 @@ class OrganizationIsolationIT extends PostgresIT {
             UUID addendumEncounterId, UUID putPrescriptionId, UUID issuePrescriptionId, UUID revisePrescriptionId,
             UUID getPrescriptionId, UUID getInvoiceId, UUID putInvoiceId, UUID discardInvoiceId,
             UUID discountInvoiceId, UUID issueInvoiceId, UUID payInvoiceId, UUID refundPaymentId, UUID approveRefundId,
-            UUID rejectRefundId, UUID creditInvoiceId) {
+            UUID rejectRefundId, UUID creditInvoiceId, UUID wardId, UUID bedId) {
     }
 
     /**
@@ -522,7 +537,7 @@ class OrganizationIsolationIT extends PostgresIT {
                 "practitioner_availability", "availability_exception", "appointment", "queue_token_counter", "encounter", "encounter_observation",
                 "clinical_note", "encounter_diagnosis", "treatment_plan", "follow_up", "prescription", "prescription_item",
                 "invoice", "invoice_item", "idempotency_record", "payment", "refund", "refund_decision",
-                "credit_note");
+                "credit_note", "ward", "bed");
         assertThat(new TreeSet<>(rlsTables())).isEqualTo(expected);
     }
 
@@ -609,6 +624,8 @@ class OrganizationIsolationIT extends PostgresIT {
         UUID pendingPayment = UUID.randomUUID();
         UUID approveRefund = UUID.randomUUID();
         UUID rejectRefund = UUID.randomUUID();
+        UUID wardId = UUID.randomUUID();
+        UUID bedId = UUID.randomUUID();
         inOrg(organizationId, () -> {
             jdbc.sql("""
                     INSERT INTO hms.department (id, organization_id, code, name, created_at, updated_at)
@@ -622,6 +639,15 @@ class OrganizationIsolationIT extends PostgresIT {
                     INSERT INTO hms.service_catalog_item (id, organization_id, code, name, created_at, updated_at)
                     VALUES (?, ?, 'CONSULT', 'Consultation', now(), now())""")
                     .params(serviceId, organizationId).update();
+            jdbc.sql("""
+                    INSERT INTO hms.ward (id, organization_id, code, name, created_at, updated_at)
+                    VALUES (?, ?, 'GENWARD', 'General Ward', now(), now())""")
+                    .params(wardId, organizationId).update();
+            jdbc.sql("""
+                    INSERT INTO hms.bed (id, organization_id, ward_id, bed_no, daily_rate_service_id, created_at,
+                        updated_at)
+                    VALUES (?, ?, ?, 'G-1', ?, now(), now())""")
+                    .params(bedId, organizationId, wardId, serviceId).update();
             jdbc.sql("""
                     INSERT INTO hms.patient (id, organization_id, uhid, full_name, sex, date_of_birth, phone,
                         created_by, created_at, updated_at)
@@ -778,7 +804,8 @@ class OrganizationIsolationIT extends PostgresIT {
                 cancelAppointmentId, noShowAppointmentId, checkInAppointmentId, encounterId,
                 notesEncounterId, diagnosesEncounterId, planEncounterId, followUpEncounterId, finalizeEncounterId,
                 addendumEncounterId, putRx, issueRx, reviseRx, getRx, getInvoice, putInvoice, discardInvoice,
-                discountInvoice, issueInvoice, payInvoice, refundPayment, approveRefund, rejectRefund, creditInvoice);
+                discountInvoice, issueInvoice, payInvoice, refundPayment, approveRefund, rejectRefund, creditInvoice,
+                wardId, bedId);
     }
 
     private UUID insertUser(UUID organizationId) {
