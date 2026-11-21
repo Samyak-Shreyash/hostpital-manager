@@ -104,6 +104,10 @@ public class DischargeService {
         if (planned.isBefore(row.admittedAt())) {
             throw AdmissionService.invalid("plannedDischargeAt must not be before admittedAt.");
         }
+        BedAllocation.AssignmentView held = beds.current(org, List.of(id)).get(id);
+        if (held != null && planned.isBefore(held.assignedAt())) {
+            throw AdmissionService.invalid("plannedDischargeAt must not be before the current bed assignment.");
+        }
         Optional<SummaryRow> existing = summaries.findByAdmission(org, id);
         if (existing.isPresent() && !Objects.equals(cmd.version(), existing.get().version())) {
             throw AdmissionService.concurrentModification();
