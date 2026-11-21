@@ -5,8 +5,8 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * Seam between bed administration and bed assignments (bedmanagement-internal). Until {@code bed_assignment}
- * exists ([E8-2]) the implementation reports every bed as free; it is replaced by a query over open assignments.
+ * Seam between bed administration and bed assignments (bedmanagement-internal). Implemented over open
+ * {@code bed_assignment} rows ([E8-2]).
  */
 public interface BedOccupancy {
 

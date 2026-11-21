@@ -103,6 +103,8 @@ class OrganizationIsolationIT extends PostgresIT {
             "GET /api/v1/wards", // list scoped by the principal
             "POST /api/v1/wards", // department id in the body: cross-org ones answer 422, WardBedIT
             "GET /api/v1/beds/availability", // scoped by the principal; an other-org wardId answers 404, WardBedIT
+            "GET /api/v1/admissions", // list scoped by the principal
+            "POST /api/v1/admissions", // referenced ids in the body: cross-org ones answer 404, AdmissionIT
             "POST /api/v1/patients",
             "GET /api/v1/doctors", // list scoped by the principal
             "POST /api/v1/doctors", // referenced ids in the body: cross-org ones answer 422, PractitionerRegistrationIT
@@ -338,7 +340,17 @@ class OrganizationIsolationIT extends PostgresIT {
                     org.wardId()).contentType(MediaType.APPLICATION_JSON)
                     .content("{\"bedNo\":\"X-1\",\"dailyRateServiceId\":\"" + org.serviceId() + "\"}"))),
             Map.entry("PATCH /api/v1/beds/{id}", new CrossOrgCase(org -> patch("/api/v1/beds/{id}", org.bedId())
-                    .contentType(MediaType.APPLICATION_JSON).content(BED_PATCH_BODY))));
+                    .contentType(MediaType.APPLICATION_JSON).content(BED_PATCH_BODY))),
+            Map.entry("GET /api/v1/admissions/{id}",
+                    new CrossOrgCase(org -> get("/api/v1/admissions/{id}", org.admissionId()))),
+            Map.entry("PATCH /api/v1/admissions/{id}", new CrossOrgCase(org -> patch("/api/v1/admissions/{id}",
+                    org.admissionId()).contentType(MediaType.APPLICATION_JSON)
+                    .content("{\"version\":0,\"admissionDiagnosis\":\"Synthetic\"}"))),
+            Map.entry("POST /api/v1/admissions/{id}/cancel", new CrossOrgCase(org -> post(
+                    "/api/v1/admissions/{id}/cancel", org.cancelAdmissionId()).contentType(MediaType.APPLICATION_JSON)
+                    .content("{\"version\":0}"))),
+            Map.entry("GET /api/v1/admissions/{id}/bed-assignments",
+                    new CrossOrgCase(org -> get("/api/v1/admissions/{id}/bed-assignments", org.admissionId()))));
 
     record CrossOrgCase(Function<OrgFixture, MockHttpServletRequestBuilder> request) {
     }
@@ -352,7 +364,8 @@ class OrganizationIsolationIT extends PostgresIT {
             UUID addendumEncounterId, UUID putPrescriptionId, UUID issuePrescriptionId, UUID revisePrescriptionId,
             UUID getPrescriptionId, UUID getInvoiceId, UUID putInvoiceId, UUID discardInvoiceId,
             UUID discountInvoiceId, UUID issueInvoiceId, UUID payInvoiceId, UUID refundPaymentId, UUID approveRefundId,
-            UUID rejectRefundId, UUID creditInvoiceId, UUID wardId, UUID bedId) {
+            UUID rejectRefundId, UUID creditInvoiceId, UUID wardId, UUID bedId, UUID admissionId,
+            UUID cancelAdmissionId) {
     }
 
     /**
@@ -537,7 +550,7 @@ class OrganizationIsolationIT extends PostgresIT {
                 "practitioner_availability", "availability_exception", "appointment", "queue_token_counter", "encounter", "encounter_observation",
                 "clinical_note", "encounter_diagnosis", "treatment_plan", "follow_up", "prescription", "prescription_item",
                 "invoice", "invoice_item", "idempotency_record", "payment", "refund", "refund_decision",
-                "credit_note", "ward", "bed");
+                "credit_note", "ward", "bed", "admission", "bed_assignment");
         assertThat(new TreeSet<>(rlsTables())).isEqualTo(expected);
     }
 
@@ -626,6 +639,11 @@ class OrganizationIsolationIT extends PostgresIT {
         UUID rejectRefund = UUID.randomUUID();
         UUID wardId = UUID.randomUUID();
         UUID bedId = UUID.randomUUID();
+        UUID admissionBedId = UUID.randomUUID();
+        UUID admissionId = UUID.randomUUID();
+        UUID cancelBedId = UUID.randomUUID();
+        UUID cancelPatientId = UUID.randomUUID();
+        UUID cancelAdmissionId = UUID.randomUUID();
         inOrg(organizationId, () -> {
             jdbc.sql("""
                     INSERT INTO hms.department (id, organization_id, code, name, created_at, updated_at)
@@ -648,6 +666,16 @@ class OrganizationIsolationIT extends PostgresIT {
                         updated_at)
                     VALUES (?, ?, ?, 'G-1', ?, now(), now())""")
                     .params(bedId, organizationId, wardId, serviceId).update();
+            jdbc.sql("""
+                    INSERT INTO hms.bed (id, organization_id, ward_id, bed_no, daily_rate_service_id, created_at,
+                        updated_at)
+                    VALUES (?, ?, ?, 'G-2', ?, now(), now())""")
+                    .params(admissionBedId, organizationId, wardId, serviceId).update();
+            jdbc.sql("""
+                    INSERT INTO hms.bed (id, organization_id, ward_id, bed_no, daily_rate_service_id, created_at,
+                        updated_at)
+                    VALUES (?, ?, ?, 'G-3', ?, now(), now())""")
+                    .params(cancelBedId, organizationId, wardId, serviceId).update();
             jdbc.sql("""
                     INSERT INTO hms.patient (id, organization_id, uhid, full_name, sex, date_of_birth, phone,
                         created_by, created_at, updated_at)
@@ -794,6 +822,32 @@ class OrganizationIsolationIT extends PostgresIT {
                         start_time, end_time, slot_minutes, created_at)
                     VALUES (?, ?, ?, 1, TIME '09:00', TIME '10:00', 15, now())""")
                     .params(UUID.randomUUID(), organizationId, practitionerId).update();
+            jdbc.sql("""
+                    INSERT INTO hms.admission (id, organization_id, admission_no, patient_id, admitting_doctor_id,
+                        admission_diagnosis, admitted_at, created_by, created_at, updated_at)
+                    VALUES (?, ?, 'ADM-1999-0001', ?, ?, 'Synthetic', now(), ?, now(), now())""")
+                    .params(admissionId, organizationId, patientId, practitionerId, practitionerUserId).update();
+            jdbc.sql("""
+                    INSERT INTO hms.bed_assignment (id, organization_id, bed_id, admission_id, assigned_at)
+                    VALUES (?, ?, ?, ?, now())""")
+                    .params(UUID.randomUUID(), organizationId, admissionBedId, admissionId).update();
+            // A second admission (another patient, I3) for the cancel case, which changes its row.
+            jdbc.sql("""
+                    INSERT INTO hms.patient (id, organization_id, uhid, full_name, sex, date_of_birth, phone,
+                        created_by, created_at, updated_at)
+                    VALUES (?, ?, 'HMS-000002', 'Test Patient Cancel', 'U', DATE '1990-01-01', '+910000000098',
+                        ?, now(), now())""")
+                    .params(cancelPatientId, organizationId, UUID.randomUUID()).update();
+            jdbc.sql("""
+                    INSERT INTO hms.admission (id, organization_id, admission_no, patient_id, admitting_doctor_id,
+                        admission_diagnosis, admitted_at, created_by, created_at, updated_at)
+                    VALUES (?, ?, 'ADM-1999-0002', ?, ?, 'Synthetic', now(), ?, now(), now())""")
+                    .params(cancelAdmissionId, organizationId, cancelPatientId, practitionerId, practitionerUserId)
+                    .update();
+            jdbc.sql("""
+                    INSERT INTO hms.bed_assignment (id, organization_id, bed_id, admission_id, assigned_at)
+                    VALUES (?, ?, ?, ?, now() - interval '1 hour')""")
+                    .params(UUID.randomUUID(), organizationId, cancelBedId, cancelAdmissionId).update();
             return jdbc.sql("""
                     INSERT INTO hms.practitioner_department (organization_id, practitioner_id, department_id,
                         created_at) VALUES (?, ?, ?, now())""")
@@ -805,7 +859,7 @@ class OrganizationIsolationIT extends PostgresIT {
                 notesEncounterId, diagnosesEncounterId, planEncounterId, followUpEncounterId, finalizeEncounterId,
                 addendumEncounterId, putRx, issueRx, reviseRx, getRx, getInvoice, putInvoice, discardInvoice,
                 discountInvoice, issueInvoice, payInvoice, refundPayment, approveRefund, rejectRefund, creditInvoice,
-                wardId, bedId);
+                wardId, bedId, admissionId, cancelAdmissionId);
     }
 
     private UUID insertUser(UUID organizationId) {
