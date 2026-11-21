@@ -14,6 +14,11 @@ import { QueueBoardPage } from '../features/appointments/QueueBoardPage'
 import { ConsultPage } from '../features/consultation/ConsultPage'
 import { InvoiceEditorPage } from '../features/billing/InvoiceEditorPage'
 import { OutstandingListPage } from '../features/billing/OutstandingListPage'
+import { AdmissionDetailPage } from '../features/ipd/AdmissionDetailPage'
+import { AdmissionsPage } from '../features/ipd/AdmissionsPage'
+import { AdmitPage } from '../features/ipd/AdmitPage'
+import { BedBoardPage } from '../features/ipd/BedBoardPage'
+import { WardsPage } from '../features/ipd/WardsPage'
 import { CatalogPage } from '../features/catalog/CatalogPage'
 import { PatientDetailPage } from '../features/patients/PatientDetailPage'
 import { PatientRegisterPage } from '../features/patients/PatientRegisterPage'
@@ -101,6 +106,19 @@ export function AppRoutes() {
           <Route element={<RequirePermission permission="invoice:read" screen="Billing" />}>
             <Route path="invoices" element={<OutstandingListPage />} />
             <Route path="invoices/:id" element={<InvoiceEditorPage />} />
+          </Route>
+          <Route element={<RequirePermission permission="bed:read" screen="Bed board" />}>
+            <Route path="beds" element={<BedBoardPage />} />
+          </Route>
+          <Route element={<RequirePermission permission="ward:read" screen="Wards" />}>
+            <Route path="wards" element={<WardsPage />} />
+          </Route>
+          <Route element={<RequirePermission permission="admission:create" screen="Admit patient" />}>
+            <Route path="admissions/new" element={<AdmitPage />} />
+          </Route>
+          <Route element={<RequirePermission permission="admission:read" screen="Admissions" />}>
+            <Route path="admissions" element={<AdmissionsPage />} />
+            <Route path="admissions/:id" element={<AdmissionDetailPage />} />
           </Route>
           <Route element={<RequirePermission permission="catalog:read" screen="Departments & specialties" />}>
             <Route path="catalog" element={<CatalogPage />} />

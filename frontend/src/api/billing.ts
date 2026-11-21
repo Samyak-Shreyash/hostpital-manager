@@ -25,6 +25,8 @@ export interface Invoice {
   patientId: string
   encounterId: string | null
   admissionId: string | null
+  /** IPD invoices only. */
+  kind?: 'INTERIM' | 'FINAL' | null
   status: InvoiceStatus
   invoiceNo: string | null
   issuedAt: string | null
