@@ -1,6 +1,7 @@
 package com.hms.admission;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.catchThrowable;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.is;
@@ -234,5 +235,54 @@ class ChargesPreviewIT extends PostgresIT {
 
         UUID other = fx.organization();
         preview(fx.withAllPermissions(other), id, ist(24, 9)).andExpect(status().isNotFound());
+    }
+
+    @Test
+    void dischargedAdmissionIsCappedAtDischargeForPreviewAndPort() throws Exception {
+        UUID general = service("GEN4");
+        price(general, "1500.00", "2026-01-01T00:00:00Z", null);
+        UUID id = ipd.admitted(clerk, ipd.patient(), doctor, bed("G-4", general));
+        backdate(id, ist(21, 10));
+        owner("UPDATE hms.bed_assignment SET released_at = '" + ist(23, 9) + "' WHERE admission_id = '" + id + "'");
+        owner("UPDATE hms.admission SET status = 'DISCHARGED', discharged_at = '" + ist(23, 9) + "' WHERE id = '"
+                + id + "'");
+
+        preview(clerk, id, ist(26, 9)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.lines", hasSize(1)))
+                .andExpect(jsonPath("$.lines[0].quantity", is(2)))
+                .andExpect(jsonPath("$.lines[0].to", is("2026-11-22")))
+                .andExpect(jsonPath("$.roomTotal", is("3000.00")));
+        List<ChargeLine> lines = fx.inOrg(org, () -> chargeSource.roomCharges(org, id, null,
+                java.time.Instant.parse(ist(26, 9))));
+        assertThat(lines).singleElement().satisfies(l -> assertThat(l.quantity()).isEqualTo(2));
+        assertThat(fx.inOrg(org, () -> chargeSource.admission(org, id)).orElseThrow().chargeEndAt())
+                .isEqualTo(java.time.Instant.parse(ist(23, 9)));
+    }
+
+    @Test
+    void cancelledAdmissionHasNoRoomCharges() throws Exception {
+        UUID id = ipd.admitted(clerk, ipd.patient(), doctor, ipd.bed(ward, "C-1"));
+        mockMvc.perform(clerk.apply(post("/api/v1/admissions/" + id + "/cancel")).contentType(JSON)
+                .content("{\"version\":0}")).andExpect(status().isOk());
+        preview(clerk, id, java.time.Instant.now().plusSeconds(86_400 * 3).toString()).andExpect(status().isOk())
+                .andExpect(jsonPath("$.lines", hasSize(0)))
+                .andExpect(jsonPath("$.roomTotal", is("0.00")));
+        assertThat(fx.inOrg(org, () -> chargeSource.roomCharges(org, id, null,
+                java.time.Instant.now().plusSeconds(86_400 * 3)))).isEmpty();
+    }
+
+    @Test
+    void portRejectsNullEndWith422() throws Exception {
+        UUID id = ipd.admitted(clerk, ipd.patient(), doctor, ipd.bed(ward, "N-1"));
+        Throwable thrown = catchThrowable(() -> fx.inOrg(org, () -> chargeSource.roomCharges(org, id, null, null)));
+        assertThat(thrown).isInstanceOf(com.hms.shared.domain.BusinessRuleException.class);
+        assertThat(((com.hms.shared.domain.BusinessRuleException) thrown).code()).isEqualTo("VALIDATION_ERROR");
+    }
+
+    @Test
+    void malformedAsOfIs422() throws Exception {
+        UUID id = ipd.admitted(clerk, ipd.patient(), doctor, ipd.bed(ward, "M-1"));
+        preview(clerk, id, "not-an-instant").andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.code", is("VALIDATION_ERROR")));
     }
 }

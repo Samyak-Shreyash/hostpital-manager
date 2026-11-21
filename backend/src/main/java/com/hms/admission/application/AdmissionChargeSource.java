@@ -95,13 +95,9 @@ public class AdmissionChargeSource implements ChargeSource {
         }
         audit.record(AuditEntry.of(org, actor.userId(), "ADMISSION_VIEWED", AdmissionService.ENTITY, id,
                 AuditOutcome.SUCCESS));
-        if (AdmissionStatus.CANCELLED.name().equals(row.status())) {
-            return new ChargesPreview(at, List.of(), Money.ZERO);
-        }
-        Instant end = row.dischargedAt() != null && row.dischargedAt().isBefore(at) ? row.dischargedAt() : at;
         List<PreviewLine> out = new ArrayList<>();
         Money total = Money.ZERO;
-        for (ChargeLine l : lines(org, row, null, end)) {
+        for (ChargeLine l : lines(org, row, null, at)) {
             Money amount = l.unitPrice().multiply(BigDecimal.valueOf(l.quantity()));
             out.add(new PreviewLine(l.description(), l.quantity(), l.unitPrice(), amount, l.from(), l.to()));
             total = total.plus(amount);
@@ -109,7 +105,19 @@ public class AdmissionChargeSource implements ChargeSource {
         return new ChargesPreview(at, out, total);
     }
 
-    private List<ChargeLine> lines(UUID org, AdmissionRow row, LocalDate afterDate, Instant endAt) {
+    /**
+     * Shared by the port and the preview: {@code endAt} is required (422 otherwise) and capped at the discharge
+     * instant (no bed is held after it); a CANCELLED admission has no room charges.
+     */
+    private List<ChargeLine> lines(UUID org, AdmissionRow row, LocalDate afterDate, Instant requestedEnd) {
+        if (requestedEnd == null) {
+            throw AdmissionService.invalid("endAt is required.");
+        }
+        if (AdmissionStatus.CANCELLED.name().equals(row.status())) {
+            return List.of();
+        }
+        Instant endAt = row.dischargedAt() != null && row.dischargedAt().isBefore(requestedEnd)
+                ? row.dischargedAt() : requestedEnd;
         ZoneId zone = ZoneId.of(organizations.find(org).map(OrganizationSummary::timezone)
                 .orElseThrow(() -> new IllegalStateException("organization not found")));
         Map<UUID, AssignmentView> byBed = new HashMap<>();

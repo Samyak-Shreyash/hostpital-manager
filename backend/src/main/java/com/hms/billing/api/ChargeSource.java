@@ -22,6 +22,8 @@ public interface ChargeSource {
      * or before {@code afterDate} (null: from the admission date). One line per bed, consecutive date run and unit
      * price. A charged date with no valid bed price is {@code 422 BUSINESS_RULE_VIOLATION} naming the bed. An
      * unknown admission is {@code 404}.
+     * {@code endAt} is required (null is {@code 422 VALIDATION_ERROR}; {@link AdmissionInfo#chargeEndAt} may be null,
+     * callers must supply an end) and is capped at the discharge instant; a CANCELLED admission yields no lines.
      */
     List<ChargeLine> roomCharges(UUID organizationId, UUID admissionId, LocalDate afterDate, Instant endAt);
 

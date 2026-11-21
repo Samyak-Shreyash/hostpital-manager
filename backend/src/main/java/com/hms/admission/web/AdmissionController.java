@@ -9,7 +9,9 @@ import com.hms.admission.application.AdmissionView;
 import com.hms.bedmanagement.api.BedAllocation.AssignmentView;
 import com.hms.shared.PageResult;
 import com.hms.shared.tenancy.OrganizationPrincipal;
+import com.hms.shared.domain.BusinessRuleException;
 import java.time.Instant;
+import java.time.format.DateTimeParseException;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
@@ -89,12 +91,18 @@ class AdmissionController {
         return admissions.transfer(actor, id, request.toBedId(), request.reason());
     }
 
-    /** [E8-5] Room-day charges so far (BR-B6 rule [A]); {@code asOf} defaults to now. */
+    /** [E8-5] Room-day charges so far (BR-B6 rule [A]); {@code asOf} (ISO-8601 instant, malformed -> 422) defaults to now. */
     @GetMapping("/{id}/charges-preview")
     @PreAuthorize("hasAuthority('invoice:read')")
     ChargesPreview chargesPreview(@AuthenticationPrincipal OrganizationPrincipal actor, @PathVariable UUID id,
-            @RequestParam(required = false) Instant asOf) {
-        return charges.preview(actor, id, asOf);
+            @RequestParam(required = false) String asOf) {
+        Instant at;
+        try {
+            at = asOf == null || asOf.isBlank() ? null : Instant.parse(asOf);
+        } catch (DateTimeParseException e) {
+            throw new BusinessRuleException("VALIDATION_ERROR", "asOf must be an ISO-8601 instant.");
+        }
+        return charges.preview(actor, id, at);
     }
 
     /** {@code reason} is required (1 to 500 characters); stored on the new assignment, never audited. */
