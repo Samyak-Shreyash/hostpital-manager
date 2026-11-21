@@ -13,7 +13,7 @@ const linkClass = ({ isActive }: { isActive: boolean }) =>
 const TITLES: [string, string][] = [
   ['/users/new', 'New user'], ['/users/import', 'Import users'], ['/users', 'Users'], ['/roles', 'Roles'], ['/patients', 'Patients'],
   ['/appointments', 'Appointments'], ['/queue', 'Queue'], ['/consult', 'Consultation'], ['/invoices', 'Billing'],
-  ['/doctors', 'Doctors'], ['/staff', 'Staff'], ['/catalog', 'Departments & specialties'], ['/audit', 'Audit'], ['/', 'Home'],
+  ['/beds', 'Bed board'], ['/wards', 'Wards'], ['/admissions', 'Admissions'], ['/doctors', 'Doctors'], ['/staff', 'Staff'], ['/catalog', 'Departments & specialties'], ['/audit', 'Audit'], ['/', 'Home'],
 ]
 
 export function AppLayout() {
@@ -45,6 +45,9 @@ export function AppLayout() {
           {can('appointment:read') && <NavLink to="/appointments" className={linkClass}>Appointments</NavLink>}
           {can('appointment:read') && <NavLink to="/queue" className={linkClass}>Queue</NavLink>}
           {can('invoice:read') && <NavLink to="/invoices" className={linkClass}>Billing</NavLink>}
+          {can('bed:read') && <NavLink to="/beds" className={linkClass}>Bed board</NavLink>}
+          {can('admission:read') && <NavLink to="/admissions" className={linkClass}>Admissions</NavLink>}
+          {can('ward:read') && <NavLink to="/wards" className={linkClass}>Wards</NavLink>}
           {can('practitioner:read') && <NavLink to="/doctors" className={linkClass}>Doctors</NavLink>}
           {can('staff:read') && <NavLink to="/staff" className={linkClass}>Staff</NavLink>}
           {can('user:read') && <NavLink to="/users" className={linkClass}>Users</NavLink>}

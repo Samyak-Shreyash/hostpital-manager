@@ -5,6 +5,9 @@ import { useSession } from './auth/useSession'
 /** Same entries as the main menu, so Home only offers what the signed-in role can open. */
 const SHORTCUTS = [
   { permission: 'patient:search', to: '/patients', label: 'Patients', hint: 'Search and register patients' },
+  { permission: 'bed:read', to: '/beds', label: 'Bed board', hint: 'Available and occupied beds' },
+  { permission: 'admission:read', to: '/admissions', label: 'Admissions', hint: 'Inpatients, transfers and discharge' },
+  { permission: 'ward:read', to: '/wards', label: 'Wards and beds', hint: 'Ward and bed administration' },
   { permission: 'practitioner:read', to: '/doctors', label: 'Doctors', hint: 'Doctors, availability and leave' },
   { permission: 'staff:read', to: '/staff', label: 'Staff', hint: 'Non-doctor staff records' },
   { permission: 'user:read', to: '/users', label: 'Users', hint: 'Sign-in accounts and roles' },
