@@ -55,6 +55,8 @@ class BedAllocationConcurrencyIT extends PostgresIT {
     @Autowired
     PlatformTransactionManager transactionManager;
 
+    private AdminApiFixture fx;
+    private UUID org;
     private AdminApiFixture.Session clerk;
     private IpdFixture ipd;
     private UUID ward;
@@ -62,9 +64,9 @@ class BedAllocationConcurrencyIT extends PostgresIT {
 
     @BeforeEach
     void setUp() throws Exception {
-        AdminApiFixture fx = new AdminApiFixture(mockMvc, jdbc, passwordEncoder, roleProvisioning,
+        fx = new AdminApiFixture(mockMvc, jdbc, passwordEncoder, roleProvisioning,
                 organizationContext, transactionManager);
-        UUID org = fx.organization();
+        org = fx.organization();
         clerk = fx.withAllPermissions(org);
         ipd = new IpdFixture(mockMvc, jdbc, fx, org, clerk);
         ward = ipd.ward("RACE");
@@ -94,6 +96,14 @@ class BedAllocationConcurrencyIT extends PostgresIT {
         List<int[]> outcome = race(bodies, "PATIENT_ALREADY_ADMITTED");
         assertThat(outcome.stream().filter(o -> o[0] == 201).count()).isEqualTo(1);
         assertThat(outcome.stream().filter(o -> o[0] == 409).count()).isEqualTo(19);
+        assertThat(fx.inOrg(org, () -> jdbc.sql("""
+                SELECT count(*) FROM hms.admission WHERE patient_id = ?
+                AND status IN ('ADMITTED', 'DISCHARGE_INITIATED')""").param(patient).query(Long.class).single()))
+                .isEqualTo(1);
+        assertThat(fx.inOrg(org, () -> jdbc.sql("""
+                SELECT count(*) FROM hms.bed_assignment ba JOIN hms.admission ad ON ad.id = ba.admission_id
+                WHERE ad.patient_id = ? AND ba.released_at IS NULL""").param(patient).query(Long.class).single()))
+                .isEqualTo(1);
     }
 
     /** Fires every body at once; each 409 must carry {@code conflictCode}. */

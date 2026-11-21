@@ -350,7 +350,11 @@ class OrganizationIsolationIT extends PostgresIT {
                     "/api/v1/admissions/{id}/cancel", org.cancelAdmissionId()).contentType(MediaType.APPLICATION_JSON)
                     .content("{\"version\":0}"))),
             Map.entry("GET /api/v1/admissions/{id}/bed-assignments",
-                    new CrossOrgCase(org -> get("/api/v1/admissions/{id}/bed-assignments", org.admissionId()))));
+                    new CrossOrgCase(org -> get("/api/v1/admissions/{id}/bed-assignments", org.admissionId()))),
+            Map.entry("POST /api/v1/admissions/{id}/bed-assignments/transfer", new CrossOrgCase(org -> post(
+                    "/api/v1/admissions/{id}/bed-assignments/transfer", org.admissionId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("{\"toBedId\":\"" + org.bedId() + "\",\"reason\":\"Synthetic\"}"))));
 
     record CrossOrgCase(Function<OrgFixture, MockHttpServletRequestBuilder> request) {
     }

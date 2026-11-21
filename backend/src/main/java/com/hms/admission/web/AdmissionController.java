@@ -2,6 +2,7 @@ package com.hms.admission.web;
 
 import com.hms.admission.application.AdmissionService;
 import com.hms.admission.application.AdmissionService.AdmitCommand;
+import com.hms.admission.application.AdmissionService.TransferView;
 import com.hms.admission.application.AdmissionView;
 import com.hms.bedmanagement.api.BedAllocation.AssignmentView;
 import com.hms.shared.PageResult;
@@ -74,6 +75,17 @@ class AdmissionController {
     List<AssignmentView> bedAssignments(@AuthenticationPrincipal OrganizationPrincipal actor,
             @PathVariable UUID id) {
         return admissions.bedAssignments(actor, id);
+    }
+
+    @PostMapping("/{id}/bed-assignments/transfer")
+    @PreAuthorize("hasAuthority('bed:assign')")
+    TransferView transfer(@AuthenticationPrincipal OrganizationPrincipal actor, @PathVariable UUID id,
+            @RequestBody TransferRequest request) {
+        return admissions.transfer(actor, id, request.toBedId(), request.reason());
+    }
+
+    /** {@code reason} is required (1 to 500 characters); stored on the new assignment, never audited. */
+    record TransferRequest(UUID toBedId, String reason) {
     }
 
     record AdmitRequest(UUID patientId, UUID admittingDoctorId, UUID bedId, String admissionDiagnosis,
