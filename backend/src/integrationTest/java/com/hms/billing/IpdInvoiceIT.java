@@ -272,6 +272,47 @@ class IpdInvoiceIT extends PostgresIT {
         assertThat(money(again)).isEqualByComparingTo("6000.00");
     }
 
+    /** Two interims: the first trimmed (by SQL, as a DRAFT) to end 3 days ago, the second covering the rest. */
+    private String[] twoInterims(String bedNo) throws Exception {
+        UUID id = admitted(bedNo);
+        backdate(id, daysAgo(6, 10));
+        String first = created(id, "INTERIM");
+        owner("UPDATE hms.invoice SET room_charges_through = '" + LocalDate.now(IST).minusDays(4)
+                + "' WHERE id = '" + JsonPath.read(first, "$.id") + "'");
+        String second = created(id, "INTERIM");
+        assertThat(roomDates(second).getFirst()).isEqualTo(LocalDate.now(IST).minusDays(3));
+        return new String[] {reload(first), second};
+    }
+
+    private String reload(String invoice) throws Exception {
+        return mockMvc.perform(clerk.apply(get("/api/v1/invoices/" + JsonPath.read(invoice, "$.id"))))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+    }
+
+    @Test
+    void discardingAnEarlierInterimIs409() throws Exception {
+        String[] interims = twoInterims("E-1");
+        discard(interims[0]).andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code", is("INVALID_STATE_TRANSITION")));
+        discard(interims[1]).andExpect(status().isOk());
+        discard(interims[0]).andExpect(status().isOk());
+    }
+
+    @Test
+    void fullyCreditingAnEarlierInterimIs409ButPartialCreditWorks() throws Exception {
+        String[] interims = twoInterims("E-2");
+        String first = issue(interims[0]).andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        issue(interims[1]).andExpect(status().isOk());
+        Object firstId = JsonPath.read(first, "$.id");
+        String total = JsonPath.read(first, "$.total");
+        mockMvc.perform(clerk.apply(post("/api/v1/invoices/" + firstId + "/credit-notes")).contentType(JSON)
+                        .content("{\"amount\":\"" + total + "\",\"reason\":\"Synthetic reason\"}"))
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.code", is("INVALID_STATE_TRANSITION")));
+        mockMvc.perform(clerk.apply(post("/api/v1/invoices/" + firstId + "/credit-notes")).contentType(JSON)
+                        .content("{\"amount\":\"100.00\",\"reason\":\"Synthetic reason\"}"))
+                .andExpect(status().isCreated());
+    }
+
     @Test
     void secondLiveFinalIs409() throws Exception {
         UUID id = admitted("F-1");
@@ -366,12 +407,13 @@ class IpdInvoiceIT extends PostgresIT {
             List<String> createdBodies = new ArrayList<>();
             for (MvcResult r : results) {
                 int code = r.getResponse().getStatus();
-                assertThat(code).isIn(201, 422);
                 if (code == 201) {
                     createdBodies.add(r.getResponse().getContentAsString());
                 }
             }
-            assertThat(createdBodies).isNotEmpty();
+            // The advisory lock serialises the drafts: the second sees the first's coverage and has nothing to charge.
+            assertThat(createdBodies).hasSize(1);
+            assertThat(results).filteredOn(r -> r.getResponse().getStatus() == 422).hasSize(1);
             List<LocalDate> all = new ArrayList<>();
             createdBodies.forEach(b -> all.addAll(roomDates(b)));
             assertThat(all).doesNotHaveDuplicates();
