@@ -357,7 +357,18 @@ class OrganizationIsolationIT extends PostgresIT {
             Map.entry("POST /api/v1/admissions/{id}/bed-assignments/transfer", new CrossOrgCase(org -> post(
                     "/api/v1/admissions/{id}/bed-assignments/transfer", org.admissionId())
                     .contentType(MediaType.APPLICATION_JSON)
-                    .content("{\"toBedId\":\"" + org.bedId() + "\",\"reason\":\"Synthetic\"}"))));
+                    .content("{\"toBedId\":\"" + org.bedId() + "\",\"reason\":\"Synthetic\"}"))),
+            Map.entry("PUT /api/v1/admissions/{id}/discharge-summary", new CrossOrgCase(org -> put(
+                    "/api/v1/admissions/{id}/discharge-summary", org.summaryAdmissionId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("{\"version\":0,\"finalDiagnosis\":\"Synthetic\",\"conditionAtDischarge\":\"Stable\","
+                            + "\"plannedDischargeAt\":\"2020-01-02T00:00:00Z\"}"))),
+            Map.entry("GET /api/v1/admissions/{id}/discharge-summary", new CrossOrgCase(org -> get(
+                    "/api/v1/admissions/{id}/discharge-summary", org.summaryAdmissionId()))),
+            Map.entry("POST /api/v1/admissions/{id}/discharge", new CrossOrgCase(org -> post(
+                    "/api/v1/admissions/{id}/discharge", org.dischargeAdmissionId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("{\"version\":0,\"dischargedAt\":\"2020-01-02T00:00:00Z\",\"deferBilling\":true}"))));
 
     record CrossOrgCase(Function<OrgFixture, MockHttpServletRequestBuilder> request) {
     }
@@ -372,7 +383,7 @@ class OrganizationIsolationIT extends PostgresIT {
             UUID getPrescriptionId, UUID getInvoiceId, UUID putInvoiceId, UUID discardInvoiceId,
             UUID discountInvoiceId, UUID issueInvoiceId, UUID payInvoiceId, UUID refundPaymentId, UUID approveRefundId,
             UUID rejectRefundId, UUID creditInvoiceId, UUID wardId, UUID bedId, UUID admissionId,
-            UUID cancelAdmissionId) {
+            UUID cancelAdmissionId, UUID summaryAdmissionId, UUID dischargeAdmissionId) {
     }
 
     /**
@@ -651,6 +662,8 @@ class OrganizationIsolationIT extends PostgresIT {
         UUID cancelBedId = UUID.randomUUID();
         UUID cancelPatientId = UUID.randomUUID();
         UUID cancelAdmissionId = UUID.randomUUID();
+        UUID summaryAdmissionId = UUID.randomUUID();
+        UUID dischargeAdmissionId = UUID.randomUUID();
         inOrg(organizationId, () -> {
             jdbc.sql("""
                     INSERT INTO hms.department (id, organization_id, code, name, created_at, updated_at)
@@ -861,6 +874,42 @@ class OrganizationIsolationIT extends PostgresIT {
                     INSERT INTO hms.bed_assignment (id, organization_id, bed_id, admission_id, assigned_at)
                     VALUES (?, ?, ?, ?, now() - interval '1 hour')""")
                     .params(UUID.randomUUID(), organizationId, cancelBedId, cancelAdmissionId).update();
+            // [E8-7] An ADMITTED admission with a summary (summary PUT/GET) and a DISCHARGE_INITIATED one (discharge).
+            UUID[] stays = {summaryAdmissionId, dischargeAdmissionId};
+            for (int i = 0; i < stays.length; i++) {
+                UUID stayBed = UUID.randomUUID();
+                UUID stayPatient = UUID.randomUUID();
+                jdbc.sql("""
+                        INSERT INTO hms.bed (id, organization_id, ward_id, bed_no, daily_rate_service_id, created_at,
+                            updated_at)
+                        VALUES (?, ?, ?, ?, ?, now(), now())""")
+                        .params(stayBed, organizationId, wardId, "D-" + i, serviceId).update();
+                jdbc.sql("""
+                        INSERT INTO hms.patient (id, organization_id, uhid, full_name, sex, date_of_birth, phone,
+                            created_by, created_at, updated_at)
+                        VALUES (?, ?, ?, 'Test Patient Discharge', 'U', DATE '1990-01-01', '+910000000097',
+                            ?, now(), now())""")
+                        .params(stayPatient, organizationId, "HMS-00001" + i, UUID.randomUUID()).update();
+                jdbc.sql("""
+                        INSERT INTO hms.admission (id, organization_id, admission_no, patient_id, admitting_doctor_id,
+                            admission_diagnosis, status, admitted_at, planned_discharge_at, created_by, created_at,
+                            updated_at)
+                        VALUES (?, ?, ?, ?, ?, 'Synthetic', ?, TIMESTAMPTZ '2020-01-01T00:00:00Z', ?, ?, now(), now())""")
+                        .params(stays[i], organizationId, "ADM-1999-001" + i, stayPatient, practitionerId,
+                                i == 0 ? "ADMITTED" : "DISCHARGE_INITIATED",
+                                i == 0 ? null : java.sql.Timestamp.from(java.time.Instant.parse("2020-01-02T00:00:00Z")),
+                                practitionerUserId).update();
+                jdbc.sql("""
+                        INSERT INTO hms.bed_assignment (id, organization_id, bed_id, admission_id, assigned_at)
+                        VALUES (?, ?, ?, ?, TIMESTAMPTZ '2020-01-01T00:00:00Z')""")
+                        .params(UUID.randomUUID(), organizationId, stayBed, stays[i]).update();
+                jdbc.sql("""
+                        INSERT INTO hms.discharge_summary (id, organization_id, admission_id, final_diagnosis,
+                            condition_at_discharge, created_by, created_at, updated_by, updated_at)
+                        VALUES (?, ?, ?, 'Synthetic', 'Stable', ?, now(), ?, now())""")
+                        .params(UUID.randomUUID(), organizationId, stays[i], practitionerUserId, practitionerUserId)
+                        .update();
+            }
             return jdbc.sql("""
                     INSERT INTO hms.practitioner_department (organization_id, practitioner_id, department_id,
                         created_at) VALUES (?, ?, ?, now())""")
@@ -872,7 +921,7 @@ class OrganizationIsolationIT extends PostgresIT {
                 notesEncounterId, diagnosesEncounterId, planEncounterId, followUpEncounterId, finalizeEncounterId,
                 addendumEncounterId, putRx, issueRx, reviseRx, getRx, getInvoice, putInvoice, discardInvoice,
                 discountInvoice, issueInvoice, payInvoice, refundPayment, approveRefund, rejectRefund, creditInvoice,
-                wardId, bedId, admissionId, cancelAdmissionId);
+                wardId, bedId, admissionId, cancelAdmissionId, summaryAdmissionId, dischargeAdmissionId);
     }
 
     private UUID insertUser(UUID organizationId) {

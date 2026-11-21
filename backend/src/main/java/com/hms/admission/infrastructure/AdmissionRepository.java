@@ -109,6 +109,26 @@ public class AdmissionRepository {
                 """).params(status, Timestamp.from(now), org, id, expectedVersion).update() == 1;
     }
 
+    /** [E8-7] Planned discharge and status (ADMITTED to DISCHARGE_INITIATED on the first summary save); CAS on version. */
+    public boolean updatePlannedDischarge(UUID org, UUID id, long expectedVersion, String status, Instant planned,
+            Instant now) {
+        return jdbc.sql("""
+                UPDATE hms.admission SET status = ?, planned_discharge_at = ?, version = version + 1, updated_at = ?
+                WHERE organization_id = ? AND id = ? AND version = ?
+                """).params(status, Timestamp.from(planned), Timestamp.from(now), org, id, expectedVersion)
+                .update() == 1;
+    }
+
+    /** [E8-7] DISCHARGE_INITIATED to DISCHARGED at {@code dischargedAt}; CAS on version. */
+    public boolean discharge(UUID org, UUID id, long expectedVersion, Instant dischargedAt, Instant now) {
+        return jdbc.sql("""
+                UPDATE hms.admission SET status = 'DISCHARGED', discharged_at = ?, version = version + 1,
+                    updated_at = ?
+                WHERE organization_id = ? AND id = ? AND version = ? AND status = 'DISCHARGE_INITIATED'
+                """).params(Timestamp.from(dischargedAt), Timestamp.from(now), org, id, expectedVersion)
+                .update() == 1;
+    }
+
     private static String idClause(ListFilter filter) {
         return filter.ids() == null ? "" : " AND id IN (:ids)";
     }

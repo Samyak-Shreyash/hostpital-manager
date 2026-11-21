@@ -159,6 +159,7 @@ REVOKE ALL ON FUNCTION hms.reject_modification() FROM PUBLIC;
   | `HM003` | prescription and item guards (V28, V35) | `409 INVALID_STATE_TRANSITION` |
   | `HM004` | invoice and item guards (V29, V31) | `409 INVOICE_IMMUTABLE` |
   | `HM005` | finalized-encounter guard (V35; V27 used `HM001`) | `409 ENCOUNTER_FINALIZED` |
+  | `HM006` | discharge summary and medication guard of a DISCHARGED admission (V39) | `409 IMMUTABLE_RECORD` |
  Reaching the trigger means an application state check was missed, so it is also logged at `WARN` (no row values — table name and operation only).
 
 ## 8. Baseline migration (`V1__baseline.sql`) and order
@@ -400,6 +401,15 @@ ADR-0007, PRD AUD-1/2/4, invariant I8. Written only through `audit.api.AuditReco
 - No new grants or policies; the V31 guard freezes every column but status/version/updated_at after issue (`to_jsonb`), which covers the new columns.
 - Concurrency: an IPD draft takes `pg_advisory_xact_lock(hashtext('ipd-invoice:' || admission_id))` before reading the admission and the latest `room_charges_through`, so concurrent drafts of one admission never charge the same date; admission cancel takes the same lock (through `InvoiceLookup.hasLiveIpdInvoice`) after the bed and admission row locks, so no draft appears between its check and its commit.
 - Tests: `IpdInvoiceIT`.
+
+### 20s. Discharge summary (`V39__discharge_summary.sql`, `[E8-7]`)
+- `discharge_summary(id, organization_id, admission_id, final_diagnosis NOT NULL, course_in_hospital, procedures, condition_at_discharge NOT NULL, follow_up, version, created_by/at, updated_by/at)`, `UNIQUE (organization_id, admission_id)` (one summary per admission), composite same-org FK to `admission`; length checks (diagnosis/condition 1–2000, course ≤ 10000, procedures ≤ 4000, follow-up ≤ 2000).
+- `discharge_medication(id, organization_id, summary_id, position, name NOT NULL, dose, frequency, duration)`, `UNIQUE (organization_id, summary_id, position)`, composite FK to `discharge_summary`. Replaced as a whole on save, so `hms_app` additionally gets `DELETE` on this table only; summaries are never deleted.
+- The planned discharge instant lives on `admission.planned_discharge_at` (V37), not on the summary: it is `ChargeSource.AdmissionInfo.chargeEndAt` until `discharged_at` is set.
+- Guard `hms.guard_discharged_summary()` (BEFORE INSERT/UPDATE/DELETE on both tables) raises SQLSTATE `HM006` when the admission is DISCHARGED (ruling R7), and fails closed like V35 when the parent summary or admission is not found (missing, or not visible under RLS).
+- Forced RLS `org_isolation` on both tables.
+- Concurrency: summary save locks the admission row, then (through `InvoiceLookup.liveFinalInvoice`) billing's `ipd-invoice:` advisory lock. Discharge locks the bed, the admission row, then the advisory lock, in one transaction.
+- Tests: `DischargeIT`, `DischargeAtomicityIT`.
 
 ### 20b. Staff and the person-user link (`V19__staff.sql`, `[E4-2]`)
 - `staff` (`user_id`, `full_name` 2-120, `staff_type` NURSE/RECEPTIONIST/ACCOUNTANT/LAB_TECHNICIAN/PHARMACIST/ADMINISTRATIVE/OTHER, optional `designation` 1-80, optional `department_id`, `status` ACTIVE/INACTIVE, `created_by`, `version`). Composite same-org FKs `(organization_id, user_id) -> app_user` and `(organization_id, department_id) -> department`; `UNIQUE (user_id)` (owner decision 2026-11-13: every staff record links to exactly one login); index `(organization_id, lower(full_name))`. No DELETE grant (lifecycle is `status`). Roles are not stored here: they stay on the user (`PATCH /users/{id}`, `[E1-7]`). Forced RLS with `org_isolation`.
