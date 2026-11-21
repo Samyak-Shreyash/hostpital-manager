@@ -4,6 +4,7 @@ import com.hms.admission.domain.AdmissionStatus;
 import com.hms.admission.domain.BedDayCalculator;
 import com.hms.admission.domain.BedDayCalculator.BedDay;
 import com.hms.admission.domain.BedDayCalculator.Stay;
+import com.hms.admission.domain.RoomTaxRule;
 import com.hms.admission.infrastructure.AdmissionRepository;
 import com.hms.admission.infrastructure.AdmissionRepository.AdmissionRow;
 import com.hms.audit.api.AuditEntry;
@@ -42,13 +43,13 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class AdmissionChargeSource implements ChargeSource {
 
-    /** Preview response: room days only; services already on drafts are out of scope. */
+    /** Preview response: room days only (tax included in {@code roomTotal}); services already on drafts are out of scope. */
     public record ChargesPreview(Instant asOf, List<PreviewLine> lines, Money roomTotal) {
     }
 
-    /** {@code amount} = quantity x unitPrice, half-up. */
-    public record PreviewLine(String description, int quantity, Money unitPrice, Money amount, LocalDate from,
-            LocalDate to) {
+    /** {@code amount} = quantity x unitPrice, half-up; {@code tax} = round(amount x taxRate / 100). */
+    public record PreviewLine(String description, int quantity, Money unitPrice, Money amount, String taxRate,
+            Money tax, LocalDate from, LocalDate to) {
     }
 
     private final AdmissionRepository admissions;
@@ -99,8 +100,11 @@ public class AdmissionChargeSource implements ChargeSource {
         Money total = Money.ZERO;
         for (ChargeLine l : lines(org, row, null, at)) {
             Money amount = l.unitPrice().multiply(BigDecimal.valueOf(l.quantity()));
-            out.add(new PreviewLine(l.description(), l.quantity(), l.unitPrice(), amount, l.from(), l.to()));
-            total = total.plus(amount);
+            Money tax = amount.percentage(l.taxRate());
+            out.add(new PreviewLine(l.description(), l.quantity(), l.unitPrice(), amount, l.taxRate().toPlainString(),
+                    tax,
+                    l.from(), l.to()));
+            total = total.plus(amount).plus(tax);
         }
         return new ChargesPreview(at, out, total);
     }
@@ -129,6 +133,7 @@ public class AdmissionChargeSource implements ChargeSource {
         List<ChargeLine> out = new ArrayList<>();
         UUID runBed = null;
         ServicePrice runPrice = null;
+        BigDecimal runTax = null;
         LocalDate runFrom = null;
         LocalDate runTo = null;
         for (BedDay day : BedDayCalculator.chargedDays(stays, row.admittedAt(), endAt, zone)) {
@@ -140,30 +145,33 @@ public class AdmissionChargeSource implements ChargeSource {
                     day.date().atStartOfDay(zone).toInstant()).orElseThrow(() -> new BusinessRuleException(
                             "Bed " + bed.wardName() + " " + bed.bedNo() + " has no daily rate on " + day.date()
                                     + "."));
+            BigDecimal tax = RoomTaxRule.rate(bed.criticalCare(), price.amount());
             if (runBed != null && runBed.equals(day.bedId()) && runPrice.id().equals(price.id())
-                    && runTo.plusDays(1).equals(day.date())) {
+                    && runTax.compareTo(tax) == 0 && runTo.plusDays(1).equals(day.date())) {
                 runTo = day.date();
                 continue;
             }
             if (runBed != null) {
-                out.add(line(byBed.get(runBed), runPrice, runFrom, runTo));
+                out.add(line(byBed.get(runBed), runPrice, runTax, runFrom, runTo));
             }
             runBed = day.bedId();
             runPrice = price;
+            runTax = tax;
             runFrom = day.date();
             runTo = day.date();
         }
         if (runBed != null) {
-            out.add(line(byBed.get(runBed), runPrice, runFrom, runTo));
+            out.add(line(byBed.get(runBed), runPrice, runTax, runFrom, runTo));
         }
         return out;
     }
 
     /** {@code Room charges — <ward> <bedNo> (<from>–<to>)} (ruling R3), dates ISO. */
-    private static ChargeLine line(AssignmentView bed, ServicePrice price, LocalDate from, LocalDate to) {
+    private static ChargeLine line(AssignmentView bed, ServicePrice price, BigDecimal taxRate,
+            LocalDate from, LocalDate to) {
         int days = (int) ChronoUnit.DAYS.between(from, to) + 1;
         return new ChargeLine(bed.dailyRateServiceId(), "Room charges — " + bed.wardName() + " " + bed.bedNo()
-                + " (" + from + "–" + to + ")", days, price.amount(), from, to);
+                + " (" + from + "–" + to + ")", days, price.amount(), from, to, taxRate);
     }
 
     private static AdmissionInfo info(AdmissionRow r) {

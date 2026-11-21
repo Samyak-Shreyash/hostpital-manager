@@ -48,14 +48,16 @@ class WardController {
     @ResponseStatus(HttpStatus.CREATED)
     WardView create(@AuthenticationPrincipal OrganizationPrincipal actor,
             @Valid @RequestBody CreateWardRequest request) {
-        return wards.create(actor, request.code(), request.name(), request.departmentId());
+        return wards.create(actor, request.code(), request.name(), request.departmentId(),
+                request.careType());
     }
 
     @PatchMapping("/{id}")
     @PreAuthorize("hasAuthority('ward:manage')")
     WardView update(@AuthenticationPrincipal OrganizationPrincipal actor, @PathVariable UUID id,
             @Valid @RequestBody UpdateWardRequest request) {
-        return wards.update(actor, id, request.version(), request.name(), request.departmentId(), request.status());
+        return wards.update(actor, id, request.version(), request.name(), request.departmentId(),
+                request.status(), request.careType());
     }
 
     @GetMapping("/{id}/beds")

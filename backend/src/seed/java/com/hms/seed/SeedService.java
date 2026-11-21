@@ -104,11 +104,13 @@ public class SeedService {
             new String[] {"VACCINE_ADMIN", "Vaccine administration", "200.00"});
     private static final List<String[]> ROOM_SERVICES = List.of(
             new String[] {"ROOM_GENERAL", "General ward bed, per day", "800.00"},
-            new String[] {"ROOM_PRIVATE", "Private room, per day", "2500.00"});
-    /** Ward code, name, bed number prefix, bed class, rate service code. */
+            new String[] {"ROOM_PRIVATE", "Private room, per day", "2500.00"},
+            new String[] {"ROOM_ICU", "ICU bed, per day", "6000.00"});
+    /** Ward code, name, bed number prefix, bed class, rate service code, care type. */
     private static final List<String[]> WARDS = List.of(
-            new String[] {"GENWARD", "General Ward", "G", "GENERAL", "ROOM_GENERAL"},
-            new String[] {"PVTWARD", "Private Ward", "P", "PRIVATE", "ROOM_PRIVATE"});
+            new String[] {"GENWARD", "General Ward", "G", "GENERAL", "ROOM_GENERAL", "GENERAL"},
+            new String[] {"PVTWARD", "Private Ward", "P", "PRIVATE", "ROOM_PRIVATE", "GENERAL"},
+            new String[] {"ICUWARD", "Intensive Care Unit", "I", "ICU", "ROOM_ICU", "CRITICAL_CARE"});
     private static final int BEDS_PER_WARD = 6;
     private static final int DOCTORS = 5;
     /** Staff: role code (also the staff type) per record. */
@@ -292,7 +294,7 @@ public class SeedService {
         return created;
     }
 
-    /** Two wards of six beds ([E8-1]); room-rate services are created on the way. Idempotent. Not in the summary. */
+    /** Three wards of six beds (one CRITICAL_CARE) ([E8-1]); room-rate services are created on the way. Idempotent. Not in the summary. */
     private void seedWards(UUID org, AuthenticatedPrincipal admin) {
         seedServices(org, admin, ROOM_SERVICES);
         Map<String, UUID> rates = new HashMap<>();
@@ -302,7 +304,7 @@ public class SeedService {
         for (String[] ward : WARDS) {
             UUID wardId = existingWards.get(ward[0]);
             if (wardId == null) {
-                wardId = asOrg(org, () -> wardService.create(admin, ward[0], ward[1], null)).id();
+                wardId = asOrg(org, () -> wardService.create(admin, ward[0], ward[1], null, ward[5])).id();
             }
             UUID id = wardId;
             Set<String> present = new HashSet<>();

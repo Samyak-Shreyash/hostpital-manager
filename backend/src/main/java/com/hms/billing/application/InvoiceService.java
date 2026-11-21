@@ -211,7 +211,7 @@ public class InvoiceService implements InvoiceBalancePort {
         if (!room.isEmpty()) {
             List<InvoiceLine> lines = room.stream().map(c -> InvoiceLine.of(c.serviceId(), c.description(),
                     BigDecimal.valueOf(c.quantity()).setScale(2), c.unitPrice(), Money.ZERO, null,
-                    BigDecimal.ZERO.setScale(2))).toList();
+                    c.taxRate())).toList();
             repository.replaceItems(org, id, lines, Collections.nCopies(lines.size(), InvoiceRepository.ROOM),
                     InvoiceCalculator.totals(lines.stream().map(InvoiceLine::totals).toList()), now);
             repository.setRoomChargesThrough(org, id, room.stream().map(ChargeLine::to)
@@ -323,7 +323,8 @@ public class InvoiceService implements InvoiceBalancePort {
 
     /**
      * [E8-6] Room-charge lines of an IPD draft are kept as generated: every stored ROOM line must appear in the
-     * request unchanged (service, description, quantity, unit price, discount, tax rate) and is matched off; the
+     * request unchanged (service, description, quantity, unit price, discount; the tax rate is set by the room GST rule, so an omitted
+     * rate matches and a given one must equal it) and is matched off; the
      * remaining inputs are ordinary lines. A room line changed or left out is {@code 422 VALIDATION_ERROR}.
      */
     private static List<ItemInput> withoutRoomLines(List<ItemInput> inputs, List<ItemRow> roomRows) {
@@ -352,8 +353,7 @@ public class InvoiceService implements InvoiceBalancePort {
                 && sameDecimal(in.quantity(), l.quantity())
                 && (in.unitPrice() == null || in.unitPrice().equals(l.unitPrice()))
                 && (in.discount() == null ? !positive(l.discount()) : in.discount().equals(l.discount()))
-                && (in.taxRate() == null || in.taxRate().isBlank() ? l.taxRate().signum() == 0
-                        : sameDecimal(in.taxRate(), l.taxRate()));
+                && (in.taxRate() == null || in.taxRate().isBlank() || sameDecimal(in.taxRate(), l.taxRate()));
     }
 
     private static boolean sameDecimal(String text, BigDecimal value) {

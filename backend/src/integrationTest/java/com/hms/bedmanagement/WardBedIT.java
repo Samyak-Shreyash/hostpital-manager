@@ -123,6 +123,25 @@ class WardBedIT extends PostgresIT {
     }
 
     @Test
+    void wardCareTypeDefaultsToGeneralAndIsEditable() throws Exception {
+        UUID ward = newWard(admin, "CTW");
+        mockMvc.perform(admin.apply(get("/api/v1/wards")).param("size", "100")).andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[?(@.id=='" + ward + "')].careType", contains("GENERAL")));
+        mockMvc.perform(admin.apply(patch("/api/v1/wards/" + ward)).contentType(JSON)
+                        .content("{\"version\":0,\"careType\":\"CRITICAL_CARE\"}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.careType", is("CRITICAL_CARE")))
+                .andExpect(jsonPath("$.version", is(1)));
+        mockMvc.perform(admin.apply(patch("/api/v1/wards/" + ward)).contentType(JSON)
+                        .content("{\"version\":1,\"careType\":\"VIP\"}"))
+                .andExpect(status().isUnprocessableEntity());
+        mockMvc.perform(admin.apply(get("/api/v1/beds/availability")).param("wardId", ward.toString()))
+                .andExpect(jsonPath("$.wards[0].ward.careType", is("CRITICAL_CARE")));
+        mockMvc.perform(admin.apply(post("/api/v1/wards")).contentType(JSON)
+                        .content("{\"code\":\"ICU2\",\"name\":\"Intensive Care\",\"careType\":\"CRITICAL_CARE\"}"))
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.careType", is("CRITICAL_CARE")));
+    }
+
+    @Test
     void outOfServiceBedIsNotAvailable() throws Exception {
         UUID ward = newWard(admin, "ICU");
         UUID bed = newBed(admin, ward, "I-1");

@@ -9,7 +9,7 @@ import java.util.UUID;
  */
 public record AvailabilityView(List<WardAvailability> wards) {
 
-    public record WardRef(UUID id, String name) {
+    public record WardRef(UUID id, String name, String careType) {
     }
 
     public record WardAvailability(WardRef ward, String code, String status, int total, int occupied, int available,

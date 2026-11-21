@@ -31,7 +31,8 @@ public class BedAssignmentRepository {
 
     private static final String VIEW = """
             SELECT a.id, a.bed_id, b.bed_no, w.name AS ward_name, b.daily_rate_service_id, a.assigned_at,
-                   a.released_at, a.reason, a.admission_id
+                   a.released_at, a.reason, a.admission_id,
+                   (w.care_type = 'CRITICAL_CARE') AS critical_care
             FROM hms.bed_assignment a
             JOIN hms.bed b ON b.organization_id = a.organization_id AND b.id = a.bed_id
             JOIN hms.ward w ON w.organization_id = b.organization_id AND w.id = b.ward_id
@@ -143,6 +144,6 @@ public class BedAssignmentRepository {
         return new AssignmentView(rs.getObject("id", UUID.class), rs.getObject("bed_id", UUID.class),
                 rs.getString("bed_no"), rs.getString("ward_name"), rs.getObject("daily_rate_service_id", UUID.class),
                 rs.getTimestamp("assigned_at").toInstant(), released == null ? null : released.toInstant(),
-                rs.getString("reason"));
+                rs.getString("reason"), rs.getBoolean("critical_care"));
     }
 }

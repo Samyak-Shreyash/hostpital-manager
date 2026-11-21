@@ -80,7 +80,7 @@ class AdmissionServiceRetryTest {
     }
 
     private Map<UUID, AssignmentView> held(UUID assignmentId) {
-        return Map.of(id, new AssignmentView(assignmentId, fromBed, "B-1", "Ward", null, Instant.EPOCH, null, null));
+        return Map.of(id, new AssignmentView(assignmentId, fromBed, "B-1", "Ward", null, Instant.EPOCH, null, null, false));
     }
 
     @Test

@@ -232,6 +232,16 @@ class DischargeIT extends PostgresIT {
     }
 
     @Test
+    void plannedDischargeMustNotPrecedeTheCurrentBedAssignment() throws Exception {
+        UUID id = admittedDaysAgo()[0];
+        Instant assigned = Instant.now().minus(2, ChronoUnit.DAYS).truncatedTo(ChronoUnit.SECONDS);
+        owner("UPDATE hms.bed_assignment SET assigned_at = '" + assigned + "' WHERE admission_id = '" + id + "'");
+        putSummary(clerk, id, summaryBody(null, assigned.minus(1, ChronoUnit.HOURS)))
+                .andExpect(status().isUnprocessableEntity()).andExpect(jsonPath("$.code", is("VALIDATION_ERROR")));
+        putSummary(clerk, id, summaryBody(null, assigned.plus(1, ChronoUnit.HOURS))).andExpect(status().isOk());
+    }
+
+    @Test
     void dischargeBillingRules() throws Exception {
         UUID id = admittedDaysAgo()[0];
         Instant planned = planned();

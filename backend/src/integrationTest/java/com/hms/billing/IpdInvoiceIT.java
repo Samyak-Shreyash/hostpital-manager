@@ -239,6 +239,59 @@ class IpdInvoiceIT extends PostgresIT {
     }
 
     @Test
+    void roomGstFollowsTheOwnerRule() throws Exception {
+        UUID icuWard = UUID.fromString(JsonPath.read(mockMvc.perform(clerk.apply(post("/api/v1/wards"))
+                        .contentType(JSON).content("{\"code\":\"ICUX\",\"name\":\"Synthetic ICU\","
+                                + "\"careType\":\"CRITICAL_CARE\"}"))
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString(), "$.id"));
+        UUID general = service("ROOM_6K", "6000.00");
+        UUID icu = service("ROOM_ICU9K", "9000.00");
+        UUID a = bed("T-1", general);
+        UUID b = UUID.fromString(JsonPath.read(mockMvc.perform(clerk.apply(post("/api/v1/wards/" + icuWard
+                        + "/beds")).contentType(JSON).content("{\"bedNo\":\"I-1\",\"dailyRateServiceId\":\"" + icu
+                        + "\"}")).andExpect(status().isCreated()).andReturn().getResponse().getContentAsString(),
+                "$.id"));
+        UUID id = ipd.admitted(clerk, ipd.patient(), doctor, a);
+        mockMvc.perform(clerk.apply(post("/api/v1/admissions/" + id + "/bed-assignments/transfer"))
+                .contentType(JSON).content("{\"toBedId\":\"" + b + "\",\"reason\":\"Synthetic reason\"}"))
+                .andExpect(status().isOk());
+        backdate(id, daysAgo(5, 10), daysAgo(3, 15));
+        Instant planned = daysAgo(0, 9).plus(1, ChronoUnit.DAYS);
+        dischargeInitiated(id, planned);
+
+        String invoice = created(id, "FINAL");
+        // 2 days at 6,000.00 (5%): 12,000.00 + 600.00; then 4 days at 9,000.00 in CRITICAL_CARE (exempt).
+        assertThat(JsonPath.<String>read(invoice, "$.items[0].taxRate")).isEqualTo("5.00");
+        assertThat(JsonPath.<String>read(invoice, "$.items[0].taxable")).isEqualTo("12000.00");
+        assertThat(JsonPath.<String>read(invoice, "$.items[0].tax")).isEqualTo("600.00");
+        assertThat(JsonPath.<String>read(invoice, "$.items[1].taxRate")).isEqualTo("0.00");
+        assertThat(JsonPath.<String>read(invoice, "$.items[1].tax")).isEqualTo("0.00");
+        assertThat(JsonPath.<String>read(invoice, "$.taxTotal")).isEqualTo("600.00");
+        assertThat(JsonPath.<String>read(invoice, "$.total")).isEqualTo("48600.00").isEqualTo(roomTotal(id, planned));
+        String preview = mockMvc.perform(clerk.apply(get("/api/v1/admissions/" + id + "/charges-preview"))
+                .param("asOf", planned.toString())).andExpect(status().isOk()).andReturn().getResponse()
+                .getContentAsString();
+        assertThat(JsonPath.<String>read(preview, "$.lines[0].taxRate")).isEqualTo("5.00");
+        assertThat(JsonPath.<String>read(preview, "$.lines[0].tax")).isEqualTo("600.00");
+        assertThat(JsonPath.<String>read(preview, "$.lines[1].taxRate")).isEqualTo("0.00");
+
+        // Echoing the room lines (tax rate given or omitted) keeps them; a wrong tax rate is refused.
+        String r0 = "{\"serviceId\":\"" + general + "\",\"description\":\"" + JsonPath.read(invoice,
+                "$.items[0].description") + "\",\"quantity\":\"2\",\"unitPrice\":\"6000.00\"";
+        String r1 = "{\"serviceId\":\"" + icu + "\",\"description\":\"" + JsonPath.read(invoice,
+                "$.items[1].description") + "\",\"quantity\":\"4\",\"unitPrice\":\"9000.00\",\"taxRate\":\"0.00\"}";
+        Object invoiceId = JsonPath.read(invoice, "$.id");
+        mockMvc.perform(clerk.apply(put("/api/v1/invoices/" + invoiceId + "/items")).contentType(JSON)
+                        .content("{\"version\":" + JsonPath.read(invoice, "$.version") + ",\"items\":[" + r0
+                                + ",\"taxRate\":\"5.00\"}," + r1 + "]}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.total", is("48600.00")));
+        mockMvc.perform(clerk.apply(put("/api/v1/invoices/" + invoiceId + "/items")).contentType(JSON)
+                        .content("{\"version\":" + (((Number) JsonPath.read(invoice, "$.version")).longValue() + 1)
+                                + ",\"items\":[" + r0 + ",\"taxRate\":\"0.00\"}," + r1 + "]}"))
+                .andExpect(status().isUnprocessableEntity()).andExpect(jsonPath("$.code", is("VALIDATION_ERROR")));
+    }
+
+    @Test
     void interimThenFinalCoverEachDayOnce() throws Exception {
         UUID id = admitted("I-1");
         backdate(id, daysAgo(6, 10));

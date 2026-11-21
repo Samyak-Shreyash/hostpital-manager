@@ -144,7 +144,7 @@ public class BedService {
 
         List<WardAvailability> result = new ArrayList<>();
         for (WardRow w : wardRows) {
-            WardRef ref = new WardRef(w.id(), w.name());
+            WardRef ref = new WardRef(w.id(), w.name(), w.careType());
             List<BedAvailability> items = new ArrayList<>();
             int occupied = 0;
             int outOfService = 0;
