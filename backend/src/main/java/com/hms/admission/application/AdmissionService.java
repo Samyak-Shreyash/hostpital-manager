@@ -107,7 +107,7 @@ public class AdmissionService {
         this.transactions = new TransactionTemplate(transactionManager);
     }
 
-    private Instant now() {
+    Instant now() {
         return clock.instant().truncatedTo(ChronoUnit.MICROS);
     }
 
@@ -262,7 +262,7 @@ public class AdmissionService {
 
     /** Work done while holding the bed lock(s) and the admission row lock. */
     @FunctionalInterface
-    private interface LockedWork<T> {
+    interface LockedWork<T> {
         T run(AdmissionRow row, AssignmentView held);
     }
 
@@ -274,7 +274,7 @@ public class AdmissionService {
     }
 
     /**
-     * Shared by cancel and transfer. In a new transaction: reads the admission's open assignment (unlocked), locks
+     * Shared by cancel, transfer and discharge ({@link DischargeService}). In a new transaction: reads the admission's open assignment (unlocked), locks
      * its bed plus {@code extraBed.apply(held)} (when not null) in ascending id order, runs {@code afterBedLocks},
      * locks the admission row and re-reads the open assignment. If that is no longer the one read first, the
      * transaction rolls back and the whole attempt is retried once in a fresh transaction (so no lock is ever taken
@@ -284,7 +284,7 @@ public class AdmissionService {
      * transaction a miss would mark that transaction rollback-only and the retry would not be fresh. Callers
      * (including a later discharge flow) must therefore not be {@code @Transactional}; this fails fast otherwise.
      */
-    private <T> T underBedLock(UUID org, UUID id, Function<AssignmentView, UUID> extraBed, Runnable afterBedLocks,
+    <T> T underBedLock(UUID org, UUID id, Function<AssignmentView, UUID> extraBed, Runnable afterBedLocks,
             LockedWork<T> work) {
         if (TransactionSynchronizationManager.isActualTransactionActive()) {
             throw new IllegalStateException("underBedLock must run outside a transaction");
@@ -408,7 +408,7 @@ public class AdmissionService {
         }
     }
 
-    private static ConflictException concurrentModification() {
+    static ConflictException concurrentModification() {
         return new ConflictException("CONCURRENT_MODIFICATION",
                 "The resource was changed by someone else. Reload and try again.");
     }

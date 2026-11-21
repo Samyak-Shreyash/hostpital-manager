@@ -141,6 +141,13 @@ public class InvoiceRepository {
         }
     }
 
+    /** [E8-7] The admission's live FINAL invoice (at most one: uq_invoice_admission_final_live). */
+    public Optional<InvoiceRow> liveFinalInvoice(UUID org, UUID admissionId) {
+        return jdbc.sql("SELECT " + COLUMNS + " FROM hms.invoice WHERE organization_id = ? AND admission_id = ?"
+                + " AND kind = 'FINAL' AND status NOT IN ('DISCARDED', 'CANCELLED')")
+                .params(org, admissionId).query(InvoiceRepository::map).optional();
+    }
+
     public boolean hasLiveIpdInvoice(UUID org, UUID admissionId) {
         return jdbc.sql("SELECT EXISTS (SELECT 1 FROM hms.invoice WHERE organization_id = ? AND admission_id = ?"
                 + " AND type = 'IPD' AND status NOT IN ('DISCARDED', 'CANCELLED'))")

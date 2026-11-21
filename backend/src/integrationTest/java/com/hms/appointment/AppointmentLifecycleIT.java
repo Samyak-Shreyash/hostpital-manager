@@ -259,7 +259,7 @@ class AppointmentLifecycleIT extends PostgresIT {
                 .andExpect(jsonPath("$.items[2].patient.uhid", is("HMS-000002")))
                 .andExpect(jsonPath("$.items[2].startAt", is(at("09:30").toString())));
         // The brief is resolved in one batch and never audits a patient read.
-        assertThat(jdbc.sql("SELECT count(*) FROM hms.audit_event WHERE action LIKE 'PATIENT_%'")
+        assertThat(jdbc.sql("SELECT count(*) FROM hms.audit_event WHERE organization_id = ? AND action LIKE 'PATIENT_%'").param(org)
                 .query(Integer.class).single()).isZero();
         mockMvc.perform(desk.apply(get(URL).param("patientId", second.toString())))
                 .andExpect(jsonPath("$.totalItems", is(1)));
