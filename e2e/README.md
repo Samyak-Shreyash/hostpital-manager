@@ -7,7 +7,7 @@ Playwright browser tests, in two projects.
 Run with `npm ci && npx playwright install chromium && npm run test:e2e`; `playwright.config.ts` starts the Vite dev
 server of `../frontend` itself. **Not full-stack:** the backend is not started; each spec mocks `/api/v1/**` with
 `page.route`, so they check the SPA's routing, forms, CSRF header and flows, not the real API. Test data is synthetic.
-`tests/m3-opd-journey.spec.ts` is excluded here.
+`tests/m3-opd-journey.spec.ts` and `tests/m4-ipd-journey.spec.ts` are excluded here.
 
 ## Real-stack journey (`real-stack` project, `npm run test:e2e:real-stack`) [E7-M3]
 
@@ -48,4 +48,13 @@ E2E_BASE_URL=http://localhost:8080 E2E_ADMIN_EMAIL=... E2E_ADMIN_PASSWORD=... E2
   npm run test:e2e:real-stack
 ```
 
-CI runs it in the `e2e-real-stack` job of `.github/workflows/ci.yml`.
+`tests/m4-ipd-journey.spec.ts` [E8-9] reuses the same setup and drives IPD: creates a ward with two beds (daily rate
+300.00, GST-exempt), registers a patient, admits to bed 1, transfers to bed 2, saves the
+discharge summary (planned discharge = the next minute), creates the FINAL invoice and checks its total equals the room
+charges preview, issues and pays it, discharges, and checks the bed board shows both beds available.
+
+Room rates are priced at 00:00 of each charged day and the API refuses past prices, so the spec inserts one
+backdated `service_price` row through `psql` in the Compose `db` container (`backdatedService` in
+`support/real-stack.ts`; command overridable with `E2E_COMPOSE`, default run from `e2e/`). Throwaway stacks only.
+
+CI runs both in the `e2e-real-stack` job of `.github/workflows/ci.yml`.
