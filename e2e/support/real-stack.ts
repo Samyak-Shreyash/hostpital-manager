@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
 
 /**
@@ -72,6 +73,25 @@ export class Api {
 
 export const uniqueSuffix = (): string => randomBytes(4).toString('hex')
 
+/**
+ * Creates a catalogue service (as the clinic user) and gives it a price valid from two days ago. Room rates are priced at
+ * 00:00 of each charged day (BR-B6) and the API refuses past prices, so a fresh stack needs this test-only fixture: one
+ * INSERT through psql in the Compose `db` container (superuser, so RLS does not apply). Never run against real data.
+ */
+export async function backdatedService(clinic: { email: string; password: string }, env: RealStackEnv, name: string, amount: string): Promise<void> {
+  const api = new Api(env.baseURL)
+  await api.login(clinic.email, clinic.password)
+  const code = `E2E_${uniqueSuffix().toUpperCase()}`
+  const service = await api.post<{ id: string }>('/api/v1/services', { code, name })
+  if (!/^[0-9a-f-]{36}$/.test(service.id) || !/^\d+\.\d{2}$/.test(amount)) throw new Error('unexpected id or amount')
+  const sql = `INSERT INTO hms.service_price (id, organization_id, service_id, amount, effective_from, created_by, created_at)
+    SELECT gen_random_uuid(), organization_id, id, ${amount}, now() - interval '2 days', '00000000-0000-0000-0000-000000000000', now()
+    FROM hms.service_catalog_item WHERE id = '${service.id}';`
+  const compose = (process.env.E2E_COMPOSE ?? 'docker compose -f ../infra/compose/compose.yml --env-file ../.env').split(' ')
+  execFileSync(compose[0], [...compose.slice(1), 'exec', '-T', 'db', 'sh', '-c', 'psql -q -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"'],
+    { input: sql, stdio: ['pipe', 'ignore', 'inherit'], env: { ...process.env, MSYS_NO_PATHCONV: '1' } })
+}
+
 /** A password that meets the policy (length) and is random per run; never printed. */
 export const randomPassword = (): string => `E2e-${randomBytes(12).toString('hex')}`
 
@@ -99,7 +119,11 @@ export interface Clinic {
 export async function prepareClinic(env: RealStackEnv): Promise<Clinic> {
   const suffix = uniqueSuffix()
   const admin = new Api(env.baseURL)
-  let session = await admin.login(env.adminEmail, env.adminPassword)
+  // An earlier spec of the same run may already have replaced the temporary password with adminNewPassword.
+  let session = await admin.login(env.adminEmail, env.adminPassword).catch(async (error: unknown) => {
+    if (!(error instanceof ApiError && error.status === 401 && env.adminNewPassword)) throw error
+    return admin.login(env.adminEmail, env.adminNewPassword)
+  })
   if (session.user.mustChangePassword) {
     if (!env.adminNewPassword) throw new Error('The admin still has the temporary password: set E2E_ADMIN_NEW_PASSWORD (see e2e/README.md)')
     await admin.post('/api/v1/auth/change-password', { currentPassword: env.adminPassword, newPassword: env.adminNewPassword })
