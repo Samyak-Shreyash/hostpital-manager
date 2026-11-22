@@ -379,6 +379,52 @@ class IpdInvoiceIT extends PostgresIT {
     }
 
     @Test
+    void deferredBillingDischargeCanStillGetAFinal() throws Exception {
+        UUID id = admitted("D-1");
+        backdate(id, daysAgo(3, 10));
+        // Stands in for POST /discharge with deferBilling=true and no FINAL ([E8-7]).
+        Instant at = daysAgo(0, 9);
+        owner("UPDATE hms.admission SET status = 'DISCHARGED', planned_discharge_at = '" + at + "', discharged_at = '"
+                + at + "' WHERE id = '" + id + "'");
+        owner("UPDATE hms.bed_assignment SET released_at = '" + at + "' WHERE admission_id = '" + id + "'");
+
+        String fin = created(id, "FINAL");
+        assertThat(JsonPath.<String>read(fin, "$.roomChargesThrough"))
+                .isEqualTo(LocalDate.now(IST).minusDays(1).toString());
+        assertThat(money(fin)).isEqualByComparingTo(roomTotal(id, at));
+        // INTERIM stays refused after discharge.
+        draft(id, "INTERIM").andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code", is("INVALID_STATE_TRANSITION")));
+    }
+
+    @Test
+    void interimStopsAtThePlannedDischarge() throws Exception {
+        UUID id = admitted("C-1");
+        backdate(id, daysAgo(5, 10));
+        dischargeInitiated(id, daysAgo(2, 10));
+        String interim = created(id, "INTERIM");
+        assertThat(JsonPath.<String>read(interim, "$.roomChargesThrough"))
+                .isEqualTo(LocalDate.now(IST).minusDays(3).toString());
+    }
+
+    @Test
+    void transferWhileAFinalIsLiveIs409() throws Exception {
+        UUID id = admitted("T-1");
+        UUID free = ipd.bed(ward, "T-2");
+        backdate(id, daysAgo(2, 10));
+        dischargeInitiated(id, daysAgo(0, 9).plus(1, ChronoUnit.DAYS));
+        String fin = created(id, "FINAL");
+        mockMvc.perform(clerk.apply(post("/api/v1/admissions/" + id + "/bed-assignments/transfer"))
+                .contentType(JSON).content("{\"toBedId\":\"" + free + "\",\"reason\":\"Synthetic reason\"}"))
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.code", is("INVALID_STATE_TRANSITION")));
+        // Once the FINAL draft is discarded the transfer works.
+        discard(fin).andExpect(status().isOk());
+        mockMvc.perform(clerk.apply(post("/api/v1/admissions/" + id + "/bed-assignments/transfer"))
+                .contentType(JSON).content("{\"toBedId\":\"" + free + "\",\"reason\":\"Synthetic reason\"}"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
     void stateAndInputRules() throws Exception {
         UUID id = admitted("S-1");
         backdate(id, daysAgo(3, 10));

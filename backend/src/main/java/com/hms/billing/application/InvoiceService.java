@@ -158,7 +158,8 @@ public class InvoiceService implements InvoiceBalancePort {
     /**
      * [E8-6] An IPD draft (ruling R4) whose first items are the admission's room-charge lines from
      * {@link ChargeSource}, unit prices snapshot. INTERIM needs the admission ADMITTED or DISCHARGE_INITIATED and
-     * charges up to now; FINAL needs DISCHARGE_INITIATED and charges up to the planned discharge, at most one live
+     * charges up to now, or the planned discharge if earlier; FINAL needs DISCHARGE_INITIATED (up to the planned
+     * discharge) or DISCHARGED after deferred billing (up to the discharge), at most one live
      * FINAL per admission ({@code 409 DUPLICATE_FINAL_INVOICE}). Only dates after the latest
      * {@code roomChargesThrough} of the admission's live IPD invoices are charged; drafts of one admission are
      * serialised by a transaction advisory lock (billing never locks the admission row). An INTERIM with no
@@ -186,15 +187,18 @@ public class InvoiceService implements InvoiceBalancePort {
             throw invalid("patientId", "The admission belongs to another patient.");
         }
         boolean fin = Invoice.FINAL.equals(kind);
-        boolean allowed = fin ? "DISCHARGE_INITIATED".equals(admission.status())
+        // FINAL also after a deferred-billing discharge (PRD IPD-9: deferred, not waived); it ends at dischargedAt.
+        boolean allowed = fin ? "DISCHARGE_INITIATED".equals(admission.status()) || "DISCHARGED".equals(admission.status())
                 : "ADMITTED".equals(admission.status()) || "DISCHARGE_INITIATED".equals(admission.status());
         if (!allowed) {
             throw new ConflictException("INVALID_STATE_TRANSITION", fin
-                    ? "A final invoice needs the admission in DISCHARGE_INITIATED."
+                    ? "A final invoice needs the admission in DISCHARGE_INITIATED or DISCHARGED."
                     : "An interim invoice needs an active admission.");
         }
         Instant now = clock.instant();
-        Instant endAt = fin ? admission.chargeEndAt() : now;
+        // An INTERIM never charges past the planned discharge (the stay ends there once a FINAL exists).
+        Instant endAt = fin ? admission.chargeEndAt()
+                : admission.chargeEndAt() != null && admission.chargeEndAt().isBefore(now) ? admission.chargeEndAt() : now;
         if (endAt == null) {
             throw new BusinessRuleException("BUSINESS_RULE_VIOLATION", "The admission has no planned discharge time.");
         }

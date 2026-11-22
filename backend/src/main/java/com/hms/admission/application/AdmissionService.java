@@ -229,7 +229,8 @@ public class AdmissionService {
      * Moves an active admission to another bed ([E8-4]): locks both beds in ascending id order, checks the target is
      * available ({@code 409 BED_NOT_AVAILABLE}), locks the admission row (ADMITTED or DISCHARGE_INITIATED, else
      * {@code 409 INVALID_STATE_TRANSITION}), then closes the old assignment and opens the new one at the same
-     * instant. The reason is stored on the new assignment and never audited.
+     * instant. Refused while a live FINAL invoice exists ({@code 409 INVALID_STATE_TRANSITION}). The reason is
+     * stored on the new assignment and never audited.
      */
     public TransferView transfer(OrganizationPrincipal actor, UUID id, UUID toBedId, String reason) {
         UUID org = actor.organizationId();
@@ -250,6 +251,11 @@ public class AdmissionService {
             if (!current.isActive() || held == null) {
                 throw new ConflictException("INVALID_STATE_TRANSITION",
                         "An admission that is " + current + " cannot change beds.");
+            }
+            // The FINAL's room lines are fixed from the bed history; a later move would bill the old bed.
+            if (invoices.liveFinalInvoice(org, id).isPresent()) {
+                throw new ConflictException("INVALID_STATE_TRANSITION",
+                        "A final invoice exists; discard it before transferring the patient.");
             }
             Instant now = now();
             AssignmentView previous = beds.release(org, id, now);
