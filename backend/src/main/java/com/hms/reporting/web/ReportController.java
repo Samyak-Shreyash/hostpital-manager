@@ -57,18 +57,51 @@ class ReportController {
         return ranged(actor, "opd-consultations", from, to, accept);
     }
 
+    @GetMapping(value = "/api/v1/reports/admissions/active", produces = {JSON, "text/csv"})
+    @PreAuthorize("hasAuthority('report:clinical')")
+    ResponseEntity<?> activeAdmissions(@AuthenticationPrincipal OrganizationPrincipal actor,
+            @RequestHeader(value = HttpHeaders.ACCEPT, required = false) String accept) {
+        return snapshot(actor, "admissions-active", accept);
+    }
+
+    @GetMapping(value = "/api/v1/reports/beds/occupancy", produces = {JSON, "text/csv"})
+    @PreAuthorize("hasAuthority('report:clinical')")
+    ResponseEntity<?> bedOccupancy(@AuthenticationPrincipal OrganizationPrincipal actor,
+            @RequestHeader(value = HttpHeaders.ACCEPT, required = false) String accept) {
+        return snapshot(actor, "beds-occupancy", accept);
+    }
+
+    @GetMapping(value = "/api/v1/reports/discharges", produces = {JSON, "text/csv"})
+    @PreAuthorize("hasAuthority('report:clinical')")
+    ResponseEntity<?> discharges(@AuthenticationPrincipal OrganizationPrincipal actor,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            @RequestHeader(value = HttpHeaders.ACCEPT, required = false) String accept) {
+        return ranged(actor, "discharges", from, to, accept);
+    }
+
     private ResponseEntity<?> ranged(OrganizationPrincipal actor, String name, LocalDate from, LocalDate to,
             String accept) {
         boolean csv = accept != null && accept.contains("text/csv");
-        return respond(reports.run(actor, name, ReportRange.of(from, to), csv), csv);
+        return respond(reports.run(actor, name, ReportRange.of(from, to), csv), csv, null);
     }
 
-    /** Shared by every report endpoint: JSON body, or CSV attachment named report-from-to.csv. */
-    static ResponseEntity<?> respond(ReportResult result, boolean csv) {
+    /** Snapshot reports take no dates; their CSV file name carries the organization-local date. */
+    private ResponseEntity<?> snapshot(OrganizationPrincipal actor, String name, String accept) {
+        boolean csv = accept != null && accept.contains("text/csv");
+        ReportResult result = reports.run(actor, name, null, csv);
+        return respond(result, csv, csv ? reports.localToday(actor) : null);
+    }
+
+    /**
+     * Shared by every report endpoint: JSON body, or CSV attachment named report-from-to.csv; snapshots (no from)
+     * use {@code today}, the organization-local date.
+     */
+    static ResponseEntity<?> respond(ReportResult result, boolean csv, LocalDate today) {
         if (!csv) {
             return ResponseEntity.ok().contentType(MediaType.APPLICATION_JSON).body(result);
         }
-        String suffix = result.from() == null ? LocalDate.now(java.time.ZoneOffset.UTC).toString()
+        String suffix = result.from() == null ? today.toString()
                 : result.from() + "-" + result.to();
         return ResponseEntity.ok().contentType(CSV)
                 .header(HttpHeaders.CONTENT_DISPOSITION,
