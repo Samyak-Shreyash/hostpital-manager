@@ -37,6 +37,18 @@ describe('reports page', () => {
     expect(screen.getByRole('button', { name: 'Download CSV' })).toBeInTheDocument()
   })
 
+  it('right-aligns the money column paid but not invoiceNo', async () => {
+    mockApi({
+      'GET /api/v1/auth/me': json(200, session(['report:finance'])),
+      [`GET /api/v1/reports/revenue/daily?from=${FROM}&to=${TO}`]: json(200, REVENUE),
+      'GET /api/v1/reports/payments/outstanding': json(200, report([{ invoiceNo: '1042', paid: '70.00' }], ['invoiceNo', 'paid'])),
+    })
+    renderApp('/reports')
+    fireEvent.change(await screen.findByLabelText('Report'), { target: { value: 'outstanding' } })
+    expect((await screen.findByText('70.00')).className).toContain('text-right')
+    expect(screen.getByText('1042').className).not.toContain('text-right')
+  })
+
   it('hides the nav link without a report permission', async () => {
     mockApi({ 'GET /api/v1/auth/me': json(200, session(['patient:read'])) })
     renderApp('/')
