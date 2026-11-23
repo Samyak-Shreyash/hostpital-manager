@@ -80,6 +80,22 @@ class ReportController {
         return ranged(actor, "discharges", from, to, accept);
     }
 
+    @GetMapping(value = "/api/v1/reports/revenue/daily", produces = {JSON, "text/csv"})
+    @PreAuthorize("hasAuthority('report:finance')")
+    ResponseEntity<?> revenueDaily(@AuthenticationPrincipal OrganizationPrincipal actor,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            @RequestHeader(value = HttpHeaders.ACCEPT, required = false) String accept) {
+        return ranged(actor, "revenue-daily", from, to, accept);
+    }
+
+    @GetMapping(value = "/api/v1/reports/payments/outstanding", produces = {JSON, "text/csv"})
+    @PreAuthorize("hasAuthority('report:finance')")
+    ResponseEntity<?> paymentsOutstanding(@AuthenticationPrincipal OrganizationPrincipal actor,
+            @RequestHeader(value = HttpHeaders.ACCEPT, required = false) String accept) {
+        return snapshot(actor, "payments-outstanding", accept);
+    }
+
     private ResponseEntity<?> ranged(OrganizationPrincipal actor, String name, LocalDate from, LocalDate to,
             String accept) {
         boolean csv = accept != null && accept.contains("text/csv");

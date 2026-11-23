@@ -74,7 +74,25 @@ public class ReportService {
                     FROM generate_series(CAST(:from AS timestamp), CAST(:to AS timestamp), interval '1 day') d
                     LEFT JOIN hms.report_discharge_v r
                       ON r.organization_id = :org AND r.day = d::date
-                    GROUP BY d ORDER BY d"""));
+                    GROUP BY d ORDER BY d"""),
+            "revenue-daily", new Def(List.of("date", "mode", "collected", "refunded", "net"), """
+                    SELECT day AS date, mode, sum(collected)::text AS collected, sum(refunded)::text AS refunded,
+                           (sum(collected) - sum(refunded))::text AS net
+                    FROM hms.report_cash_movement_v
+                    WHERE organization_id = :org AND day BETWEEN :from AND :to
+                    GROUP BY day, mode ORDER BY day, mode"""),
+            "payments-outstanding", new Def(List.of("invoiceNo", "uhid", "patientName", "issuedAt", "total",
+                    "credited", "paid", "refunded", "balance"), """
+                    SELECT i.invoice_no AS "invoiceNo", p.uhid, p.full_name AS "patientName",
+                           i.issued_at AS "issuedAt", v.total::text AS total, v.credited::text AS credited,
+                           v.paid::text AS paid, v.refunded::text AS refunded,
+                           (v.total - v.credited - v.paid + v.refunded)::text AS balance
+                    FROM hms.invoice_reconciliation_v v
+                    JOIN hms.invoice i ON i.organization_id = v.organization_id AND i.id = v.id
+                    JOIN hms.patient p ON p.organization_id = i.organization_id AND p.id = i.patient_id
+                    WHERE v.organization_id = :org AND v.status IN ('ISSUED', 'PARTIALLY_PAID', 'PAID')
+                      AND v.total - v.credited - v.paid + v.refunded > 0
+                    ORDER BY i.issued_at, i.invoice_no"""));
 
     private final ReportRepository repository;
     private final AuditRecorder audit;
