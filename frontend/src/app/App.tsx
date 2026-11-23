@@ -8,6 +8,7 @@ import { RequireAuth, RequirePermission } from '../features/auth/guards'
 import { LoginPage } from '../features/auth/LoginPage'
 import { SESSION_KEY } from '../features/auth/useSession'
 import { HomePage } from '../features/HomePage'
+import { ReportsPage } from '../features/reports/ReportsPage'
 import { AuditPage } from '../features/audit/AuditPage'
 import { DayCalendarPage } from '../features/appointments/DayCalendarPage'
 import { QueueBoardPage } from '../features/appointments/QueueBoardPage'
@@ -128,6 +129,7 @@ export function AppRoutes() {
           <Route element={<RequirePermission permission="audit:read" screen="Audit log" />}>
             <Route path="audit" element={<AuditPage />} />
           </Route>
+          <Route path="reports" element={<ReportsPage />} />
           <Route path="*" element={<NotFound />} />
         </Route>
       </Route>

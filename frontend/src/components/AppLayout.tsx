@@ -13,7 +13,7 @@ const linkClass = ({ isActive }: { isActive: boolean }) =>
 const TITLES: [string, string][] = [
   ['/users/new', 'New user'], ['/users/import', 'Import users'], ['/users', 'Users'], ['/roles', 'Roles'], ['/patients', 'Patients'],
   ['/appointments', 'Appointments'], ['/queue', 'Queue'], ['/consult', 'Consultation'], ['/invoices', 'Billing'],
-  ['/beds', 'Bed board'], ['/wards', 'Wards'], ['/admissions', 'Admissions'], ['/doctors', 'Doctors'], ['/staff', 'Staff'], ['/catalog', 'Departments & specialties'], ['/audit', 'Audit'], ['/', 'Home'],
+  ['/beds', 'Bed board'], ['/wards', 'Wards'], ['/admissions', 'Admissions'], ['/doctors', 'Doctors'], ['/staff', 'Staff'], ['/catalog', 'Departments & specialties'], ['/audit', 'Audit'], ['/reports', 'Reports'], ['/', 'Home'],
 ]
 
 export function AppLayout() {
@@ -53,6 +53,7 @@ export function AppLayout() {
           {can('user:read') && <NavLink to="/users" className={linkClass}>Users</NavLink>}
           {can('role:read') && <NavLink to="/roles" className={linkClass}>Roles</NavLink>}
           {can('catalog:read') && <NavLink to="/catalog" className={linkClass}>Departments &amp; specialties</NavLink>}
+          {(can('report:clinical') || can('report:finance')) && <NavLink to="/reports" className={linkClass}>Reports</NavLink>}
           {can('audit:read') && <NavLink to="/audit" className={linkClass}>Audit</NavLink>}
         </nav>
         <span className="ml-auto text-sm text-slate-600">{data?.user.fullName}</span>
