@@ -76,6 +76,9 @@ class OrganizationIsolationIT extends PostgresIT {
     /** Mappings without a path id: nothing to cross-check by id (list endpoints are scoped by the principal). */
     private static final Set<String> EXEMPT = Set.of(
             "POST /api/v1/auth/login",
+            "GET /api/v1/reports/registrations/daily", // org from the principal only; other-org rows never counted,
+            "GET /api/v1/reports/appointments", // OperationalReportsIT
+            "GET /api/v1/reports/opd-consultations", // OperationalReportsIT
             "GET /api/v1/appointments", // list scoped by the principal; other-org filters match nothing
             "POST /api/v1/appointments", // ids in the body; cross-org patient/doctor covered by AppointmentBookingIT
             "GET /api/v1/invoices", // list scoped by the principal; other-org patientId matches nothing

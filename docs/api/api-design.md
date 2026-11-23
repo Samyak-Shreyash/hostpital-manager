@@ -391,6 +391,8 @@ Rules: amounts are strings with ≤2 decimals, > 0; quantity 0.01–9999; unitPr
 ## 13. Reports (read-only; all org-scoped, `from`/`to` in facility local dates, CSV via `Accept: text/csv`)
 `GET /reports/registrations/daily`, `/reports/appointments`, `/reports/opd-consultations`, `/reports/admissions/active`, `/reports/beds/occupancy`, `/reports/discharges`, `/reports/revenue/daily`, `/reports/payments/outstanding` · Permissions: `report:clinical` (clinical/operational), `report:finance` (revenue/outstanding).
 
+**Implemented `[E9-1]`.** `registrations/daily`, `appointments`, `opd-consultations` (all `report:clinical`). Ranged reports require `from` and `to` (ISO local dates, inclusive, in the organization time zone); `from > to`, a span over 366 days or a missing date -> `422 VALIDATION_ERROR`. JSON: `{report, from, to, generatedAt, columns, rows}` (money as decimal strings, dates ISO, ids strings, counts numbers; `from`/`to` null for snapshots). `Accept: text/csv` -> `200 text/csv; charset=UTF-8`, `Content-Disposition: attachment; filename="<report>-<from>-<to>.csv"`, RFC 4180 quoting, text cells starting with `=`, `+`, `-`, `@`, tab or CR prefixed with `'`. Not paginated. Each call writes one `REPORT_VIEWED` audit event (entity type `REPORT`, `changedFields` = supplied filter names `from`, `to`, `format`). `registrations/daily` columns `date,count` (zero-filled per day); `appointments` `date,practitionerId,practitionerName,status,count`; `opd-consultations` (finalized encounters by finalized date) `date,practitionerId,practitionerName,count`.
+
 ## 14. Audit (admin)
 `GET /audit-events` ?actorId,entityType,entityId,patientId,action,from,to · `audit:read` (System Administrator, Facility Administrator). Read of audit events is itself audited.
 
