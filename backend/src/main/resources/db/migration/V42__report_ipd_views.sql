@@ -34,8 +34,8 @@ FROM hms.ward w
 LEFT JOIN hms.bed b ON b.organization_id = w.organization_id AND b.ward_id = w.id
 LEFT JOIN hms.bed_assignment ba ON ba.organization_id = b.organization_id AND ba.bed_id = b.id
                                AND ba.released_at IS NULL
-WHERE w.status = 'ACTIVE'
-GROUP BY w.organization_id, w.id, w.name;
+GROUP BY w.organization_id, w.id, w.name, w.status
+HAVING w.status = 'ACTIVE' OR count(ba.id) > 0; -- retired wards still holding patients stay visible
 
 CREATE VIEW hms.report_discharge_v WITH (security_invoker = true) AS
 SELECT a.organization_id,

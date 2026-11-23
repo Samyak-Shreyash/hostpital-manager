@@ -69,7 +69,7 @@ export function ReportsPage() {
               {result.data.rows.map((row, i) => (
                 <tr key={i} className="border-b">
                   {result.data.columns.map((c) => (
-                    <td key={c} className={`p-2 ${isNumeric(row[c]) && !/date|no$|id$/i.test(c) ? 'text-right' : ''}`}>{row[c] ?? ''}</td>
+                    <td key={c} className={`p-2 ${isNumeric(row[c]) && !/date|no$/i.test(c) ? 'text-right' : ''}`}>{row[c] ?? ''}</td>
                   ))}
                 </tr>
               ))}

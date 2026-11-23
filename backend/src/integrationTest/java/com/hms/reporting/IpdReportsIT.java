@@ -117,6 +117,20 @@ class IpdReportsIT extends PostgresIT {
     }
 
     @Test
+    void inactiveWardWithAnOpenAssignmentStillCounts() throws Exception {
+        UUID ward = ipd.ward("RETD");
+        ipd.admitted(clerk, ipd.patient(), doctor, ipd.bed(ward, "R1"));
+        fx.inOrg(org, () -> jdbc.sql("UPDATE hms.ward SET status = 'INACTIVE' WHERE id = ?").param(ward).update());
+
+        mockMvc.perform(clerk.apply(get("/api/v1/reports/beds/occupancy")))
+                .andExpect(jsonPath("$.rows.length()", is(2)))
+                .andExpect(jsonPath("$.rows[0].wardName", is("Ward RETD")))
+                .andExpect(jsonPath("$.rows[0].occupied", is(1)))
+                .andExpect(jsonPath("$.rows[1].wardName", is("Total")))
+                .andExpect(jsonPath("$.rows[1].occupied", is(1)));
+    }
+
+    @Test
     void occupiedSumsToTheOpenBedAssignments() throws Exception {
         UUID ward = ipd.ward("SUMW");
         for (String bed : new String[] {"S1", "S2", "S3"}) {

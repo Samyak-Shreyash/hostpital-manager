@@ -56,6 +56,7 @@ Legal review flags (for `[E10-8]`, not decided here): ABHA retention and masking
 - R1: revenue is reported **by payment mode** only. Payments are not allocated to invoice lines, so per-service collection would be an invented allocation (cost if wrong: one more view and endpoint).
 - R2: revenue is cash basis. Payments count on the organization-local date of `received_at`; refunds count only when effective, on the date they became effective (RECORDED: `requested_at`; otherwise the APPROVED decision's `decided_at`). Pending and rejected refunds never count. Same effectiveness rule as `invoice_reconciliation_v` (V34), so the report ties out with reconciliation.
 - R3: outstanding = invoices in ISSUED, PARTIALLY_PAID or PAID status (not DRAFT, DISCARDED or CANCELLED) with `total - credited - paid + refunded > 0`, from `invoice_reconciliation_v`.
+- R3 open owner question: CANCELLED invoices that still hold money (payments received, not refunded) are excluded from payments-outstanding, since a cancelled invoice is not a receivable. Confirm, or add an unallocated/held-money report or include them.
 - R4: reports are not paginated (bounded by the 366-day range and facility size); add `page/size` if that proves wrong.
 
 ## 2. Open questions
