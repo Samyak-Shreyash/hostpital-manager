@@ -26,7 +26,7 @@ export class ApiError extends Error {
   }
 }
 
-async function toApiError(response: Response): Promise<ApiError> {
+export async function toApiError(response: Response): Promise<ApiError> {
   let body: { code?: string; detail?: string; title?: string; errors?: FieldError[]; [key: string]: unknown } = {}
   try {
     body = await response.json()
