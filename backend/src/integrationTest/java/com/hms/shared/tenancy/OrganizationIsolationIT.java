@@ -82,6 +82,8 @@ class OrganizationIsolationIT extends PostgresIT {
             "GET /api/v1/reports/admissions/active", // IpdReportsIT seeds a second organization's stay
             "GET /api/v1/reports/beds/occupancy", // IpdReportsIT
             "GET /api/v1/reports/discharges", // IpdReportsIT
+            "GET /api/v1/reports/revenue/daily", // FinanceReportsIT seeds a second organization's money
+            "GET /api/v1/reports/payments/outstanding", // FinanceReportsIT
             "GET /api/v1/appointments", // list scoped by the principal; other-org filters match nothing
             "POST /api/v1/appointments", // ids in the body; cross-org patient/doctor covered by AppointmentBookingIT
             "GET /api/v1/invoices", // list scoped by the principal; other-org patientId matches nothing

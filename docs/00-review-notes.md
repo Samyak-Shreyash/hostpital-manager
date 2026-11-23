@@ -52,6 +52,12 @@ Legal review flags (for `[E10-8]`, not decided here): ABHA retention and masking
 ### 1c. IPD decisions (2026-11-21, `[E8-6]`)
 - Room-rent GST (owner decision, not a legal-compliance claim; the owner should still have a tax adviser confirm): non-ICU rooms at or below INR 5,000.00 per day are exempt (0%); non-ICU rooms above INR 5,000.00 per day carry 5% GST (2.5% CGST + 2.5% SGST), without input tax credit, on the room-rent lines only (never on other services on the invoice); ICU, CCU, ICCU and NICU wards (`ward.care_type = 'CRITICAL_CARE'`) are exempt whatever the daily charge. The threshold compares the per-day unit price before any discount. Implemented in `com.hms.admission.domain.RoomTaxRule`; the rate is stored on each room invoice line (`tax_rate`) and the preview and the FINAL invoice totals both include it.
 
+### 1d. Reporting decisions (2026-11-22, `[E9-3]`; owner may overturn)
+- R1: revenue is reported **by payment mode** only. Payments are not allocated to invoice lines, so per-service collection would be an invented allocation (cost if wrong: one more view and endpoint).
+- R2: revenue is cash basis. Payments count on the organization-local date of `received_at`; refunds count only when effective, on the date they became effective (RECORDED: `requested_at`; otherwise the APPROVED decision's `decided_at`). Pending and rejected refunds never count. Same effectiveness rule as `invoice_reconciliation_v` (V34), so the report ties out with reconciliation.
+- R3: outstanding = invoices in ISSUED, PARTIALLY_PAID or PAID status (not DRAFT, DISCARDED or CANCELLED) with `total - credited - paid + refunded > 0`, from `invoice_reconciliation_v`.
+- R4: reports are not paginated (bounded by the 366-day range and facility size); add `page/size` if that proves wrong.
+
 ## 2. Open questions
 
 | ID | Question | Raised in | Blocks | Default until answered |
