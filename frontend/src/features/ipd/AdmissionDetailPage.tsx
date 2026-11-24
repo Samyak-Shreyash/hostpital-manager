@@ -20,7 +20,7 @@ import { SummaryForm } from './SummaryForm'
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section aria-label={title} className="mb-6 rounded bg-white p-4 shadow">
+    <section aria-label={title} className="mb-6 rounded-xl border border-border bg-surface p-4">
       <h2 className="mb-3 text-lg font-semibold">{title}</h2>
       {children}
     </section>
@@ -80,7 +80,7 @@ function DischargeDialog({ admission, finalInvoice, timeZone, onClose, onDone }:
         <Field label="Discharged at" htmlFor="discharge-at" error={errors.dischargedAt?.message}>
           <input id="discharge-at" type="datetime-local" className={inputClass} {...form.register('dischargedAt')} />
         </Field>
-        <p className="mb-3 text-sm text-slate-600">
+        <p className="mb-3 text-sm text-ink-muted">
           {issued ? `Final invoice ${finalInvoice.invoiceNo ?? ''} is issued.` : 'No issued final invoice yet: issue one first'}
           {!issued && canDefer ? ', or defer billing below.' : !issued ? '.' : ''}
         </p>
@@ -108,7 +108,7 @@ function DiagnosisEditor({ admission, onDone }: { admission: Admission; onDone: 
   })
   if (!editing) {
     return <p className="text-sm">Admission diagnosis: {admission.admissionDiagnosis}{' '}
-      <button type="button" className="text-blue-700 underline" onClick={() => setEditing(true)}>Edit diagnosis</button></p>
+      <button type="button" className="text-primary underline" onClick={() => setEditing(true)}>Edit diagnosis</button></p>
   }
   return (
     <form noValidate onSubmit={form.handleSubmit((v) => save.mutate(v))}>
@@ -168,13 +168,13 @@ export function AdmissionDetailPage() {
   })
 
   if (admissionQuery.isPending) return <p role="status">Loading...</p>
-  if (admissionQuery.isError || !a) return <p role="alert" className="text-red-700">{ipdErrorMessage(admissionQuery.error)}</p>
+  if (admissionQuery.isError || !a) return <p role="alert" className="text-danger">{ipdErrorMessage(admissionQuery.error)}</p>
 
   return (
     <section>
       <h1 className="mb-1 text-2xl font-semibold">Admission {a.admissionNo}</h1>
       <p className="mb-4 flex flex-wrap items-center gap-3 text-sm">
-        <span className="rounded bg-slate-200 px-2 py-0.5 text-xs">{ADMISSION_STATUS_LABELS[a.status]}</span>
+        <span className="rounded bg-muted px-2 py-0.5 text-xs">{ADMISSION_STATUS_LABELS[a.status]}</span>
         <span><strong>{a.patient.name ?? 'Patient'}</strong> {a.patient.uhid}</span>
         <span>Admitted {formatDateTime(a.admittedAt, timeZone)}</span>
         {a.plannedDischargeAt && <span>Planned discharge {formatDateTime(a.plannedDischargeAt, timeZone)}</span>}
@@ -195,7 +195,7 @@ export function AdmissionDetailPage() {
         </div>
         <div className="mt-2"><IpdProblem error={cancel.error} what="admission" onReload={reload} /></div>
         <h3 className="mb-1 mt-4 font-medium">Bed history</h3>
-        {assignments.isError && <p role="alert" className="text-red-700">{ipdErrorMessage(assignments.error)}</p>}
+        {assignments.isError && <p role="alert" className="text-danger">{ipdErrorMessage(assignments.error)}</p>}
         <table className="w-full text-left text-sm">
           <caption className="sr-only">Bed history</caption>
           <thead><tr className="border-b"><th className="py-1">Ward</th><th>Bed</th><th>From</th><th>To</th><th>Reason</th></tr></thead>
@@ -219,7 +219,7 @@ export function AdmissionDetailPage() {
 
       {canInvoiceRead && a.status !== 'CANCELLED' && (
         <Section title="Charges preview">
-          {charges.isError && <p role="alert" className="text-red-700">{ipdErrorMessage(charges.error)}</p>}
+          {charges.isError && <p role="alert" className="text-danger">{ipdErrorMessage(charges.error)}</p>}
           {charges.data && (
             <>
               <table className="mb-2 w-full text-left text-sm">
@@ -243,12 +243,12 @@ export function AdmissionDetailPage() {
 
       {canInvoiceRead && (
         <Section title="Invoices">
-          {live.length === 0 && <p className="mb-2 text-sm text-slate-600">No invoices for this admission yet.</p>}
+          {live.length === 0 && <p className="mb-2 text-sm text-ink-muted">No invoices for this admission yet.</p>}
           <ul className="mb-3 space-y-1">
             {live.map((i) => (
               <li key={i.id} className="text-sm">
-                <Link className="text-blue-700 underline" to={`/invoices/${i.id}`}>{i.kind === 'FINAL' ? 'Final' : 'Interim'} invoice {i.invoiceNo ?? '(draft)'}</Link>
-                <span className="ml-2 rounded bg-slate-200 px-2 py-0.5 text-xs">{INVOICE_STATUS_LABELS[i.status]}</span>
+                <Link className="text-primary underline" to={`/invoices/${i.id}`}>{i.kind === 'FINAL' ? 'Final' : 'Interim'} invoice {i.invoiceNo ?? '(draft)'}</Link>
+                <span className="ml-2 rounded bg-muted px-2 py-0.5 text-xs">{INVOICE_STATUS_LABELS[i.status]}</span>
               </li>
             ))}
           </ul>

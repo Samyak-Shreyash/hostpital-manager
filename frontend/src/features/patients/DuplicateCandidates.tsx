@@ -26,12 +26,12 @@ export function DuplicateCandidates({ candidates, canOverride, submitting, actio
     onOverride(parsed.data)
   }
   return (
-    <div role="region" aria-label="Possible duplicates" className="mt-6 max-w-xl rounded border border-amber-300 bg-amber-50 p-4">
+    <div role="region" aria-label="Possible duplicates" className="mt-6 max-w-xl rounded border border-amber-300 bg-warning-soft p-4">
       <h2 className="mb-2 font-semibold">This patient may already be registered</h2>
       <ul className="mb-3 text-sm">
         {candidates.map((c) => (
           <li key={c.id} className="mb-1">
-            <Link className="text-blue-700 underline" to={`/patients/${encodeURIComponent(c.id)}`}>{c.fullName}</Link>
+            <Link className="text-primary underline" to={`/patients/${encodeURIComponent(c.id)}`}>{c.fullName}</Link>
             {' '}<span className="font-mono">{c.uhid}</span> · {c.dateOfBirth ?? 'DOB unknown'} · {c.phoneMasked}
           </li>
         ))}

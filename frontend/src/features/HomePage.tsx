@@ -23,21 +23,21 @@ export function HomePage() {
   return (
     <section>
       <h1 className="text-2xl font-semibold">Welcome, {data?.user.fullName}</h1>
-      {notice && <p role="status" className="mt-4 rounded bg-green-50 p-3 text-sm text-green-800">{notice}</p>}
-      <p className="mt-2 text-slate-600">Signed in to {data?.organization.name}.</p>
+      {notice && <p role="status" className="mt-4 rounded bg-success-soft p-3 text-sm text-success">{notice}</p>}
+      <p className="mt-2 text-ink-muted">Signed in to {data?.organization.name}.</p>
       {shortcuts.length > 0 ? (
         <ul className="mt-6 grid gap-3 sm:grid-cols-2">
           {shortcuts.map((s) => (
             <li key={s.to}>
-              <Link to={s.to} className="block rounded bg-white p-4 shadow hover:bg-slate-50">
-                <span className="font-medium text-blue-800">{s.label}</span>
-                <span className="mt-1 block text-sm text-slate-600">{s.hint}</span>
+              <Link to={s.to} className="block rounded-xl border border-border bg-surface p-4 hover:bg-canvas">
+                <span className="font-medium text-primary">{s.label}</span>
+                <span className="mt-1 block text-sm text-ink-muted">{s.hint}</span>
               </Link>
             </li>
           ))}
         </ul>
       ) : (
-        <p className="mt-4 text-slate-600">
+        <p className="mt-4 text-ink-muted">
           No screens are available for your role yet. Appointments, consultations, admissions and billing arrive in later
           releases; ask your administrator if you expected to see something now.
         </p>

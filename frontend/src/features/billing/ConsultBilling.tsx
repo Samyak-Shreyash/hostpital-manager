@@ -35,13 +35,13 @@ export function ConsultBilling({ encounter }: { encounter: Encounter }) {
       {invoices.isError && <FormError message={billingErrorMessage(invoices.error)} />}
       {live ? (
         <p className="text-sm">
-          <Link className="text-blue-700 underline" to={`/invoices/${live.id}`}>Open invoice {live.invoiceNo ?? '(draft)'}</Link>
-          <span className="ml-2 rounded bg-slate-200 px-2 py-0.5 text-xs">{STATUS_LABELS[live.status]}</span>
+          <Link className="text-primary underline" to={`/invoices/${live.id}`}>Open invoice {live.invoiceNo ?? '(draft)'}</Link>
+          <span className="ml-2 rounded bg-muted px-2 py-0.5 text-xs">{STATUS_LABELS[live.status]}</span>
         </p>
       ) : canCreate ? (
         <button type="button" className={primaryButton} disabled={create.isPending} onClick={() => create.mutate()}>Create invoice</button>
       ) : (
-        <p className="text-sm text-slate-600">No invoice has been created for this visit yet.</p>
+        <p className="text-sm text-ink-muted">No invoice has been created for this visit yet.</p>
       )}
       {exists && <p role="alert" className="mt-2 text-sm text-amber-800">An invoice already exists for this visit.{canRead ? ' It is listed above once loaded.' : ' Ask someone with invoice access to open it.'}</p>}
       {create.isError && !exists && <div className="mt-2"><FormError message={billingErrorMessage(create.error)} /></div>}

@@ -56,26 +56,26 @@ export function DoctorListPage() {
           </select>
         </label>
       </div>
-      {doctors.isError && <p role="alert" className="text-red-700">{errorMessage(doctors.error)}</p>}
+      {doctors.isError && <p role="alert" className="text-danger">{errorMessage(doctors.error)}</p>}
       {doctors.isPending && <p role="status">Loading...</p>}
       {doctors.data && (
         <>
-          <table className="w-full border-collapse bg-white text-left text-sm shadow">
+          <table className="w-full border-collapse bg-surface text-left text-sm">
             <thead>
-              <tr className="border-b bg-slate-100">
+              <tr className="border-b bg-muted">
                 <th className="p-2">Name</th><th className="p-2">Registration no.</th><th className="p-2">Primary specialty</th><th className="p-2">Status</th>
               </tr>
             </thead>
             <tbody>
               {doctors.data.items.map((d) => (
                 <tr key={d.id} className="border-b">
-                  <td className="p-2"><Link className="text-blue-700 underline" to={`/doctors/${encodeURIComponent(d.id)}`}>{d.fullName}</Link></td>
+                  <td className="p-2"><Link className="text-primary underline" to={`/doctors/${encodeURIComponent(d.id)}`}>{d.fullName}</Link></td>
                   <td className="p-2">{d.registrationNo}</td>
                   <td className="p-2">{catalog.specialtyName(d.primarySpecialtyId)}</td>
                   <td className="p-2"><StatusBadge status={d.status} /></td>
                 </tr>
               ))}
-              {doctors.data.items.length === 0 && <tr><td colSpan={4} className="p-2 text-slate-600">No doctors found.</td></tr>}
+              {doctors.data.items.length === 0 && <tr><td colSpan={4} className="p-2 text-ink-muted">No doctors found.</td></tr>}
             </tbody>
           </table>
           <div className="mt-3 flex items-center gap-3 text-sm">

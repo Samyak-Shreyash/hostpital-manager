@@ -26,18 +26,18 @@ export function LeaveList({ doctorId, canEdit }: { doctorId: string; canEdit: bo
   return (
     <section aria-labelledby="leave-heading" className="mb-8">
       <h2 id="leave-heading" className="mb-3 text-lg font-semibold">Leave</h2>
-      {leave.isError && <p role="alert" className="text-red-700">{errorMessage(leave.error)}</p>}
+      {leave.isError && <p role="alert" className="text-danger">{errorMessage(leave.error)}</p>}
       <FormError message={cancel.isError ? errorMessage(cancel.error) : null} />
-      {leave.data && leave.data.length === 0 && <p className="mb-3 text-sm text-slate-600">No leave recorded.</p>}
+      {leave.data && leave.data.length === 0 && <p className="mb-3 text-sm text-ink-muted">No leave recorded.</p>}
       {leave.data && leave.data.length > 0 && (
-        <ul className="mb-4 divide-y rounded bg-white text-sm shadow">
+        <ul className="mb-4 divide-y rounded bg-surface text-sm">
           {leave.data.map((l) => (
             <li key={l.id} className="flex items-center gap-3 p-2">
               <span>{l.date}</span>
               <span>{l.wholeDay ? 'Whole day' : `${l.start}–${l.end}`}</span>
-              {l.status === 'CANCELLED' && <span className="rounded bg-slate-200 px-2 text-xs">Cancelled</span>}
+              {l.status === 'CANCELLED' && <span className="rounded bg-muted px-2 text-xs">Cancelled</span>}
               {canEdit && l.status === 'ACTIVE' && (
-                <button type="button" className="ml-auto text-red-700 underline" disabled={cancel.isPending}
+                <button type="button" className="ml-auto text-danger underline" disabled={cancel.isPending}
                   aria-label={`Cancel leave on ${l.date}`} onClick={() => cancel.mutate(l)}>
                   Cancel leave
                 </button>

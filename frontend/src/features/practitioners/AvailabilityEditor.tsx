@@ -13,7 +13,7 @@ const sorted = (w: Window[]) => [...w].sort((a, b) => a.weekday - b.weekday || a
 export function AvailabilityEditor({ doctorId, canEdit }: { doctorId: string; canEdit: boolean }) {
   const availability = useQuery({ queryKey: practitionerKeys.availability(doctorId), queryFn: () => getAvailability(doctorId) })
   if (availability.isPending) return <p role="status">Loading availability...</p>
-  if (availability.isError) return <p role="alert" className="text-red-700">{errorMessage(availability.error)}</p>
+  if (availability.isError) return <p role="alert" className="text-danger">{errorMessage(availability.error)}</p>
   return (
     <TemplateEditor
       key={availability.data.version}
@@ -50,20 +50,20 @@ function TemplateEditor({ doctorId, availability, canEdit, onReload }: { doctorI
   return (
     <section aria-labelledby="availability-heading" className="mb-8">
       <h2 id="availability-heading" className="mb-1 text-lg font-semibold">Weekly availability</h2>
-      <p className="mb-3 text-sm text-slate-600">Times are in the facility timezone ({availability.timezone}).</p>
-      {saved && <p role="status" className="mb-2 text-sm text-green-800">Availability saved.</p>}
+      <p className="mb-3 text-sm text-ink-muted">Times are in the facility timezone ({availability.timezone}).</p>
+      {saved && <p role="status" className="mb-2 text-sm text-success">Availability saved.</p>}
       {conflict && <ConflictNotice what="doctor" onReload={() => { save.reset(); onReload() }} />}
       <FormError message={save.isError && !conflict ? errorMessage(save.error) : null} />
       {problems.length > 0 && (
-        <ul role="alert" className="mb-3 list-disc rounded bg-red-50 p-3 pl-6 text-sm text-red-800">
+        <ul role="alert" className="mb-3 list-disc rounded bg-danger-soft p-3 pl-6 text-sm text-danger">
           {problems.map((p) => <li key={p}>{p}</li>)}
         </ul>
       )}
-      {windows.length === 0 && <p className="mb-3 text-sm text-slate-600">No weekly availability defined.</p>}
+      {windows.length === 0 && <p className="mb-3 text-sm text-ink-muted">No weekly availability defined.</p>}
       {windows.length > 0 && (
-        <table className="mb-3 w-full border-collapse bg-white text-left text-sm shadow">
+        <table className="mb-3 w-full border-collapse bg-surface text-left text-sm">
           <thead>
-            <tr className="border-b bg-slate-100">
+            <tr className="border-b bg-muted">
               <th className="p-2">#</th><th className="p-2">Day</th><th className="p-2">Start</th><th className="p-2">End</th><th className="p-2">Slot (min)</th>
               {canEdit && <th className="p-2"><span className="sr-only">Actions</span></th>}
             </tr>
@@ -86,7 +86,7 @@ function TemplateEditor({ doctorId, availability, canEdit, onReload }: { doctorI
                         onChange={(e) => update(i, { slotMinutes: Number(e.target.value) })} />
                     </td>
                     <td className="p-2">
-                      <button type="button" className="text-red-700 underline" onClick={() => setWindows(windows.filter((_, j) => j !== i))}>Remove</button>
+                      <button type="button" className="text-danger underline" onClick={() => setWindows(windows.filter((_, j) => j !== i))}>Remove</button>
                     </td>
                   </>
                 ) : (

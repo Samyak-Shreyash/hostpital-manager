@@ -61,7 +61,7 @@ export function StaffDetailPage() {
   if (staff.isPending) return <p role="status">Loading...</p>
   if (staff.isError) {
     const notFound = staff.error instanceof ApiError && staff.error.status === 404
-    return <p role="alert" className="text-red-700">{notFound ? 'Staff record not found.' : errorMessage(staff.error)}</p>
+    return <p role="alert" className="text-danger">{notFound ? 'Staff record not found.' : errorMessage(staff.error)}</p>
   }
   const s = staff.data
   const conflict = save.error instanceof ApiError && save.error.code === 'CONCURRENT_MODIFICATION'
@@ -79,11 +79,11 @@ export function StaffDetailPage() {
         <dt className="font-medium">Designation</dt><dd>{s.designation ?? '—'}</dd>
         <dt className="font-medium">Department</dt><dd>{catalog.departmentName(s.departmentId)}</dd>
       </dl>
-      <p className="mb-4 text-sm text-slate-600">
+      <p className="mb-4 text-sm text-ink-muted">
         Access roles belong to the linked user account and are managed on the user screen.{' '}
-        {canUsers && <Link className="text-blue-700 underline" to={`/users/${encodeURIComponent(s.userId)}`}>Open linked user account</Link>}
+        {canUsers && <Link className="text-primary underline" to={`/users/${encodeURIComponent(s.userId)}`}>Open linked user account</Link>}
       </p>
-      {saved && <p role="status" className="mb-4 text-sm text-green-800">Changes saved.</p>}
+      {saved && <p role="status" className="mb-4 text-sm text-success">Changes saved.</p>}
       {conflict && <ConflictNotice what="staff record" onReload={() => { save.reset(); void staff.refetch() }} />}
       {canUpdate && (
         <>
@@ -104,7 +104,7 @@ export function StaffDetailPage() {
           </button>
         </>
       )}
-      <Link className="mt-6 block text-blue-700 underline" to="/staff">Back to staff</Link>
+      <Link className="mt-6 block text-primary underline" to="/staff">Back to staff</Link>
     </section>
   )
 }
@@ -164,7 +164,7 @@ function StaffForm({ staff, submitting, serverError, onSubmit }: {
         </select>
       </Field>
       <button type="submit" className={primaryButton} disabled={submitting}>{staff ? 'Save changes' : 'Register staff'}</button>
-      {!staff && <Link className="ml-4 text-blue-700 underline" to="/staff">Cancel</Link>}
+      {!staff && <Link className="ml-4 text-primary underline" to="/staff">Cancel</Link>}
     </form>
   )
 }

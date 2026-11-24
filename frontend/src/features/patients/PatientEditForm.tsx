@@ -70,7 +70,7 @@ export function PatientEditForm({ patient, canEditIdentity, submitting, serverEr
       <h2 className="mb-3 text-lg font-semibold">Edit details</h2>
       <FormError message={serverError} />
       {canEditIdentity && (
-        <fieldset className="mb-4 rounded border border-slate-200 p-3">
+        <fieldset className="mb-4 rounded border border-border p-3">
           <legend className="px-1 text-sm font-medium">Identity</legend>
           <Field label="Full name" htmlFor="edit-fullName" error={errors.fullName?.message}>
             <input id="edit-fullName" className={inputClass} autoComplete="off" {...form.register('fullName')} />

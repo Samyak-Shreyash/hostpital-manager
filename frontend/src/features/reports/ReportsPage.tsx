@@ -55,13 +55,13 @@ export function ReportsPage() {
           Download CSV
         </button>
       </div>
-      {error != null && <p role="alert" className="text-red-700">{errorMessage(error)}</p>}
+      {error != null && <p role="alert" className="text-danger">{errorMessage(error)}</p>}
       {result.isPending && result.fetchStatus !== 'idle' && <p role="status">Loading...</p>}
       {result.data && (result.data.rows.length === 0 ? <p>No data for this range.</p> : (
         <div className="overflow-x-auto">
-          <table className="w-full border-collapse bg-white text-left text-sm shadow">
+          <table className="w-full border-collapse bg-surface text-left text-sm">
             <thead>
-              <tr className="border-b bg-slate-100">
+              <tr className="border-b bg-muted">
                 {result.data.columns.map((c) => <th key={c} className="p-2">{header(c)}</th>)}
               </tr>
             </thead>

@@ -50,7 +50,7 @@ export function BookAppointmentDialog({ doctorId, startAt, durationMinutes, time
   const { errors } = form.formState
   return (
     <Dialog title="Book appointment" onClose={onClose}>
-      <p className="mb-3 text-sm text-slate-600">Slot at {timeLabel}</p>
+      <p className="mb-3 text-sm text-ink-muted">Slot at {timeLabel}</p>
       <form noValidate onSubmit={form.handleSubmit((v) => book.mutate(v))}>
         <PatientPicker selected={patient} error={errors.patientId?.message} onSelect={(p) => { setPatient(p); form.setValue('patientId', p.id, { shouldValidate: true }) }} />
         <Field label="Duration (minutes)" htmlFor="book-duration" error={errors.durationMinutes?.message}>

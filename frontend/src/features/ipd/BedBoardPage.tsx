@@ -11,32 +11,53 @@ function bedState(bed: AvailabilityBed): 'occupied' | 'out' | 'available' {
   return bed.occupied ? 'occupied' : 'available'
 }
 
+/** States differ in fill and outline, not hue alone. */
 const TILE: Record<ReturnType<typeof bedState>, string> = {
-  occupied: 'border-red-300 bg-red-50 text-red-900',
-  out: 'border-amber-300 bg-amber-50 text-amber-900',
-  available: 'border-green-300 bg-green-50 text-green-900',
+  occupied: 'border-nav bg-nav text-white',
+  out: 'border-dashed border-border-strong bg-muted text-ink-muted',
+  available: 'border-primary bg-surface text-primary',
 }
 const TILE_LABEL: Record<ReturnType<typeof bedState>, string> = { occupied: 'Occupied', out: 'Out of service', available: 'Available' }
 
+function Legend() {
+  return (
+    <ul aria-label="Legend" className="flex flex-wrap gap-4 text-sm">
+      {(['available', 'occupied', 'out'] as const).map((k) => (
+        <li key={k} className="flex items-center gap-2"><span aria-hidden="true" className={`size-4 rounded border-2 ${TILE[k]}`} />{TILE_LABEL[k]}</li>
+      ))}
+    </ul>
+  )
+}
+
 function WardBoard({ w, canOpenAdmission }: { w: WardAvailability; canOpenAdmission: boolean }) {
   return (
-    <section aria-label={`Ward ${w.ward.name}`} className="mb-6 rounded bg-white p-4 shadow">
-      <h2 className="font-semibold">
-        {w.ward.name} <span className="text-sm font-normal text-slate-600">{w.code}{w.ward.careType === 'CRITICAL_CARE' ? ' · critical care' : ''}</span>
-      </h2>
-      <p className="mb-3 text-sm" aria-label={`${w.ward.name} counts`}>
-        <span data-testid={`occupied-${w.code}`}>Occupied: {w.occupied}</span>{' · '}
-        <span data-testid={`available-${w.code}`}>Available: {w.available}</span>{' · '}
-        <span data-testid={`out-${w.code}`}>Out of service: {w.outOfService}</span>
-      </p>
-      <ul className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+    <section aria-label={`Ward ${w.ward.name}`} className="mb-5 rounded-xl border border-border bg-surface p-5">
+      <div className="mb-3 flex flex-wrap items-baseline gap-x-4 gap-y-1">
+        <h2 className="text-lg font-semibold">
+          {w.ward.name} <span className="text-sm font-normal text-ink-muted">{w.code}{w.ward.careType === 'CRITICAL_CARE' ? ' · critical care' : ''}</span>
+        </h2>
+        <p className="text-sm text-ink-muted" aria-label={`${w.ward.name} counts`}>
+          <span data-testid={`occupied-${w.code}`}>Occupied: {w.occupied}</span>{' · '}
+          <span data-testid={`available-${w.code}`}>Available: {w.available}</span>{' · '}
+          <span data-testid={`out-${w.code}`}>Out of service: {w.outOfService}</span>
+        </p>
+      </div>
+      <ul className="grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-2.5">
         {w.beds.map((b) => {
           const state = bedState(b)
+          const body = (
+            <>
+              <span className="font-display text-base font-bold">{b.bedNo}</span>
+              <span className="text-sm">{TILE_LABEL[state]}</span>
+            </>
+          )
+          const tile = `flex min-h-18 flex-col gap-0.5 rounded-lg border-2 px-3 py-2.5 ${TILE[state]}`
           return (
-            <li key={b.id} className={`rounded border p-2 text-sm ${TILE[state]}`}>
-              <span className="font-medium">{b.bedNo}</span> <span>{TILE_LABEL[state]}</span>
-              {state === 'occupied' && canOpenAdmission && b.admissionId && (
-                <Link className="ml-2 underline" to={`/admissions/${b.admissionId}`}>Open admission for bed {b.bedNo}</Link>
+            <li key={b.id}>
+              {state === 'occupied' && canOpenAdmission && b.admissionId ? (
+                <Link className={`${tile} hover:opacity-90`} to={`/admissions/${b.admissionId}`} aria-label={`Open admission for bed ${b.bedNo}`}>{body}</Link>
+              ) : (
+                <div className={tile}>{body}</div>
               )}
             </li>
           )
@@ -57,7 +78,8 @@ export function BedBoardPage() {
   return (
     <section>
       <div className="mb-4 flex flex-wrap items-center gap-4">
-        <h1 className="text-2xl font-semibold">Bed board</h1>
+        <h1 className="text-3xl font-semibold">Bed board</h1>
+        {board.data && <Occupancy wards={board.data.wards} />}
         {canCreate && <Link to="/admissions/new" className={`${primaryButton} ml-auto`}>Admit patient</Link>}
       </div>
       {canWards && (
@@ -69,10 +91,18 @@ export function BedBoardPage() {
           </select>
         </div>
       )}
+      <div className="mb-4"><Legend /></div>
       {board.isPending && <p role="status">Loading...</p>}
-      {board.isError && <p role="alert" className="text-red-700">{ipdErrorMessage(board.error)}</p>}
-      {board.data && board.data.wards.length === 0 && <p className="text-slate-600">No active wards.</p>}
+      {board.isError && <p role="alert" className="text-danger">{ipdErrorMessage(board.error)}</p>}
+      {board.data && board.data.wards.length === 0 && <p className="text-ink-muted">No active wards.</p>}
       {board.data?.wards.map((w) => <WardBoard key={w.ward.id} w={w} canOpenAdmission={canOpenAdmission} />)}
     </section>
   )
+}
+
+function Occupancy({ wards }: { wards: WardAvailability[] }) {
+  const occupied = wards.reduce((n, w) => n + w.occupied, 0)
+  const usable = wards.reduce((n, w) => n + w.occupied + w.available, 0)
+  if (usable === 0) return null
+  return <span className="text-sm text-ink-muted">{occupied} of {usable} beds occupied · {Math.round((occupied * 100) / usable)}%</span>
 }

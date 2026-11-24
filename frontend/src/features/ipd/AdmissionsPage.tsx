@@ -26,16 +26,16 @@ export function AdmissionsPage() {
         </select>
       </div>
       {list.isPending && <p role="status">Loading...</p>}
-      {list.isError && <p role="alert" className="text-red-700">{ipdErrorMessage(list.error)}</p>}
-      {list.data && list.data.items.length === 0 && <p className="text-slate-600">No admissions found.</p>}
+      {list.isError && <p role="alert" className="text-danger">{ipdErrorMessage(list.error)}</p>}
+      {list.data && list.data.items.length === 0 && <p className="text-ink-muted">No admissions found.</p>}
       <ul className="space-y-2">
         {list.data?.items.map((a) => (
-          <li key={a.id} className="flex flex-wrap items-center gap-3 rounded bg-white p-3 shadow">
-            <Link className="font-medium text-blue-700 underline" to={`/admissions/${a.id}`}>{a.admissionNo}</Link>
-            <span>{a.patient.name ?? 'Patient'} <span className="text-sm text-slate-600">{a.patient.uhid}</span></span>
+          <li key={a.id} className="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-surface p-3">
+            <Link className="font-medium text-primary underline" to={`/admissions/${a.id}`}>{a.admissionNo}</Link>
+            <span>{a.patient.name ?? 'Patient'} <span className="text-sm text-ink-muted">{a.patient.uhid}</span></span>
             <span className="text-sm">{a.currentBed ? `${a.currentBed.ward} — ${a.currentBed.bedNo}` : 'No bed'}</span>
-            <span className="text-sm text-slate-600">{formatDateTime(a.admittedAt, timeZone)}</span>
-            <span className="ml-auto rounded bg-slate-200 px-2 py-0.5 text-xs">{ADMISSION_STATUS_LABELS[a.status]}</span>
+            <span className="text-sm text-ink-muted">{formatDateTime(a.admittedAt, timeZone)}</span>
+            <span className="ml-auto rounded bg-muted px-2 py-0.5 text-xs">{ADMISSION_STATUS_LABELS[a.status]}</span>
           </li>
         ))}
       </ul>

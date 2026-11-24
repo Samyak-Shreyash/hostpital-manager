@@ -49,7 +49,7 @@ export function DoctorDetailPage() {
   if (doctor.isPending) return <p role="status">Loading...</p>
   if (doctor.isError) {
     const notFound = doctor.error instanceof ApiError && doctor.error.status === 404
-    return <p role="alert" className="text-red-700">{notFound ? 'Doctor not found.' : errorMessage(doctor.error)}</p>
+    return <p role="alert" className="text-danger">{notFound ? 'Doctor not found.' : errorMessage(doctor.error)}</p>
   }
   const d = doctor.data
   const conflict = [profile, specialties, departments].some((m) => isConflict(m.error))
@@ -69,7 +69,7 @@ export function DoctorDetailPage() {
         <dt className="font-medium">Departments</dt><dd>{d.departmentIds.map(catalog.departmentName).join(', ') || '—'}</dd>
         <dt className="font-medium">Default slot</dt><dd>{d.defaultSlotMinutes} min</dd>
       </dl>
-      {saved && <p role="status" className="mb-4 text-sm text-green-800">{saved}</p>}
+      {saved && <p role="status" className="mb-4 text-sm text-success">{saved}</p>}
       {conflict && <ConflictNotice what="doctor" onReload={reload} />}
       {canUpdate && (
         <div className="mb-8 grid gap-6 md:grid-cols-2">
@@ -101,7 +101,7 @@ export function DoctorDetailPage() {
       <AvailabilityEditor doctorId={id} canEdit={canSchedule} />
       <LeaveList doctorId={id} canEdit={canSchedule} />
       {canSlots && <FreeSlots doctorId={id} />}
-      <Link className="mt-6 inline-block text-blue-700 underline" to="/doctors">Back to doctors</Link>
+      <Link className="mt-6 inline-block text-primary underline" to="/doctors">Back to doctors</Link>
     </section>
   )
 }

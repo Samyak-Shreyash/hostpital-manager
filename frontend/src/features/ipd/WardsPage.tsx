@@ -22,7 +22,7 @@ function CareTypeSelect({ id, registration }: { id: string; registration: UseFor
         <option value="GENERAL">General</option>
         <option value="CRITICAL_CARE">Critical care</option>
       </select>
-      <p id={`${id}-help`} className="mt-1 text-sm text-slate-600">{CRITICAL_CARE_HELP}</p>
+      <p id={`${id}-help`} className="mt-1 text-sm text-ink-muted">{CRITICAL_CARE_HELP}</p>
     </>
   )
 }
@@ -36,7 +36,7 @@ function NewWardForm() {
   })
   const { errors } = form.formState
   return (
-    <form noValidate onSubmit={form.handleSubmit((v) => create.mutate(v))} className="mb-6 rounded bg-white p-4 shadow" aria-label="New ward">
+    <form noValidate onSubmit={form.handleSubmit((v) => create.mutate(v))} className="mb-6 rounded-xl border border-border bg-surface p-4" aria-label="New ward">
       <h2 className="mb-2 font-semibold">New ward</h2>
       <Field label="Code" htmlFor="ward-code" error={errors.code?.message}>
         <input id="ward-code" className={inputClass} {...form.register('code')} />
@@ -73,7 +73,7 @@ function WardEditor({ ward, onChanged }: { ward: Ward; onChanged: () => void }) 
           <option value="GENERAL">General</option>
           <option value="CRITICAL_CARE">Critical care</option>
         </select>
-        <p id="edit-ward-care-help" className="mt-1 text-sm text-slate-600">{CRITICAL_CARE_HELP}</p>
+        <p id="edit-ward-care-help" className="mt-1 text-sm text-ink-muted">{CRITICAL_CARE_HELP}</p>
       </Field>
       <IpdProblem error={save.error ?? toggle.error} what="ward" onReload={onChanged} />
       <div className="flex gap-2">
@@ -97,7 +97,7 @@ function NewBedForm({ ward }: { ward: Ward }) {
   })
   const { errors } = form.formState
   return (
-    <form noValidate onSubmit={form.handleSubmit((v) => create.mutate(v))} aria-label="New bed" className="rounded border border-slate-200 p-3">
+    <form noValidate onSubmit={form.handleSubmit((v) => create.mutate(v))} aria-label="New bed" className="rounded border border-border p-3">
       <h3 className="mb-2 font-medium">Add a bed</h3>
       <Field label="Bed number" htmlFor="bed-no" error={errors.bedNo?.message}>
         <input id="bed-no" className={inputClass} {...form.register('bedNo')} />
@@ -110,7 +110,7 @@ function NewBedForm({ ward }: { ward: Ward }) {
           <option value="">Select a service</option>
           {services.data?.items.map((s) => <option key={s.id} value={s.id}>{s.name}{s.currentPrice ? ` (${s.currentPrice})` : ''}</option>)}
         </select>
-        {!canCatalog && <p className="mt-1 text-sm text-slate-600">You need permission to read the service catalog to choose a rate.</p>}
+        {!canCatalog && <p className="mt-1 text-sm text-ink-muted">You need permission to read the service catalog to choose a rate.</p>}
       </Field>
       <IpdProblem error={create.error} what="ward" onReload={() => void queryClient.invalidateQueries({ queryKey: ipdKeys.beds(ward.id) })} />
       <button type="submit" className={primaryButton} disabled={create.isPending}>Add bed</button>
@@ -129,8 +129,8 @@ function BedRow({ bed, wardId, canManage }: { bed: Bed; wardId: string; canManag
     <li className="border-b py-2 text-sm">
       <div className="flex items-center gap-3">
         <span className="font-medium">{bed.bedNo}</span>
-        {bed.bedClass && <span className="text-slate-600">{bed.bedClass}</span>}
-        <span className={`rounded px-2 py-0.5 text-xs ${bed.status === 'ACTIVE' ? 'bg-green-100 text-green-900' : 'bg-amber-100 text-amber-900'}`}>
+        {bed.bedClass && <span className="text-ink-muted">{bed.bedClass}</span>}
+        <span className={`rounded px-2 py-0.5 text-xs ${bed.status === 'ACTIVE' ? 'bg-success-soft text-success' : 'bg-amber-100 text-warning'}`}>
           {bed.status === 'ACTIVE' ? 'Active' : 'Out of service'}
         </span>
         {canManage && (
@@ -139,7 +139,7 @@ function BedRow({ bed, wardId, canManage }: { bed: Bed; wardId: string; canManag
           </button>
         )}
       </div>
-      {toggle.error != null && <p role="alert" className="mt-1 text-red-700">{ipdErrorMessage(toggle.error)}</p>}
+      {toggle.error != null && <p role="alert" className="mt-1 text-danger">{ipdErrorMessage(toggle.error)}</p>}
     </li>
   )
 }
@@ -151,8 +151,8 @@ function WardBeds({ ward }: { ward: Ward }) {
   return (
     <div>
       <h3 className="mb-2 font-medium">Beds in {ward.name}</h3>
-      {beds.isError && <p role="alert" className="text-red-700">{ipdErrorMessage(beds.error)}</p>}
-      {beds.data && beds.data.items.length === 0 && <p className="text-sm text-slate-600">No beds yet.</p>}
+      {beds.isError && <p role="alert" className="text-danger">{ipdErrorMessage(beds.error)}</p>}
+      {beds.data && beds.data.items.length === 0 && <p className="text-sm text-ink-muted">No beds yet.</p>}
       <ul className="mb-4">{beds.data?.items.map((b) => <BedRow key={b.id} bed={b} wardId={ward.id} canManage={canManage} />)}</ul>
       {canManage && <NewBedForm ward={ward} />}
     </div>
@@ -172,13 +172,13 @@ export function WardsPage() {
       <h1 className="mb-4 text-2xl font-semibold">Wards and beds</h1>
       {canManage && <NewWardForm />}
       {wards.isPending && <p role="status">Loading...</p>}
-      {wards.isError && <p role="alert" className="text-red-700">{ipdErrorMessage(wards.error)}</p>}
-      {wards.data && wards.data.items.length === 0 && <p className="text-slate-600">No wards yet.</p>}
+      {wards.isError && <p role="alert" className="text-danger">{ipdErrorMessage(wards.error)}</p>}
+      {wards.data && wards.data.items.length === 0 && <p className="text-ink-muted">No wards yet.</p>}
       <ul className="mb-6 space-y-2" aria-label="Wards">
         {wards.data?.items.map((w) => (
-          <li key={w.id} className="flex items-center gap-3 rounded bg-white p-3 shadow">
+          <li key={w.id} className="flex items-center gap-3 rounded-xl border border-border bg-surface p-3">
             <span className="font-medium">{w.name}</span>
-            <span className="text-sm text-slate-600">{w.code}</span>
+            <span className="text-sm text-ink-muted">{w.code}</span>
             <span className="text-sm">{CARE_LABELS[w.careType]}</span>
             <StatusBadge status={w.status} />
             <button type="button" className={`${secondaryButton} ml-auto`} onClick={() => setSelectedId(w.id)}>Manage {w.name}</button>
@@ -186,7 +186,7 @@ export function WardsPage() {
         ))}
       </ul>
       {selected && (
-        <div className="rounded bg-white p-4 shadow">
+        <div className="rounded-xl border border-border bg-surface p-4">
           {canManage && <WardEditor key={`${selected.id}-${selected.version}`} ward={selected} onChanged={changed} />}
           <WardBeds ward={selected} />
         </div>

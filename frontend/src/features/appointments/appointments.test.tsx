@@ -183,7 +183,7 @@ describe('day calendar', () => {
     mockApi({ 'GET /api/v1/auth/me': json(200, session(['patient:search'])) })
     renderApp('/queue')
     expect(await screen.findByRole('heading', { name: /is not available to you/ })).toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: 'Queue' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'OPD queue' })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'Appointments' })).not.toBeInTheDocument()
   })
 })
@@ -237,5 +237,23 @@ describe('queue board', () => {
     expect(await screen.findByText('Nobody is waiting.')).toBeInTheDocument()
     fireEvent.change(screen.getByLabelText('Date'), { target: { value: DATE } })
     await waitFor(() => expect(calls.some((c) => c.key.endsWith(`date=${DATE}`))).toBe(true))
+  })
+
+  it('shows a card per doctor with the token in consultation before a doctor is chosen', async () => {
+    mockApi({
+      'GET /api/v1/auth/me': json(200, session(['appointment:read', 'practitioner:read'])),
+      'GET /api/v1/doctors?status=ACTIVE&size=100': json(200, DOCTORS),
+      'GET /api/v1/queue?doctorId=d-1': json(200, { doctorId: 'd-1', date: DATE, items: [
+        { appointmentId: 'a-1', patient: { id: 'p-1', uhid: 'DEMO-000001', name: 'Asha Testpatient' }, tokenNo: 7, status: 'IN_CONSULTATION' },
+        { appointmentId: 'a-2', patient: { id: 'p-2', uhid: 'DEMO-000002', name: 'Ravi Testpatient' }, tokenNo: 8, status: 'CHECKED_IN' },
+      ] }),
+    })
+    renderApp('/queue')
+    const cards = await screen.findByRole('list', { name: "Doctors' queues" })
+    expect(await within(cards).findByText('1 waiting')).toBeInTheDocument()
+    expect(within(cards).getByText('7')).toBeInTheDocument()
+    expect(within(cards).getByText('Dr. Test Example')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Open queue for Dr. Test Example' }))
+    expect(await screen.findByRole('list', { name: 'Queue' })).toBeInTheDocument()
   })
 })

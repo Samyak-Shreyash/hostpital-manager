@@ -46,7 +46,7 @@ export function useEncounterSave<V>({ encounter, onSaved }: SectionProps, save: 
 
 export function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <section className="mb-6 rounded bg-white p-4 shadow">
+    <section className="mb-5 rounded-xl border border-border bg-surface p-5">
       <h2 className="mb-3 text-lg font-semibold">{title}</h2>
       {children}
     </section>

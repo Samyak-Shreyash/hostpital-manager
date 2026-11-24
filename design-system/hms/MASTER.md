@@ -9,15 +9,19 @@ monitors for long shifts. Data and forms come first and there is no decoration. 
 (dark mode deferred: add `dark` token overrides when requested).
 
 ## Colour (semantic tokens → Tailwind classes)
+Direction "Indian market" (canvas https://claude.ai/artifact/YYoUA3Nfw28W751uUkj88J): deep green primary, warm grey canvas,
+dark-green sidebar with a saffron brand mark.
 | Token | Value | Use |
 |---|---|---|
-| `canvas` | slate-50 | page background (`bg-canvas`) |
-| `surface` | white | cards, header, tables, inputs |
-| `border` | slate-200 | dividers, input borders |
-| `ink` / `ink-muted` | slate-900 / slate-600 | body text / secondary text (both ≥ 4.5:1 on canvas) |
-| `primary` / `primary-hover` / `primary-soft` | blue-700 / blue-800 / blue-50 | one primary action per screen, links, active nav |
-| `focus` | blue-600 | focus ring (global `:focus-visible`) |
-| `success`, `warning`, `danger` (+ `-soft`) | green-700, amber-800, red-700 (+ 50 tints) | status text on soft backgrounds |
+| `canvas` / `surface` / `muted` | #F4F5F1 / white / #ECEEEA | page / cards, inputs / neutral chips, hover |
+| `border` / `border-strong` | #E1E5DF / #CBD2CC | dividers / input and button borders |
+| `ink` / `ink-muted` | #14231E / #4F5E58 | body text / secondary text (both ≥ 4.5:1 on canvas) |
+| `primary` / `primary-hover` / `primary-soft` | #0F6E5B / #0A4F41 / #E3F2EC | one primary action per screen, links, active nav |
+| `nav`, `nav-hover`, `nav-ink`, `nav-ink-muted`, `accent` | #12302A, #1C3A31, #DCE9E4, #A9C2B9, #F2A541 | sidebar only; `accent` = brand mark |
+| `success`, `warning`, `danger` (+ `-soft`) | green-800, #9A3412, #A61B1B (+ tints) | status text on soft backgrounds |
+
+Fonts: `font-sans` Noto Sans → Nirmala UI/Segoe UI (Devanagari-capable), headings `font-display` (Mukta if installed).
+No web-font download: clinics may run on-prem or offline. Controls are at least 44px tall (`min-h-11`).
 
 Rules: use tokens (`text-ink-muted`, `bg-danger-soft`), not raw `slate-*`/`red-*`. Status is never shown by colour alone:
 pair it with a text label or icon. Clinical alerts (allergies) use `danger`.

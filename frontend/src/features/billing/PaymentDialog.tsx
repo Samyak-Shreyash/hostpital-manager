@@ -8,6 +8,19 @@ import { useCan } from '../auth/useSession'
 import { AMOUNT_HINT, billingErrorMessage, RETRY_ON_NETWORK_ERROR, STATUS_LABELS, type IdempotencyKey } from './shared'
 
 const MODE_LABELS: Record<PaymentMode, string> = { CASH: 'Cash', CARD: 'Card', UPI: 'UPI', BANK_TRANSFER: 'Bank transfer', CHEQUE: 'Cheque' }
+/** UPI first: the most common mode at Indian counters. */
+const MODE_ORDER: PaymentMode[] = ['UPI', 'CASH', 'CARD', 'BANK_TRANSFER', 'CHEQUE']
+const REFERENCE_LABELS: Record<PaymentMode, string> = {
+  UPI: 'UPI reference (UTR)', CASH: 'Reference no.', CARD: 'Card transaction reference', BANK_TRANSFER: 'Bank reference (UTR)', CHEQUE: 'Cheque number',
+}
+
+/** Change to return for cash, display only (never sent). Paise arithmetic avoids float drift; null when not computable. */
+export function changeDue(received: string, amount: string): string | null {
+  if (!isMoneyAmount(received.trim()) || !isMoneyAmount(amount.trim())) return null
+  const paise = (v: string) => Math.round(Number(v.trim()) * 100)
+  const diff = paise(received) - paise(amount)
+  return diff < 0 ? null : (diff / 100).toFixed(2)
+}
 
 /**
  * Records one payment. The amount is checked by pattern only; whether it exceeds what is outstanding is the server's
@@ -19,14 +32,16 @@ export function PaymentDialog({ invoiceId, idempotencyKey: key, onRecorded, onCl
   const queryClient = useQueryClient()
   const canReceipt = useCan('payment:read')
   const [amount, setAmount] = useState('')
-  const [mode, setMode] = useState<PaymentMode>('CASH')
+  const [mode, setMode] = useState<PaymentMode>('UPI')
   const [referenceNo, setReferenceNo] = useState('')
+  const [received, setReceived] = useState('')
+  const change = mode === 'CASH' ? changeDue(received, amount) : null
   const [errors, setErrors] = useState<{ amount?: string; referenceNo?: string }>({})
   const [result, setResult] = useState<RecordedPayment | null>(null)
 
   const pay = useMutation({
     mutationFn: () => {
-      const reference = referenceNo.trim()
+      const reference = mode === 'CASH' ? '' : referenceNo.trim()
       const body = { amount: amount.trim(), mode, ...(reference ? { referenceNo: reference } : {}) }
       return recordPayment(invoiceId, body, key.keyFor(`${invoiceId}|${body.amount}|${mode}|${reference}`))
     },
@@ -42,7 +57,7 @@ export function PaymentDialog({ invoiceId, idempotencyKey: key, onRecorded, onCl
   const submit = () => {
     const next: typeof errors = {}
     if (!isMoneyAmount(amount.trim())) next.amount = AMOUNT_HINT
-    if (referenceNo.trim().length > 50) next.referenceNo = 'Reference is at most 50 characters'
+    if (mode !== 'CASH' && referenceNo.trim().length > 50) next.referenceNo = 'Reference is at most 50 characters'
     setErrors(next)
     if (Object.keys(next).length === 0) pay.mutate()
   }
@@ -58,23 +73,42 @@ export function PaymentDialog({ invoiceId, idempotencyKey: key, onRecorded, onCl
             <dt>Invoice status</dt><dd>{STATUS_LABELS[result.invoiceStatus]}</dd>
           </dl>
           <div className="flex items-center gap-3">
-            {canReceipt && <a className="text-blue-700 underline" href={receiptPdfUrl(result.id)} target="_blank" rel="noreferrer">Open receipt PDF</a>}
+            {canReceipt && <a className="text-primary underline" href={receiptPdfUrl(result.id)} target="_blank" rel="noreferrer">Open receipt PDF</a>}
             <button type="button" className={primaryButton} onClick={onClose}>Done</button>
           </div>
         </div>
       ) : (
         <form noValidate onSubmit={(e) => { e.preventDefault(); submit() }}>
+          <fieldset className="mb-4">
+            <legend className="mb-1.5 text-[13px] font-semibold text-ink-muted">Mode</legend>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+              {MODE_ORDER.filter((m) => PAYMENT_MODES.includes(m)).map((m) => (
+                <button key={m} type="button" aria-pressed={mode === m} onClick={() => setMode(m)}
+                  className={`min-h-12 rounded-lg border px-2 text-sm font-semibold ${mode === m ? 'border-nav bg-nav text-white' : 'border-border-strong bg-surface hover:bg-muted'}`}>
+                  {MODE_LABELS[m]}
+                </button>
+              ))}
+            </div>
+          </fieldset>
           <Field label="Amount" htmlFor="pay-amount" error={errors.amount}>
-            <input id="pay-amount" inputMode="decimal" className={inputClass} value={amount} onChange={(e) => setAmount(e.target.value)} />
+            <input id="pay-amount" inputMode="decimal" className={`${inputClass} text-lg font-semibold`} value={amount} onChange={(e) => setAmount(e.target.value)} />
           </Field>
-          <Field label="Mode" htmlFor="pay-mode">
-            <select id="pay-mode" className={inputClass} value={mode} onChange={(e) => setMode(e.target.value as PaymentMode)}>
-              {PAYMENT_MODES.map((m) => <option key={m} value={m}>{MODE_LABELS[m]}</option>)}
-            </select>
-          </Field>
-          <Field label="Reference no." htmlFor="pay-ref" error={errors.referenceNo}>
-            <input id="pay-ref" className={inputClass} value={referenceNo} onChange={(e) => setReferenceNo(e.target.value)} />
-          </Field>
+          {mode === 'CASH' ? (
+            <div className="mb-4 grid grid-cols-2 gap-3">
+              <Field label="Cash received" htmlFor="pay-received">
+                <input id="pay-received" inputMode="decimal" className={inputClass} value={received} onChange={(e) => setReceived(e.target.value)} />
+              </Field>
+              <div>
+                <span className="block text-[13px] font-semibold text-ink-muted">Return change</span>
+                <output htmlFor="pay-received pay-amount" className="mt-1 flex min-h-11 items-center rounded-lg bg-primary-soft px-3 font-bold">{change ?? '–'}</output>
+              </div>
+            </div>
+          ) : (
+            <Field label={REFERENCE_LABELS[mode]} htmlFor="pay-ref" error={errors.referenceNo}>
+              <input id="pay-ref" className={inputClass} value={referenceNo} onChange={(e) => setReferenceNo(e.target.value)} />
+            </Field>
+          )}
+          <p className="mb-4 text-xs text-ink-muted">Part payment is allowed, up to the outstanding balance. Payments are never edited: reversals are refunds.</p>
           <FormError message={pay.isError ? billingErrorMessage(pay.error) : null} />
           <div className="flex gap-2">
             <button type="submit" className={primaryButton} disabled={pay.isPending}>Record payment</button>

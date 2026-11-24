@@ -21,10 +21,10 @@ export function OutstandingListPage() {
   return (
     <section>
       <h1 className="mb-4 text-2xl font-semibold">Invoices to collect</h1>
-      <p className="mb-3 text-sm text-slate-600">Issued and partly paid invoices. Open one to take a payment; the outstanding amount is shown after each payment.</p>
+      <p className="mb-3 text-sm text-ink-muted">Issued and partly paid invoices. Open one to take a payment; the outstanding amount is shown after each payment.</p>
       {list.isPending && <p role="status">Loading...</p>}
-      {list.isError && <p role="alert" className="text-red-700">{errorMessage(list.error)}</p>}
-      {data && data.items.length === 0 && <p className="text-slate-600">Nothing is waiting for payment.</p>}
+      {list.isError && <p role="alert" className="text-danger">{errorMessage(list.error)}</p>}
+      {data && data.items.length === 0 && <p className="text-ink-muted">Nothing is waiting for payment.</p>}
       {data && data.items.length > 0 && (
         <table className="w-full text-left text-sm">
           <caption className="sr-only">Invoices to collect</caption>
@@ -39,7 +39,7 @@ export function OutstandingListPage() {
                 <td>{STATUS_LABELS[inv.status]}</td>
                 <td className="text-right tabular-nums">{inv.total}</td>
                 <td className="text-right">
-                  <Link className="text-blue-700 underline" to={`/invoices/${inv.id}`} aria-label={`Open ${inv.invoiceNo}`}>Open</Link>
+                  <Link className="text-primary underline" to={`/invoices/${inv.id}`} aria-label={`Open ${inv.invoiceNo}`}>Open</Link>
                 </td>
               </tr>
             ))}

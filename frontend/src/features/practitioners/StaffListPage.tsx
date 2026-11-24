@@ -49,27 +49,27 @@ export function StaffListPage() {
           </select>
         </label>
       </div>
-      {staff.isError && <p role="alert" className="text-red-700">{errorMessage(staff.error)}</p>}
+      {staff.isError && <p role="alert" className="text-danger">{errorMessage(staff.error)}</p>}
       {staff.isPending && <p role="status">Loading...</p>}
       {staff.data && (
         <>
-          <table className="w-full border-collapse bg-white text-left text-sm shadow">
+          <table className="w-full border-collapse bg-surface text-left text-sm">
             <thead>
-              <tr className="border-b bg-slate-100">
+              <tr className="border-b bg-muted">
                 <th className="p-2">Name</th><th className="p-2">Type</th><th className="p-2">Designation</th><th className="p-2">Department</th><th className="p-2">Status</th>
               </tr>
             </thead>
             <tbody>
               {staff.data.items.map((s) => (
                 <tr key={s.id} className="border-b">
-                  <td className="p-2"><Link className="text-blue-700 underline" to={`/staff/${encodeURIComponent(s.id)}`}>{s.fullName}</Link></td>
+                  <td className="p-2"><Link className="text-primary underline" to={`/staff/${encodeURIComponent(s.id)}`}>{s.fullName}</Link></td>
                   <td className="p-2">{STAFF_TYPE_LABELS[s.staffType] ?? s.staffType}</td>
                   <td className="p-2">{s.designation ?? '—'}</td>
                   <td className="p-2">{catalog.departmentName(s.departmentId)}</td>
                   <td className="p-2"><StatusBadge status={s.status} /></td>
                 </tr>
               ))}
-              {staff.data.items.length === 0 && <tr><td colSpan={5} className="p-2 text-slate-600">No staff found.</td></tr>}
+              {staff.data.items.length === 0 && <tr><td colSpan={5} className="p-2 text-ink-muted">No staff found.</td></tr>}
             </tbody>
           </table>
           <div className="mt-3 flex items-center gap-3 text-sm">

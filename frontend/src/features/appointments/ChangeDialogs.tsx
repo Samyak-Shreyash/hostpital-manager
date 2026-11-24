@@ -63,7 +63,7 @@ export function RescheduleDialog({ appointment, slots, timeZone, onClose }: {
             {slots.map((s) => <option key={s.startAt} value={s.startAt}>{formatTime(s.startAt, timeZone)}–{formatTime(s.endAt, timeZone)}</option>)}
           </select>
         </Field>
-        {slots.length === 0 && <p className="mb-3 text-sm text-slate-600">No free slots on this day. Pick another date first.</p>}
+        {slots.length === 0 && <p className="mb-3 text-sm text-ink-muted">No free slots on this day. Pick another date first.</p>}
         <MutationProblem error={move.error} what="appointment" onReload={reload} />
         <div className="flex gap-2">
           <button type="submit" className={primaryButton} disabled={move.isPending}>Confirm reschedule</button>

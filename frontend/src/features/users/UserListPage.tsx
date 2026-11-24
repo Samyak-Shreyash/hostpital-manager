@@ -65,13 +65,13 @@ export function UserListPage() {
           </select>
         </label>
       </div>
-      {users.isError && <p role="alert" className="text-red-700">{errorMessage(users.error)}</p>}
+      {users.isError && <p role="alert" className="text-danger">{errorMessage(users.error)}</p>}
       {users.isPending && <p role="status">Loading...</p>}
       {users.data && (
         <>
-          <table className="w-full border-collapse bg-white text-left text-sm shadow">
+          <table className="w-full border-collapse bg-surface text-left text-sm">
             <thead>
-              <tr className="border-b bg-slate-100">
+              <tr className="border-b bg-muted">
                 <SortHeader label="Name" sortKey="name" sort={sort} onSort={(s) => { setSort(s); setPage(0) }} />
                 <SortHeader label="Email" sortKey="email" sort={sort} onSort={(s) => { setSort(s); setPage(0) }} />
                 <th className="p-2">Roles</th>
@@ -81,11 +81,11 @@ export function UserListPage() {
             <tbody>
               {users.data.items.map((u) => (
                 <tr key={u.id} className="border-b">
-                  <td className="p-2"><Link className="text-blue-700 underline" to={`/users/${encodeURIComponent(u.id)}`}>{u.fullName}</Link></td>
+                  <td className="p-2"><Link className="text-primary underline" to={`/users/${encodeURIComponent(u.id)}`}>{u.fullName}</Link></td>
                   <td className="p-2">{u.email}</td>
                   <td className="p-2">{roleNames(u.roleCodes)}</td>
                   <td className="p-2">
-                    <span className={`rounded px-2 py-0.5 text-xs font-medium ${u.status === 'ACTIVE' ? 'bg-green-100 text-green-800' : 'bg-slate-200 text-slate-700'}`}>
+                    <span className={`rounded px-2 py-0.5 text-xs font-medium ${u.status === 'ACTIVE' ? 'bg-success-soft text-success' : 'bg-muted text-ink-muted'}`}>
                       {u.status === 'ACTIVE' ? 'Active' : 'Inactive'}
                     </span>
                   </td>
@@ -100,7 +100,7 @@ export function UserListPage() {
             <button type="button" className={secondaryButton} disabled={page + 1 >= totalPages} onClick={() => setPage(page + 1)}>Next</button>
             <label className="ml-auto flex items-center gap-2">
               Per page
-              <select className="rounded border border-slate-300 px-2 py-1" value={size} onChange={(e) => { setSize(Number(e.target.value)); setPage(0) }}>
+              <select className="rounded border border-border-strong px-2 py-1" value={size} onChange={(e) => { setSize(Number(e.target.value)); setPage(0) }}>
                 {PAGE_SIZES.map((n) => <option key={n} value={n}>{n}</option>)}
               </select>
             </label>

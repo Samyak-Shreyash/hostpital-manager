@@ -46,7 +46,7 @@ export function UserEditPage() {
   if (user.isPending) return <p role="status">Loading...</p>
   if (user.isError) {
     const notFound = user.error instanceof ApiError && user.error.status === 404
-    return <p role="alert" className="text-red-700">{notFound ? 'User not found.' : errorMessage(user.error)}</p>
+    return <p role="alert" className="text-danger">{notFound ? 'User not found.' : errorMessage(user.error)}</p>
   }
   const u = user.data
   const isSelf = session.data?.user.id === u.id
@@ -55,10 +55,10 @@ export function UserEditPage() {
   return (
     <section>
       <h1 className="mb-1 text-2xl font-semibold">{u.fullName}</h1>
-      <p className="mb-4 text-sm text-slate-600">Status: {u.status}</p>
+      <p className="mb-4 text-sm text-ink-muted">Status: {u.status}</p>
       {temporaryPassword && <TemporaryPassword password={temporaryPassword} onDismiss={() => setTemporaryPassword(null)} />}
       <FormError message={lifecycle.isError ? errorMessage(lifecycle.error) : reset.isError ? errorMessage(reset.error) : null} />
-      {saved && <p role="status" className="mb-4 text-sm text-green-800">Changes saved.</p>}
+      {saved && <p role="status" className="mb-4 text-sm text-success">Changes saved.</p>}
       {canUpdate ? (
         <UserForm
           key={`${u.id}-${u.version}`}
@@ -79,7 +79,7 @@ export function UserEditPage() {
         </dl>
       )}
       {conflict && (
-        <button type="button" className="mb-4 text-sm text-blue-700 underline" onClick={() => { save.reset(); void user.refetch() }}>
+        <button type="button" className="mb-4 text-sm text-primary underline" onClick={() => { save.reset(); void user.refetch() }}>
           Reload latest version
         </button>
       )}
@@ -111,7 +111,7 @@ export function UserEditPage() {
           </button>
         )}
       </div>
-      <Link className="mt-6 inline-block text-blue-700 underline" to="/users">Back to users</Link>
+      <Link className="mt-6 inline-block text-primary underline" to="/users">Back to users</Link>
     </section>
   )
 }

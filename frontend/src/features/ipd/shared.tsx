@@ -62,9 +62,9 @@ export function BedSelect({ id, value, onChange, excludeBedId, error }: {
         <option value="">Select an available bed</option>
         {options.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
       </select>
-      {availability.isSuccess && options.length === 0 && <p className="mt-1 text-sm text-slate-600">No beds are available right now.</p>}
-      {availability.isError && <p role="alert" className="mt-1 text-sm text-red-700">{ipdErrorMessage(availability.error)}</p>}
-      {error && <p role="alert" className="mt-1 text-sm text-red-700">{error}</p>}
+      {availability.isSuccess && options.length === 0 && <p className="mt-1 text-sm text-ink-muted">No beds are available right now.</p>}
+      {availability.isError && <p role="alert" className="mt-1 text-sm text-danger">{ipdErrorMessage(availability.error)}</p>}
+      {error && <p role="alert" className="mt-1 text-sm text-danger">{error}</p>}
     </div>
   )
 }

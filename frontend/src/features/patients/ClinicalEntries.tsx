@@ -14,7 +14,7 @@ import { FormError, inputClass, secondaryButton } from '../../components/ui'
 import { errorMessage } from '../auth/messages'
 
 const statusBadge = (status: string) =>
-  status === 'ENTERED_IN_ERROR' ? <span className="ml-2 rounded bg-slate-200 px-1 text-xs">Entered in error</span> : null
+  status === 'ENTERED_IN_ERROR' ? <span className="ml-2 rounded bg-muted px-1 text-xs">Entered in error</span> : null
 
 /** Allergies list with add / entered-in-error actions (patient:update-clinical). */
 export function AllergyList({ patientId, allergies, canEdit }: { patientId: string; allergies: Allergy[]; canEdit: boolean }) {
@@ -37,11 +37,11 @@ export function AllergyList({ patientId, allergies, canEdit }: { patientId: stri
       <ul className="mb-3 text-sm">
         {allergies.length === 0 && <li>No allergies recorded.</li>}
         {allergies.map((a) => (
-          <li key={a.id} className={`mb-1 ${a.status === 'ENTERED_IN_ERROR' ? 'text-slate-500 line-through' : ''}`}>
+          <li key={a.id} className={`mb-1 ${a.status === 'ENTERED_IN_ERROR' ? 'text-ink-muted line-through' : ''}`}>
             <span className="font-medium">{a.substance}</span> ({a.severity.toLowerCase()}){a.reaction ? ` - ${a.reaction}` : ''}
             {statusBadge(a.status)}
             {canEdit && a.status === 'ACTIVE' && (
-              <button type="button" className="ml-3 text-xs text-blue-700 underline" disabled={mark.isPending}
+              <button type="button" className="ml-3 text-xs text-primary underline" disabled={mark.isPending}
                 aria-label={`Mark allergy ${a.substance} as entered in error`} onClick={() => mark.mutate(a.id)}>
                 Entered in error
               </button>
@@ -94,11 +94,11 @@ export function HistoryList({ patientId, entries, canEdit }: { patientId: string
       <ul className="mb-3 text-sm">
         {entries.length === 0 && <li>No medical history recorded.</li>}
         {entries.map((h) => (
-          <li key={h.id} className={`mb-1 ${h.status === 'ENTERED_IN_ERROR' ? 'text-slate-500 line-through' : ''}`}>
+          <li key={h.id} className={`mb-1 ${h.status === 'ENTERED_IN_ERROR' ? 'text-ink-muted line-through' : ''}`}>
             <span className="font-medium">{h.condition}</span>{h.notes ? ` - ${h.notes}` : ''}
             {statusBadge(h.status)}
             {canEdit && h.status === 'ACTIVE' && (
-              <button type="button" className="ml-3 text-xs text-blue-700 underline" disabled={mark.isPending}
+              <button type="button" className="ml-3 text-xs text-primary underline" disabled={mark.isPending}
                 aria-label={`Mark history ${h.condition} as entered in error`} onClick={() => mark.mutate(h.id)}>
                 Entered in error
               </button>
