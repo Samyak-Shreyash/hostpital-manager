@@ -8,7 +8,7 @@ name: hms
 
 services:
   db:
-    image: postgres:17-alpine
+    image: postgres:18.6
     environment:
       POSTGRES_DB: ${HMS_DB_NAME}
       # Admin superuser: only the init script and humans use it, never the API (ADR-0015).
@@ -31,7 +31,7 @@ services:
   # Logical backups of the dev database: one dump at start-up, then every HMS_BACKUP_INTERVAL_HOURS,
   # keeping the newest HMS_BACKUP_KEEP. Restore: infra/backup/restore.sh <dump>.
   db-backup:
-    image: postgres:17-alpine
+    image: postgres:18.6
     environment:
       PGHOST: db
       PGDATABASE: ${HMS_DB_NAME}
@@ -94,7 +94,7 @@ services:
 
   prometheus:
     profiles: [monitoring]
-    image: prom/prometheus:v3.5.0
+    image: prom/prometheus:v3.16.0
     volumes:
       - ../monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus-data:/prometheus
