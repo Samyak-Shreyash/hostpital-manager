@@ -229,7 +229,10 @@ describe('payment', () => {
   it('records a payment with an Idempotency-Key and shows the server outstanding and receipt link', async () => {
     const { calls } = editorRoutes(ISSUED, CASHIER, { 'POST /api/v1/invoices/inv-1/payments': json(201, RECORDED) })
     const dialog = await openDialog()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cash' }))
     fireEvent.change(within(dialog).getByLabelText('Amount'), { target: { value: '0.10' } })
+    fireEvent.change(within(dialog).getByLabelText('Cash received'), { target: { value: '1.00' } })
+    expect(within(dialog).getByText('0.90')).toBeInTheDocument()
     fireEvent.click(within(dialog).getByRole('button', { name: 'Record payment' }))
     expect(await within(dialog).findByText('RCT-2026-27/000044')).toBeInTheDocument()
     expect(within(dialog).getByTestId('outstanding')).toHaveTextContent('0.20')

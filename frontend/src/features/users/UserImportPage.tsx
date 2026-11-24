@@ -62,7 +62,7 @@ export function UserImportPage() {
     return (
       <section>
         <h1 className="mb-2 text-2xl font-semibold">{created.length} users created</h1>
-        <p role="status" className="mb-4 rounded border border-amber-400 bg-amber-50 p-3 text-sm">
+        <p role="status" className="mb-4 rounded border border-amber-400 bg-warning-soft p-3 text-sm">
           These temporary passwords are shown once. Download them now, pass each one on securely, then delete the file.
           Every user must change the password at first sign-in.
         </p>
@@ -71,9 +71,9 @@ export function UserImportPage() {
           <Link className={secondaryButton} to="/users">Done</Link>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full border-collapse bg-white text-left text-sm shadow">
+          <table className="w-full border-collapse bg-surface text-left text-sm">
             <thead>
-              <tr className="border-b bg-slate-100">
+              <tr className="border-b bg-muted">
                 <th className="p-2">Name</th><th className="p-2">Email</th><th className="p-2">Roles</th><th className="p-2">Temporary password</th>
               </tr>
             </thead>
@@ -97,7 +97,7 @@ export function UserImportPage() {
   return (
     <section className="max-w-3xl">
       <h1 className="mb-2 text-2xl font-semibold">Import users</h1>
-      <p className="mb-4 text-sm text-slate-600">
+      <p className="mb-4 text-sm text-ink-muted">
         Upload a CSV file with the header <code>email,fullName,roles</code>. Separate several role codes with
         <code> ;</code> (for example <code>NURSE;RECEPTIONIST</code>). Up to 200 users per file. If any row has a
         problem, nothing is created.
@@ -107,12 +107,12 @@ export function UserImportPage() {
         <input type="file" accept=".csv,text/csv" className="mt-1 block text-sm" onChange={(e) => void readFile(e.target.files?.[0])} />
       </label>
       {parseErrors.length > 0 && (
-        <ul role="alert" className="mb-4 list-disc rounded bg-red-50 p-3 pl-8 text-sm text-red-800">
+        <ul role="alert" className="mb-4 list-disc rounded bg-danger-soft p-3 pl-8 text-sm text-danger">
           {parseErrors.map((m) => <li key={m}>{m}</li>)}
         </ul>
       )}
       {serverRows.length > 0 ? (
-        <div role="alert" className="mb-4 rounded bg-red-50 p-3 text-sm text-red-800">
+        <div role="alert" className="mb-4 rounded bg-danger-soft p-3 text-sm text-danger">
           <p className="font-medium">{errorMessage(mutation.error)}</p>
           <ul className="mt-2 list-disc pl-5">
             {serverRows.map((r, i) => <li key={i}>Row {r.row}{rows?.[r.row - 1] ? ` (${rows[r.row - 1].email})` : ''}: {r.message}</li>)}
@@ -125,9 +125,9 @@ export function UserImportPage() {
         <>
           <p className="mb-2 text-sm">{rows.length} user(s) ready to import.</p>
           <div className="mb-4 max-h-80 overflow-auto">
-            <table className="w-full border-collapse bg-white text-left text-sm shadow">
+            <table className="w-full border-collapse bg-surface text-left text-sm">
               <thead>
-                <tr className="border-b bg-slate-100"><th className="p-2">#</th><th className="p-2">Name</th><th className="p-2">Email</th><th className="p-2">Roles</th></tr>
+                <tr className="border-b bg-muted"><th className="p-2">#</th><th className="p-2">Name</th><th className="p-2">Email</th><th className="p-2">Roles</th></tr>
               </thead>
               <tbody>
                 {rows.map((r, i) => (
@@ -156,7 +156,7 @@ export function UserImportPage() {
           </button>
         </>
       )}
-      <Link className="ml-4 text-sm text-blue-700 underline" to="/users">Cancel</Link>
+      <Link className="ml-4 text-sm text-primary underline" to="/users">Cancel</Link>
     </section>
   )
 }

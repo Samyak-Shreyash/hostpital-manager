@@ -42,7 +42,7 @@ export function PatientDetailPage() {
   if (patient.isPending) return <p role="status">Loading...</p>
   if (patient.isError) {
     const notFound = patient.error instanceof ApiError && patient.error.status === 404
-    return <p role="alert" className="text-red-700">{notFound ? 'Patient not found.' : errorMessage(patient.error)}</p>
+    return <p role="alert" className="text-danger">{notFound ? 'Patient not found.' : errorMessage(patient.error)}</p>
   }
   const p = patient.data
   const conflict = save.error instanceof ApiError && save.error.code === 'CONCURRENT_MODIFICATION'
@@ -60,11 +60,11 @@ export function PatientDetailPage() {
         <dd>{addr ? [addr.line1, addr.line2, addr.city, addr.state, addr.pincode].filter(Boolean).join(', ') : 'Not recorded'}</dd>
         <dt className="font-medium">Status</dt><dd>{p.status}</dd>
       </dl>
-      {saved && <p role="status" className="mb-4 text-sm text-green-800">Changes saved.</p>}
+      {saved && <p role="status" className="mb-4 text-sm text-success">Changes saved.</p>}
       {conflict && (
-        <div role="alert" className="mb-4 rounded bg-amber-50 p-3 text-sm">
+        <div role="alert" className="mb-4 rounded bg-warning-soft p-3 text-sm">
           Someone else changed this patient. Reload to see the latest version, then reapply your change.{' '}
-          <button type="button" className="text-blue-700 underline" onClick={() => { save.reset(); void patient.refetch() }}>
+          <button type="button" className="text-primary underline" onClick={() => { save.reset(); void patient.refetch() }}>
             Reload latest version
           </button>
         </div>
@@ -90,11 +90,11 @@ export function PatientDetailPage() {
           )}
         </div>
       )}
-      {allergies.isError && <p role="alert" className="text-red-700">{errorMessage(allergies.error)}</p>}
+      {allergies.isError && <p role="alert" className="text-danger">{errorMessage(allergies.error)}</p>}
       {allergies.data && <AllergyList patientId={id} allergies={allergies.data} canEdit={canClinical} />}
-      {history.isError && <p role="alert" className="text-red-700">{errorMessage(history.error)}</p>}
+      {history.isError && <p role="alert" className="text-danger">{errorMessage(history.error)}</p>}
       {history.data && <HistoryList patientId={id} entries={history.data} canEdit={canClinical} />}
-      <Link className="mt-6 inline-block text-blue-700 underline" to="/patients">Back to patients</Link>
+      <Link className="mt-6 inline-block text-primary underline" to="/patients">Back to patients</Link>
     </section>
   )
 }

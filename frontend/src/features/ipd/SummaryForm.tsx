@@ -74,7 +74,7 @@ function Form({ admission, summary, timeZone, canWrite, saved, onSaved }: {
           <div key={f.id} className="mb-2 grid grid-cols-2 gap-2 sm:grid-cols-5">
             <div>
               <input aria-label={`Medicine ${i + 1} name`} placeholder="Name" className={inputClass} {...form.register(`medications.${i}.name`)} />
-              {errors.medications?.[i]?.name && <p role="alert" className="text-sm text-red-700">{errors.medications[i]?.name?.message}</p>}
+              {errors.medications?.[i]?.name && <p role="alert" className="text-sm text-danger">{errors.medications[i]?.name?.message}</p>}
             </div>
             <input aria-label={`Medicine ${i + 1} dose`} placeholder="Dose" className={inputClass} {...form.register(`medications.${i}.dose`)} />
             <input aria-label={`Medicine ${i + 1} frequency`} placeholder="Frequency" className={inputClass} {...form.register(`medications.${i}.frequency`)} />
@@ -85,7 +85,7 @@ function Form({ admission, summary, timeZone, canWrite, saved, onSaved }: {
         <button type="button" className={`${secondaryButton} mb-4`} onClick={() => meds.append({ name: '', dose: '', frequency: '', duration: '' })}>Add medicine</button>
       </fieldset>
       <IpdProblem error={save.error} what="summary" onReload={reload} />
-      {saved && !save.isError && <p role="status" className="mb-2 text-sm text-green-800">Summary saved.</p>}
+      {saved && !save.isError && <p role="status" className="mb-2 text-sm text-success">Summary saved.</p>}
       {editable && <button type="submit" className={primaryButton} disabled={save.isPending}>Save summary</button>}
     </form>
   )
@@ -104,6 +104,6 @@ export function SummaryForm({ admission, timeZone, canWrite }: { admission: Admi
     },
   })
   if (summary.isPending) return <p role="status">Loading...</p>
-  if (summary.isError) return <p role="alert" className="text-red-700">{ipdErrorMessage(summary.error)}</p>
+  if (summary.isError) return <p role="alert" className="text-danger">{ipdErrorMessage(summary.error)}</p>
   return <Form key={summary.data?.version ?? 'new'} admission={admission} summary={summary.data} timeZone={timeZone} canWrite={canWrite} saved={saved} onSaved={() => setSaved(true)} />
 }

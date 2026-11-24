@@ -34,7 +34,7 @@ function RoleForm({ role, permissions, onDone }: { role: Role | null; permission
   })
   const { errors } = form.formState
   return (
-    <form noValidate onSubmit={form.handleSubmit((v) => mutation.mutate(v))} className="mb-6 max-w-xl rounded bg-white p-4 shadow">
+    <form noValidate onSubmit={form.handleSubmit((v) => mutation.mutate(v))} className="mb-6 max-w-xl rounded-xl border border-border bg-surface p-4">
       <h2 className="mb-3 text-lg font-semibold">{role ? `Edit role ${role.code}` : 'New role'}</h2>
       <FormError message={mutation.isError ? errorMessage(mutation.error) : null} />
       <Field label="Code" htmlFor="code" error={errors.code?.message}>
@@ -69,14 +69,14 @@ function PermissionChips({ permissions }: { permissions: string[] }) {
     const [resource, action = p] = p.split(':')
     groups.set(resource, [...(groups.get(resource) ?? []), action])
   }
-  if (groups.size === 0) return <span className="text-slate-500">None</span>
+  if (groups.size === 0) return <span className="text-ink-muted">None</span>
   return (
     <dl className="space-y-1">
       {[...groups].map(([resource, actions]) => (
         <div key={resource} className="flex flex-wrap items-baseline gap-1">
           <dt className="mr-1 font-medium">{resource}</dt>
           {actions.map((a) => (
-            <dd key={a} className="whitespace-nowrap rounded bg-slate-100 px-1.5 py-0.5 font-mono text-xs">{a}</dd>
+            <dd key={a} className="whitespace-nowrap rounded bg-muted px-1.5 py-0.5 font-mono text-xs">{a}</dd>
           ))}
         </div>
       ))}
@@ -107,12 +107,12 @@ export function RolesPage() {
           onDone={() => setEditing(null)}
         />
       )}
-      {roles.isError && <p role="alert" className="text-red-700">{errorMessage(roles.error)}</p>}
+      {roles.isError && <p role="alert" className="text-danger">{errorMessage(roles.error)}</p>}
       {roles.isPending && <p role="status">Loading...</p>}
       {roles.data && (
-        <table className="w-full border-collapse bg-white text-left text-sm shadow">
+        <table className="w-full border-collapse bg-surface text-left text-sm">
           <thead>
-            <tr className="border-b bg-slate-100">
+            <tr className="border-b bg-muted">
               <th className="p-2">Code</th><th className="p-2">Name</th><th className="p-2">Permissions</th>
               {canManage && <th className="p-2"><span className="sr-only">Actions</span></th>}
             </tr>
@@ -124,7 +124,7 @@ export function RolesPage() {
                 <td className="p-2">{r.name}</td>
                 <td className="p-2"><PermissionChips permissions={r.permissions} /></td>
                 {canManage && (
-                  <td className="p-2"><button type="button" className="text-blue-700 underline" onClick={() => setEditing(r)}>Edit</button></td>
+                  <td className="p-2"><button type="button" className="text-primary underline" onClick={() => setEditing(r)}>Edit</button></td>
                 )}
               </tr>
             ))}

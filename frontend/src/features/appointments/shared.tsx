@@ -41,16 +41,16 @@ export function DoctorSelect({ value, onChange }: { value: string; onChange: (id
         <option value="">Select a doctor</option>
         {doctors.map((d) => <option key={d.id} value={d.id}>{d.fullName}</option>)}
       </select>
-      {!canRead && <p className="mt-1 text-slate-600">You need permission to read doctors to choose one.</p>}
-      {error != null && <p role="alert" className="mt-1 text-red-700">{errorMessage(error)}</p>}
+      {!canRead && <p className="mt-1 text-ink-muted">You need permission to read doctors to choose one.</p>}
+      {error != null && <p role="alert" className="mt-1 text-danger">{errorMessage(error)}</p>}
     </div>
   )
 }
 
 /** Name and UHID from the server's patient brief; never the id, and no patient detail read. */
 export function PatientName({ patient }: { patient: PatientBrief }) {
-  if (!patient.name) return <span className="text-slate-600">Patient</span>
-  return <span><span className="font-medium">{patient.name}</span> <span className="text-slate-600">{patient.uhid}</span></span>
+  if (!patient.name) return <span className="text-ink-muted">Patient</span>
+  return <span><span className="font-medium">{patient.name}</span> <span className="text-ink-muted">{patient.uhid}</span></span>
 }
 
 /** Search by name (3+ characters) and pick one patient; reports the choice up, shows it back as name and UHID. */
@@ -77,15 +77,15 @@ export function PatientPicker({ selected, onSelect, error }: { selected: Patient
         />
         <button type="button" className={`${secondaryButton} mt-1`} onClick={search} disabled={!canSearch}>Search</button>
       </div>
-      {!canSearch && <p className="mt-1 text-sm text-slate-600">You need permission to search patients.</p>}
-      {hint && <p role="alert" className="mt-1 text-sm text-red-700">{hint}</p>}
-      {results.isError && <p role="alert" className="mt-1 text-sm text-red-700">{errorMessage(results.error)}</p>}
-      {results.data && results.data.items.length === 0 && <p className="mt-1 text-sm text-slate-600">No patients found.</p>}
+      {!canSearch && <p className="mt-1 text-sm text-ink-muted">You need permission to search patients.</p>}
+      {hint && <p role="alert" className="mt-1 text-sm text-danger">{hint}</p>}
+      {results.isError && <p role="alert" className="mt-1 text-sm text-danger">{errorMessage(results.error)}</p>}
+      {results.data && results.data.items.length === 0 && <p className="mt-1 text-sm text-ink-muted">No patients found.</p>}
       {results.data && results.data.items.length > 0 && (
         <ul aria-label="Matching patients" className="mt-2 space-y-1">
           {results.data.items.map((p) => (
             <li key={p.id}>
-              <button type="button" className="w-full rounded border border-slate-200 px-3 py-1 text-left text-sm hover:bg-slate-100" onClick={() => onSelect(p)}>
+              <button type="button" className="w-full rounded border border-border px-3 py-1 text-left text-sm hover:bg-muted" onClick={() => onSelect(p)}>
                 {p.fullName} ({p.uhid})
               </button>
             </li>
@@ -93,7 +93,7 @@ export function PatientPicker({ selected, onSelect, error }: { selected: Patient
         </ul>
       )}
       {selected && <p className="mt-2 text-sm">Selected: <strong>{selected.fullName}</strong> ({selected.uhid})</p>}
-      {error && <p role="alert" className="mt-1 text-sm text-red-700">{error}</p>}
+      {error && <p role="alert" className="mt-1 text-sm text-danger">{error}</p>}
     </div>
   )
 }

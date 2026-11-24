@@ -101,7 +101,7 @@ export function PatientRegisterPage() {
         </Field>
         <AddressFields register={form.register} errors={errors} />
         <button type="submit" className={primaryButton} disabled={register.isPending}>Register</button>
-        <Link className="ml-4 text-blue-700 underline" to="/patients">Cancel</Link>
+        <Link className="ml-4 text-primary underline" to="/patients">Cancel</Link>
       </form>
 
       {candidates && (

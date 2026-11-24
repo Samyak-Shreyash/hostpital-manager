@@ -37,7 +37,7 @@ export function AuditPage() {
   return (
     <section>
       <h1 className="mb-1 text-2xl font-semibold">Audit log</h1>
-      <p className="mb-4 text-sm text-slate-600">
+      <p className="mb-4 text-sm text-ink-muted">
         Newest first. Viewing this log is itself recorded. Times are shown in your local time zone.
       </p>
       <AuditFilterForm
@@ -47,14 +47,14 @@ export function AuditPage() {
           setPage(0)
         }}
       />
-      {events.isError && <p role="alert" className="text-red-700">{errorMessage(events.error)}</p>}
+      {events.isError && <p role="alert" className="text-danger">{errorMessage(events.error)}</p>}
       {events.isPending && <p role="status">Loading...</p>}
       {events.data && (
         <>
           <div className="overflow-x-auto">
-            <table className="w-full border-collapse bg-white text-left text-sm shadow">
+            <table className="w-full border-collapse bg-surface text-left text-sm">
               <thead>
-                <tr className="border-b bg-slate-100">
+                <tr className="border-b bg-muted">
                   <th className="p-2">Time</th><th className="p-2">Action</th><th className="p-2">Outcome</th>
                   <th className="p-2">Actor</th><th className="p-2">Entity</th><th className="p-2">Fields</th>
                   <th className="p-2">Correlation id</th>
@@ -68,9 +68,9 @@ export function AuditPage() {
                     <td className="p-2">{e.outcome}</td>
                     <td className="p-2">
                       {!e.actorId ? 'System' : actorNames.has(e.actorId) ? (
-                        <Link className="text-blue-700 underline" to={`/users/${encodeURIComponent(e.actorId)}`} title={e.actorId}>
+                        <Link className="text-primary underline" to={`/users/${encodeURIComponent(e.actorId)}`} title={e.actorId}>
                           {actorNames.get(e.actorId)?.fullName}
-                          <span className="block text-xs text-slate-600">{actorNames.get(e.actorId)?.email}</span>
+                          <span className="block text-xs text-ink-muted">{actorNames.get(e.actorId)?.email}</span>
                         </Link>
                       ) : (
                         <span className="font-mono text-xs">{e.actorId}</span>
@@ -85,7 +85,7 @@ export function AuditPage() {
                       {(e.changedValues ?? []).map((v) => (
                         <span key={v.field} className="mt-1 block text-xs">
                           <span className="font-medium">{v.field}:</span>{' '}
-                          <span className="text-slate-600">{v.oldValue ?? '—'}</span> → <span>{v.newValue ?? '—'}</span>
+                          <span className="text-ink-muted">{v.oldValue ?? '—'}</span> → <span>{v.newValue ?? '—'}</span>
                         </span>
                       ))}
                     </td>

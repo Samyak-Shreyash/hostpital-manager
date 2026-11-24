@@ -16,9 +16,9 @@ export function SpecialtyPicker({ items, selected, primary, onChange, error }: S
     onChange(next, next.includes(primary) ? primary : '')
   }
   return (
-    <fieldset className="mb-4 rounded border border-slate-200 p-3">
+    <fieldset className="mb-4 rounded border border-border p-3">
       <legend className="px-1 text-sm font-medium">Specialties</legend>
-      {shown.length === 0 && <p className="text-sm text-slate-600">No specialties defined.</p>}
+      {shown.length === 0 && <p className="text-sm text-ink-muted">No specialties defined.</p>}
       <table className="text-sm">
         <thead><tr><th className="pr-4 text-left font-medium">Specialty</th><th className="text-left font-medium">Primary</th></tr></thead>
         <tbody>
@@ -44,7 +44,7 @@ export function SpecialtyPicker({ items, selected, primary, onChange, error }: S
           ))}
         </tbody>
       </table>
-      {error && <p role="alert" className="mt-1 text-sm text-red-700">{error}</p>}
+      {error && <p role="alert" className="mt-1 text-sm text-danger">{error}</p>}
     </fieldset>
   )
 }
@@ -52,9 +52,9 @@ export function SpecialtyPicker({ items, selected, primary, onChange, error }: S
 export function DepartmentPicker({ items, selected, onChange, error }: { items: CatalogItem[]; selected: string[]; onChange: (s: string[]) => void; error?: string }) {
   const shown = items.filter((i) => i.active || selected.includes(i.id))
   return (
-    <fieldset className="mb-4 rounded border border-slate-200 p-3">
+    <fieldset className="mb-4 rounded border border-border p-3">
       <legend className="px-1 text-sm font-medium">Departments</legend>
-      {shown.length === 0 && <p className="text-sm text-slate-600">No departments defined.</p>}
+      {shown.length === 0 && <p className="text-sm text-ink-muted">No departments defined.</p>}
       {shown.map((i) => (
         <label key={i.id} className="flex items-center gap-2 text-sm">
           <input
@@ -65,7 +65,7 @@ export function DepartmentPicker({ items, selected, onChange, error }: { items: 
           {i.name}{!i.active && ' (inactive)'}
         </label>
       ))}
-      {error && <p role="alert" className="mt-1 text-sm text-red-700">{error}</p>}
+      {error && <p role="alert" className="mt-1 text-sm text-danger">{error}</p>}
     </fieldset>
   )
 }

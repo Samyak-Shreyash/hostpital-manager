@@ -4,7 +4,7 @@ import { hasPermission } from '../../lib/permissions'
 import { useSession } from './useSession'
 
 function Loading() {
-  return <p role="status" className="p-8 text-slate-600">Loading...</p>
+  return <p role="status" className="p-8 text-ink-muted">Loading...</p>
 }
 
 /**
@@ -15,7 +15,7 @@ export function RequireAuth({ allowPasswordChange = false }: { allowPasswordChan
   const { data, isPending, isError } = useSession()
   const location = useLocation()
   if (isPending) return <Loading />
-  if (isError) return <p role="alert" className="p-8 text-red-700">The server could not be reached. Reload to try again.</p>
+  if (isError) return <p role="alert" className="p-8 text-danger">The server could not be reached. Reload to try again.</p>
   if (!data) return <Navigate to="/login" replace state={{ from: location.pathname }} />
   if (data.user.mustChangePassword && !allowPasswordChange) return <Navigate to="/change-password" replace />
   if (!data.user.mustChangePassword && allowPasswordChange) return <Navigate to="/" replace />

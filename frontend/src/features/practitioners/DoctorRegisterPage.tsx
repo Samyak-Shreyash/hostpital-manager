@@ -76,7 +76,7 @@ export function DoctorRegisterPage() {
         />
         <DepartmentPicker items={catalog.departments} selected={departmentIds} onChange={(d) => form.setValue('departmentIds', d)} error={errors.departmentIds?.message} />
         <button type="submit" className={primaryButton} disabled={save.isPending}>Register doctor</button>
-        <Link className="ml-4 text-blue-700 underline" to="/doctors">Cancel</Link>
+        <Link className="ml-4 text-primary underline" to="/doctors">Cancel</Link>
       </form>
     </section>
   )

@@ -83,23 +83,23 @@ export function DayCalendarPage() {
           <input id="appt-date" type="date" className={inputClass} value={date} onChange={(e) => setDate(e.target.value)} />
         </div>
       </div>
-      <p className="mb-3 text-sm text-slate-600">Times are shown in the facility timezone ({zone}).</p>
+      <p className="mb-3 text-sm text-ink-muted">Times are shown in the facility timezone ({zone}).</p>
 
       {result && (
-        <p role="status" aria-label="Check-in result" className="mb-4 rounded bg-green-50 p-3 text-green-900">
+        <p role="status" aria-label="Check-in result" className="mb-4 rounded bg-success-soft p-3 text-success">
           {result.label}: <strong>Token {result.appointment.tokenNo}</strong> <PatientName patient={result.appointment.patient} />
         </p>
       )}
       <MutationProblem error={actionError} what="appointment" onReload={reloadAll} />
-      {(slots.isError || appointments.isError) && <p role="alert" className="text-red-700">{errorMessage(slots.error ?? appointments.error)}</p>}
-      {!doctorId && <p className="text-slate-600">Choose a doctor to see their day.</p>}
+      {(slots.isError || appointments.isError) && <p role="alert" className="text-danger">{errorMessage(slots.error ?? appointments.error)}</p>}
+      {!doctorId && <p className="text-ink-muted">Choose a doctor to see their day.</p>}
       {doctorId && !loaded && !slots.isError && !appointments.isError && <p role="status">Loading...</p>}
-      {loaded && rows.length === 0 && <p className="text-slate-600">No free slots or appointments on this day.</p>}
+      {loaded && rows.length === 0 && <p className="text-ink-muted">No free slots or appointments on this day.</p>}
       {loaded && rows.length > 0 && (
         <ul aria-label="Day schedule" className="space-y-2">
           {rows.map((row) => row.kind === 'slot' ? (
-            <li key={`s-${row.at}`} className="flex items-center justify-between rounded border border-dashed border-slate-300 bg-white p-3 text-sm">
-              <span>{slotLabel(row.slot)} <span className="text-slate-500">free</span></span>
+            <li key={`s-${row.at}`} className="flex items-center justify-between rounded border border-dashed border-border-strong bg-surface p-3 text-sm">
+              <span>{slotLabel(row.slot)} <span className="text-ink-muted">free</span></span>
               {canCreate && (
                 <button type="button" className={secondaryButton} aria-label={`Book ${formatTime(row.slot.startAt, zone)}`} onClick={() => setBooking(row.slot)}>Book</button>
               )}
@@ -135,15 +135,15 @@ function AppointmentRow({ appointment: a, zone, canCheckIn, canUpdate, canCancel
   const scheduled = a.status === 'SCHEDULED'
   const dimmed = a.status === 'CANCELLED' || a.status === 'NO_SHOW' || a.status === 'RESCHEDULED'
   return (
-    <li className={`rounded bg-white p-3 text-sm shadow ${dimmed ? 'opacity-60' : ''}`}>
+    <li className={`rounded bg-surface p-3 text-sm ${dimmed ? 'opacity-60' : ''}`}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <span className="mr-2 font-medium">{formatTime(a.startAt, zone)}–{formatTime(a.endAt, zone)}</span>
           <PatientName patient={a.patient} />
-          <span className="ml-2 rounded bg-slate-200 px-2 py-0.5 text-xs">{STATUS_LABELS[a.status]}</span>
-          {a.type === 'WALK_IN' && <span className="ml-1 rounded bg-blue-100 px-2 py-0.5 text-xs">Walk-in</span>}
+          <span className="ml-2 rounded bg-muted px-2 py-0.5 text-xs">{STATUS_LABELS[a.status]}</span>
+          {a.type === 'WALK_IN' && <span className="ml-1 rounded bg-primary-soft px-2 py-0.5 text-xs">Walk-in</span>}
           {a.tokenNo !== null && <span className="ml-2">Token {a.tokenNo}</span>}
-          {a.reason && <span className="ml-2 text-slate-600">{a.reason}</span>}
+          {a.reason && <span className="ml-2 text-ink-muted">{a.reason}</span>}
         </div>
         <div className="flex gap-2">
           {scheduled && canCheckIn && <button type="button" className={secondaryButton} disabled={busy} onClick={onCheckIn}>Check in</button>}

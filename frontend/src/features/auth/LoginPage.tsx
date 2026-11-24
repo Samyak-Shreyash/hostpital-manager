@@ -35,9 +35,9 @@ export function LoginPage() {
 
   const { errors } = form.formState
   return (
-    <main className="flex min-h-screen items-center justify-center bg-slate-50 p-4">
+    <main className="flex min-h-screen items-center justify-center bg-canvas p-4">
       <form
-        className="w-full max-w-sm rounded bg-white p-6 shadow"
+        className="w-full max-w-sm rounded-xl border border-border bg-surface p-6"
         onSubmit={form.handleSubmit((values) => mutation.mutate(values))}
         noValidate
       >

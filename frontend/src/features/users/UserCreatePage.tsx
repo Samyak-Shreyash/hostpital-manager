@@ -34,7 +34,7 @@ export function UserCreatePage() {
         <TemporaryPassword password={created.password} account={created.account} onDismiss={() => setCreated(null)} />
         <div className="flex items-center gap-4">
           <button type="button" className={primaryButton} onClick={() => setCreated(null)}>Create another user</button>
-          <Link className="text-blue-700 underline" to="/users">Back to users</Link>
+          <Link className="text-primary underline" to="/users">Back to users</Link>
         </div>
       </section>
     )
@@ -44,7 +44,7 @@ export function UserCreatePage() {
   return (
     <section>
       <h1 className="mb-4 text-2xl font-semibold">New user</h1>
-      {roles.isError && <p role="alert" className="mb-4 text-red-700">{errorMessage(roles.error)}</p>}
+      {roles.isError && <p role="alert" className="mb-4 text-danger">{errorMessage(roles.error)}</p>}
       <UserForm
         mode="create"
         roleOptions={(roles.data ?? []).map((r) => ({ code: r.code, name: r.name }))}

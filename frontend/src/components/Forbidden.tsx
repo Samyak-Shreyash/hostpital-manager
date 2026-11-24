@@ -5,12 +5,12 @@ export function Forbidden({ screen, permission }: { screen?: string; permission?
   return (
     <section role="alert" className="p-8">
       <h1 className="text-xl font-semibold">{screen ? `${screen} is not available to you` : 'Access denied'}</h1>
-      <p className="mt-2 text-slate-600">
+      <p className="mt-2 text-ink-muted">
         Your roles do not include access to this screen
         {permission ? <> (requires <code className="font-mono text-sm">{permission}</code>)</> : null}. Ask an administrator
         if you need it.
       </p>
-      <Link className="mt-4 inline-block text-blue-700 underline" to="/">Back to home</Link>
+      <Link className="mt-4 inline-block text-primary underline" to="/">Back to home</Link>
     </section>
   )
 }

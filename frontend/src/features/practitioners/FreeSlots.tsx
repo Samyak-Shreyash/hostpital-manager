@@ -27,7 +27,7 @@ export function FreeSlots({ doctorId }: { doctorId: string }) {
   return (
     <section aria-labelledby="slots-heading" className="mb-8">
       <h2 id="slots-heading" className="mb-1 text-lg font-semibold">Free slots preview</h2>
-      <p className="mb-3 text-sm text-slate-600">
+      <p className="mb-3 text-sm text-ink-muted">
         Up to {MAX_SLOT_RANGE_DAYS} days. Times are shown in the facility timezone ({timeZone}). Booked appointments are not subtracted yet.
       </p>
       <form noValidate className="grid grid-cols-1 items-end gap-x-3 sm:grid-cols-3" onSubmit={form.handleSubmit(setRange)}>
@@ -39,13 +39,13 @@ export function FreeSlots({ doctorId }: { doctorId: string }) {
         </Field>
         <div className="mb-4"><button type="submit" className={secondaryButton}>Show free slots</button></div>
       </form>
-      {slots.isError && <p role="alert" className="text-red-700">{errorMessage(slots.error)}</p>}
+      {slots.isError && <p role="alert" className="text-danger">{errorMessage(slots.error)}</p>}
       {slots.isFetching && <p role="status">Loading...</p>}
-      {slots.data && slots.data.slots.length === 0 && <p className="text-sm text-slate-600">No free slots in this range.</p>}
+      {slots.data && slots.data.slots.length === 0 && <p className="text-sm text-ink-muted">No free slots in this range.</p>}
       {slots.data && slots.data.slots.length > 0 && (
         <ul aria-label="Free slots" className="grid grid-cols-1 gap-1 text-sm sm:grid-cols-2">
           {slots.data.slots.map((s) => (
-            <li key={s.startAt} className="rounded bg-white p-2 shadow">
+            <li key={s.startAt} className="rounded-xl border border-border bg-surface p-2">
               {formatInstant(s.startAt, timeZone)}–{formatTime(s.endAt, timeZone)}
             </li>
           ))}

@@ -51,14 +51,14 @@ export function VitalsSection(props: SectionProps) {
                 <label htmlFor={id} className="block font-medium">{`${v.label} (${v.unit})`}</label>
                 <input id={id} inputMode="decimal" className={inputClass} value={values[v.kind] ?? ''}
                   onChange={(e) => setValues({ ...values, [v.kind]: e.target.value })} />
-                {errors[v.kind] && <p role="alert" className="mt-1 text-red-700">{errors[v.kind]}</p>}
+                {errors[v.kind] && <p role="alert" className="mt-1 text-danger">{errors[v.kind]}</p>}
               </div>
             )
           })}
         </div>
       </fieldset>
       {encounter.warnings.length > 0 && (
-        <div role="status" aria-label="Vitals warnings" className="mt-3 rounded bg-amber-50 p-3 text-sm">
+        <div role="status" aria-label="Vitals warnings" className="mt-3 rounded bg-warning-soft p-3 text-sm">
           <p className="font-medium">Check these values (saved as entered)</p>
           <ul className="list-disc pl-5">{encounter.warnings.map((w, i) => <li key={`${w.kind}-${i}`}>{w.message}</li>)}</ul>
         </div>
@@ -133,7 +133,7 @@ export function DiagnosesSection(props: SectionProps) {
   return (
     <Section title="Diagnoses">
       <fieldset disabled={!canEdit}>
-        {rows.length === 0 && <p className="mb-2 text-sm text-slate-600">No diagnoses recorded.</p>}
+        {rows.length === 0 && <p className="mb-2 text-sm text-ink-muted">No diagnoses recorded.</p>}
         {rows.map((r, i) => (
           <div key={i} className="mb-3 grid grid-cols-1 gap-2 text-sm sm:grid-cols-[8rem_1fr_auto_auto] sm:items-end">
             <div>
@@ -143,7 +143,7 @@ export function DiagnosesSection(props: SectionProps) {
             <div>
               <label htmlFor={`dx-desc-${i}`} className="block font-medium">{`Diagnosis description ${i + 1}`}</label>
               <input id={`dx-desc-${i}`} className={inputClass} maxLength={500} value={r.description} onChange={(e) => update(i, { description: e.target.value })} />
-              {errors[i] && <p role="alert" className="mt-1 text-red-700">{errors[i]}</p>}
+              {errors[i] && <p role="alert" className="mt-1 text-danger">{errors[i]}</p>}
             </div>
             <label className="flex items-center gap-1 pb-2">
               <input type="checkbox" aria-label={`Primary diagnosis ${i + 1}`} checked={r.primary} onChange={(e) => update(i, { primary: e.target.checked })} /> Primary
@@ -178,7 +178,7 @@ export function PlanSection(props: SectionProps) {
         <div className="mb-3 text-sm">
           <label htmlFor="plan-text" className="block font-medium">Treatment plan</label>
           <textarea id="plan-text" rows={3} maxLength={10000} className={inputClass} value={plan} onChange={(e) => setPlan(e.target.value)} />
-          {planError && <p role="alert" className="mt-1 text-red-700">{planError}</p>}
+          {planError && <p role="alert" className="mt-1 text-danger">{planError}</p>}
         </div>
       </fieldset>
       <ConsultProblem error={savePlan.error} onReload={props.onReload} />
@@ -191,7 +191,7 @@ export function PlanSection(props: SectionProps) {
           <div>
             <label htmlFor="fu-date" className="block font-medium">Follow-up date</label>
             <input id="fu-date" type="date" className={inputClass} value={date} onChange={(e) => setDate(e.target.value)} />
-            {dateError && <p role="alert" className="mt-1 text-red-700">{dateError}</p>}
+            {dateError && <p role="alert" className="mt-1 text-danger">{dateError}</p>}
           </div>
           <div>
             <label htmlFor="fu-instructions" className="block font-medium">Follow-up instructions</label>

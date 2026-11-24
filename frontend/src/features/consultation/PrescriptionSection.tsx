@@ -26,9 +26,9 @@ const toItem = (d: ItemDraft): PrescriptionItem => ({
   frequency: d.frequency.trim(), durationDays: Number(d.durationDays), instructions: blank(d.instructions),
 })
 
-const FIELDS: { key: keyof ItemDraft; label: string; wide?: boolean }[] = [
+const FIELDS: { key: keyof ItemDraft; label: string; wide?: boolean; placeholder?: string }[] = [
   { key: 'drugName', label: 'Drug name', wide: true }, { key: 'strength', label: 'Strength' }, { key: 'form', label: 'Form' },
-  { key: 'route', label: 'Route' }, { key: 'dose', label: 'Dose' }, { key: 'frequency', label: 'Frequency' },
+  { key: 'route', label: 'Route' }, { key: 'dose', label: 'Dose' }, { key: 'frequency', label: 'Frequency', placeholder: '1-0-1 or SOS' },
   { key: 'durationDays', label: 'Duration (days)' }, { key: 'instructions', label: 'Instructions', wide: true },
 ]
 
@@ -81,11 +81,11 @@ export function PrescriptionSection({ encounter, onReload }: { encounter: Encoun
       {rx && <PrescriptionEditor key={rx.id} rx={rx} onChange={adopt} onRevised={refresh} onReload={onReload} />}
       {!rx && !rxId && canCreate && (
         <>
-          <p className="mb-2 text-sm text-slate-600">No prescription started for this visit.</p>
+          <p className="mb-2 text-sm text-ink-muted">No prescription started for this visit.</p>
           <button type="button" className={primaryButton} disabled={start.isPending} onClick={() => start.mutate()}>Start prescription</button>
         </>
       )}
-      {!rx && !rxId && !canCreate && <p className="text-sm text-slate-600">No prescription.</p>}
+      {!rx && !rxId && !canCreate && <p className="text-sm text-ink-muted">No prescription.</p>}
       {start.error instanceof ApiError && start.error.status === 409
         ? <FormError message="A prescription already exists for this visit. It is being loaded." />
         : <MutationProblem error={start.error} what="prescription" onReload={onReload} />}
@@ -125,13 +125,13 @@ function PrescriptionEditor({ rx, onChange, onRevised, onReload }: {
   return (
     <div>
       <p className="mb-3 flex flex-wrap items-center gap-3 text-sm">
-        <span className="rounded bg-slate-200 px-2 py-0.5 text-xs">{STATUS_TEXT[rx.status]}</span>
+        <span className="rounded bg-muted px-2 py-0.5 text-xs">{STATUS_TEXT[rx.status]}</span>
         <span>Version {rx.versionNo}</span>
       </p>
       <fieldset disabled={!editable}>
-        {items.length === 0 && <p className="mb-2 text-sm text-slate-600">No medicines yet.</p>}
+        {items.length === 0 && <p className="mb-2 text-sm text-ink-muted">No medicines yet.</p>}
         {items.map((d, i) => (
-          <div key={i} className="mb-3 rounded border border-slate-200 p-3">
+          <div key={i} className="mb-3 rounded border border-border p-3">
             <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-4">
               {FIELDS.map((f) => {
                 const id = `rx-${i}-${f.key}`
@@ -139,8 +139,8 @@ function PrescriptionEditor({ rx, onChange, onRevised, onReload }: {
                 return (
                   <div key={f.key} className={f.wide ? 'col-span-2' : undefined}>
                     <label htmlFor={id} className="block font-medium">{`${f.label} ${i + 1}`}</label>
-                    <input id={id} className={inputClass} inputMode={f.key === 'durationDays' ? 'numeric' : undefined} value={d[f.key]} onChange={(e) => update(i, f.key, e.target.value)} />
-                    {error && <p role="alert" className="mt-1 text-red-700">{error}</p>}
+                    <input id={id} className={inputClass} inputMode={f.key === 'durationDays' ? 'numeric' : undefined} placeholder={f.placeholder} value={d[f.key]} onChange={(e) => update(i, f.key, e.target.value)} />
+                    {error && <p role="alert" className="mt-1 text-danger">{error}</p>}
                   </div>
                 )
               })}
@@ -157,7 +157,7 @@ function PrescriptionEditor({ rx, onChange, onRevised, onReload }: {
       {editable && <div><button type="button" className={primaryButton} disabled={save.isPending} onClick={submit}>Save medicines</button></div>}
 
       {warnings.length > 0 && isDraft && (
-        <div role="alert" aria-label="Allergy warnings" className="mt-3 rounded bg-red-50 p-3 text-sm text-red-900">
+        <div role="alert" aria-label="Allergy warnings" className="mt-3 rounded bg-danger-soft p-3 text-sm text-danger">
           <p className="font-medium">This patient has recorded allergies that match these medicines</p>
           <ul className="list-disc pl-5">{warnings.map((w, i) => <li key={`${w.substance}-${i}`}>{w.substance} ({w.severity})</li>)}</ul>
           {canIssue && (
@@ -170,7 +170,7 @@ function PrescriptionEditor({ rx, onChange, onRevised, onReload }: {
       {isDraft && canIssue && (
         <div className="mt-3">
           <button type="button" className={primaryButton} disabled={issue.isPending || dirty || items.length === 0 || (warnings.length > 0 && !acknowledged)} onClick={() => issue.mutate()}>Issue prescription</button>
-          {dirty && <p className="mt-1 text-sm text-slate-600">Save the medicines before issuing.</p>}
+          {dirty && <p className="mt-1 text-sm text-ink-muted">Save the medicines before issuing.</p>}
           <MutationProblem error={issue.error} what="prescription" onReload={onReload} />
         </div>
       )}

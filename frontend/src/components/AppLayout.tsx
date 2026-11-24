@@ -4,10 +4,22 @@ import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router'
 import { logout } from '../api/auth'
 import { SESSION_KEY, useSession } from '../features/auth/useSession'
 import { hasPermission } from '../lib/permissions'
-import { secondaryButton } from './ui'
 
 const linkClass = ({ isActive }: { isActive: boolean }) =>
-  `rounded px-3 py-1 text-sm ${isActive ? 'bg-blue-100 font-medium text-blue-900' : 'text-slate-700 hover:bg-slate-100'}`
+  `flex min-h-11 items-center rounded-lg px-3 text-sm ${isActive ? 'bg-primary font-semibold text-white' : 'text-nav-ink hover:bg-nav-hover hover:text-white'}`
+
+/** Sidebar groups; each link is shown only with its permission, and an empty group is hidden. */
+type NavItem = { to: string; label: string; show: boolean; end?: boolean }
+function NavGroup({ title, items }: { title?: string; items: NavItem[] }) {
+  const visible = items.filter((i) => i.show)
+  if (visible.length === 0) return null
+  return (
+    <div className="flex flex-col gap-0.5">
+      {title && <span className="px-3 pt-4 pb-1 text-[11px] font-semibold uppercase tracking-wider text-nav-ink-muted">{title}</span>}
+      {visible.map((i) => <NavLink key={i.to} to={i.to} end={i.end} className={linkClass}>{i.label}</NavLink>)}
+    </div>
+  )
+}
 
 /** Browser tab titles per section, so tabs and history entries are distinguishable. */
 const TITLES: [string, string][] = [
@@ -36,33 +48,47 @@ export function AppLayout() {
   }, [pathname])
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900">
-      <header className="flex flex-wrap items-center gap-4 border-b bg-white px-6 py-3">
-        <Link to="/" className="font-semibold hover:underline">{data?.organization.name}</Link>
-        <nav aria-label="Main" className="flex gap-2">
-          <NavLink to="/" end className={linkClass}>Home</NavLink>
-          {can('patient:search') && <NavLink to="/patients" className={linkClass}>Patients</NavLink>}
-          {can('appointment:read') && <NavLink to="/appointments" className={linkClass}>Appointments</NavLink>}
-          {can('appointment:read') && <NavLink to="/queue" className={linkClass}>Queue</NavLink>}
-          {can('invoice:read') && <NavLink to="/invoices" className={linkClass}>Billing</NavLink>}
-          {can('bed:read') && <NavLink to="/beds" className={linkClass}>Bed board</NavLink>}
-          {can('admission:read') && <NavLink to="/admissions" className={linkClass}>Admissions</NavLink>}
-          {can('ward:read') && <NavLink to="/wards" className={linkClass}>Wards</NavLink>}
-          {can('practitioner:read') && <NavLink to="/doctors" className={linkClass}>Doctors</NavLink>}
-          {can('staff:read') && <NavLink to="/staff" className={linkClass}>Staff</NavLink>}
-          {can('user:read') && <NavLink to="/users" className={linkClass}>Users</NavLink>}
-          {can('role:read') && <NavLink to="/roles" className={linkClass}>Roles</NavLink>}
-          {can('catalog:read') && <NavLink to="/catalog" className={linkClass}>Departments &amp; specialties</NavLink>}
-          {(can('report:clinical') || can('report:finance')) && <NavLink to="/reports" className={linkClass}>Reports</NavLink>}
-          {can('audit:read') && <NavLink to="/audit" className={linkClass}>Audit</NavLink>}
-        </nav>
-        <span className="ml-auto text-sm text-slate-600">{data?.user.fullName}</span>
-        <button type="button" className={secondaryButton} onClick={() => signOut.mutate()} disabled={signOut.isPending}>
-          Sign out
-        </button>
-      </header>
-      <main className="mx-auto max-w-5xl p-6">
-        <Outlet />
+    <div className="flex min-h-screen flex-wrap bg-canvas text-ink">
+      <nav aria-label="Main" className="flex w-full flex-col gap-1 bg-nav px-3.5 py-5 md:sticky md:top-0 md:h-screen md:w-60 md:overflow-y-auto">
+        <Link to="/" className="mb-3 flex items-center gap-2.5 rounded-lg px-2 py-1 text-white">
+          <span aria-hidden="true" className="flex size-9 items-center justify-center rounded-lg bg-accent font-display text-lg font-bold text-nav">H</span>
+          <span className="font-display text-[17px] font-bold leading-tight">{data?.organization.name}</span>
+        </Link>
+        <NavGroup items={[{ to: '/', label: 'Home', show: true, end: true }]} />
+        <NavGroup title="Front desk" items={[
+          { to: '/patients', label: 'Patients', show: can('patient:search') },
+          { to: '/appointments', label: 'Appointments', show: can('appointment:read') },
+          { to: '/queue', label: 'OPD queue', show: can('appointment:read') },
+        ]} />
+        <NavGroup title="IPD" items={[
+          { to: '/beds', label: 'Bed board', show: can('bed:read') },
+          { to: '/admissions', label: 'Admissions', show: can('admission:read') },
+          { to: '/wards', label: 'Wards', show: can('ward:read') },
+        ]} />
+        <NavGroup title="Accounts" items={[
+          { to: '/invoices', label: 'Billing', show: can('invoice:read') },
+          { to: '/reports', label: 'Reports', show: can('report:clinical') || can('report:finance') },
+        ]} />
+        <NavGroup title="Administration" items={[
+          { to: '/doctors', label: 'Doctors', show: can('practitioner:read') },
+          { to: '/staff', label: 'Staff', show: can('staff:read') },
+          { to: '/users', label: 'Users', show: can('user:read') },
+          { to: '/roles', label: 'Roles', show: can('role:read') },
+          { to: '/catalog', label: 'Departments & specialties', show: can('catalog:read') },
+          { to: '/audit', label: 'Audit', show: can('audit:read') },
+        ]} />
+        <div className="mt-auto flex flex-col gap-2 border-t border-nav-hover px-2 pt-4">
+          <span className="text-sm font-semibold text-white">{data?.user.fullName}</span>
+          <button type="button" className="min-h-11 rounded-lg border border-nav-ink-muted px-3 text-sm font-semibold text-nav-ink hover:bg-nav-hover disabled:opacity-50"
+            onClick={() => signOut.mutate()} disabled={signOut.isPending}>
+            Sign out
+          </button>
+        </div>
+      </nav>
+      <main className="min-w-0 flex-1 basis-[560px] px-4 py-6 md:px-7">
+        <div className="mx-auto max-w-7xl">
+          <Outlet />
+        </div>
       </main>
     </div>
   )

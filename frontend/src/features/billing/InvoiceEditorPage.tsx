@@ -14,12 +14,13 @@ const ISSUED_STATUSES = ['ISSUED', 'PARTIALLY_PAID', 'PAID', 'CANCELLED']
 /** Totals exactly as the server calculated them; never summed or rounded in the browser. */
 function Totals({ invoice }: { invoice: Invoice }) {
   return (
-    <section aria-label="Invoice totals" className="mb-4 rounded bg-white p-4 shadow">
-      <dl className="grid max-w-xs grid-cols-[1fr_auto] gap-x-6 gap-y-1 text-sm">
+    <section aria-label="Invoice totals" className="mb-4 rounded-xl border border-border bg-surface p-4">
+      <dl className="grid grid-cols-[1fr_auto] gap-x-6 gap-y-2 text-sm">
         <dt>Subtotal</dt><dd className="text-right tabular-nums" data-testid="subtotal">{invoice.subtotal}</dd>
         <dt>Discount</dt><dd className="text-right tabular-nums" data-testid="discount">{invoice.discountTotal}</dd>
         <dt>Tax</dt><dd className="text-right tabular-nums" data-testid="tax">{invoice.taxTotal}</dd>
-        <dt className="font-semibold">Total</dt><dd className="text-right font-semibold tabular-nums" data-testid="total">{invoice.total}</dd>
+        <dt className="border-t border-border pt-3 font-display text-lg font-semibold">Total (₹)</dt>
+        <dd className="border-t border-border pt-3 text-right font-display text-3xl font-bold tabular-nums" data-testid="total">{invoice.total}</dd>
       </dl>
     </section>
   )
@@ -69,48 +70,54 @@ export function InvoiceEditorPage() {
   return (
     <section>
       {invoice.isPending && <p role="status">Loading...</p>}
-      {invoice.isError && <p role="alert" className="text-red-700">{errorMessage(invoice.error)}</p>}
+      {invoice.isError && <p role="alert" className="text-danger">{errorMessage(invoice.error)}</p>}
       {data && (
         <>
-          <h1 className="mb-1 text-2xl font-semibold">{data.invoiceNo ? `Invoice ${data.invoiceNo}` : 'Draft invoice'}</h1>
+          <h1 className="mb-1 text-3xl font-semibold">{data.invoiceNo ? `Invoice ${data.invoiceNo}` : 'Draft invoice'}</h1>
           <p className="mb-4 flex flex-wrap items-center gap-3 text-sm">
-            <span className="rounded bg-slate-200 px-2 py-0.5 text-xs">{STATUS_LABELS[data.status]}</span>
-            {canOpenEncounter && data.encounterId && <Link className="text-blue-700 underline" to={`/consult/${data.encounterId}`}>Consultation</Link>}
-            {canOpenPatient && <Link className="text-blue-700 underline" to={`/patients/${data.patientId}`}>Patient record</Link>}
+            <span className="rounded bg-muted px-2 py-0.5 text-xs">{STATUS_LABELS[data.status]}</span>
+            {canOpenEncounter && data.encounterId && <Link className="text-primary underline" to={`/consult/${data.encounterId}`}>Consultation</Link>}
+            {canOpenPatient && <Link className="text-primary underline" to={`/patients/${data.patientId}`}>Patient record</Link>}
             {ISSUED_STATUSES.includes(data.status) && (
-              <a className="text-blue-700 underline" href={invoicePdfUrl(data.id)} target="_blank" rel="noreferrer">Open invoice PDF</a>
+              <a className="text-primary underline" href={invoicePdfUrl(data.id)} target="_blank" rel="noreferrer">Open invoice PDF</a>
             )}
           </p>
-          <Totals invoice={data} />
+          <div className="flex flex-wrap items-start gap-5">
+          <div className="min-w-0 flex-[999_1_560px]">
           {data.status === 'DRAFT' ? (
-            <section aria-label="Invoice lines" className="mb-6 rounded bg-white p-4 shadow">
+            <section aria-label="Invoice lines" className="mb-6 rounded-xl border border-border bg-surface p-4">
               <DraftEditor key={data.version} invoice={data} onReload={reload} />
             </section>
           ) : (
-            <section aria-label="Invoice lines" className="mb-6 rounded bg-white p-4 shadow">
+            <section aria-label="Invoice lines" className="mb-6 rounded-xl border border-border bg-surface p-4">
               <ReadOnlyItems invoice={data} />
-              {data.status === 'DISCARDED' && <p className="text-sm text-slate-600">This draft was discarded.</p>}
+              {data.status === 'DISCARDED' && <p className="text-sm text-ink-muted">This draft was discarded.</p>}
             </section>
           )}
+          </div>
+          <aside aria-label="Totals and payment" className="min-w-0 flex-[1_1_320px]">
+          <Totals invoice={data} />
           {(data.status === 'ISSUED' || data.status === 'PARTIALLY_PAID') && canPay && (
-            <section aria-label="Payment" className="mb-6 rounded bg-white p-4 shadow">
-              <button type="button" className={primaryButton} onClick={() => setPaying(true)}>Take payment</button>
+            <section aria-label="Payment" className="mb-6 rounded-xl border border-border bg-surface p-4">
+              <button type="button" className={`${primaryButton} min-h-13 w-full text-base`} onClick={() => setPaying(true)}>Take payment</button>
               {latest && <p className="mt-2 text-sm">Outstanding after the last payment: <span data-testid="last-outstanding">{latest.outstanding}</span></p>}
             </section>
           )}
           {payments.length > 0 && (
-            <section aria-label="Payments taken here" className="mb-6 rounded bg-white p-4 shadow">
+            <section aria-label="Payments taken here" className="mb-6 rounded-xl border border-border bg-surface p-4">
               <h2 className="mb-2 text-lg font-semibold">Payments taken on this screen</h2>
               <ul className="text-sm">
                 {payments.map((p) => (
                   <li key={p.id}>
                     {p.receiptNo}: {p.amount}{' '}
-                    {canReceipt && <a className="text-blue-700 underline" href={receiptPdfUrl(p.id)} target="_blank" rel="noreferrer">Receipt PDF {p.receiptNo}</a>}
+                    {canReceipt && <a className="text-primary underline" href={receiptPdfUrl(p.id)} target="_blank" rel="noreferrer">Receipt PDF {p.receiptNo}</a>}
                   </li>
                 ))}
               </ul>
             </section>
           )}
+          </aside>
+          </div>
           {paying && (
             <PaymentDialog invoiceId={data.id} idempotencyKey={paymentKey} onRecorded={(p) => setPayments((current) => [...current, p])} onClose={() => setPaying(false)} />
           )}

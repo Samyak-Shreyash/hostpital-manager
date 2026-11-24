@@ -154,7 +154,7 @@ export function DraftEditor({ invoice, onReload }: { invoice: Invoice; onReload:
 
   const conflict = [save.error, percentMutation.error, discard.error].find((e) => e instanceof ApiError && e.code === 'CONCURRENT_MODIFICATION')
   const rowError = (index: number, field: keyof RowErrors) => rowErrors[index]?.[field]
-  const err = (id: string, message?: string) => message ? <p id={id} role="alert" className="text-xs text-red-700">{message}</p> : null
+  const err = (id: string, message?: string) => message ? <p id={id} role="alert" className="text-xs text-danger">{message}</p> : null
 
   return (
     <div>
@@ -204,7 +204,7 @@ export function DraftEditor({ invoice, onReload }: { invoice: Invoice; onReload:
                 </td>
                 <td className="text-right tabular-nums">{server && !dirty ? server.total : ''}</td>
                 <td className="text-right">
-                  <button type="button" className="text-red-700 underline" aria-label={`Remove line ${n}`} onClick={() => setRows(rows.filter((x) => x.key !== r.key))}>Remove</button>
+                  <button type="button" className="text-danger underline" aria-label={`Remove line ${n}`} onClick={() => setRows(rows.filter((x) => x.key !== r.key))}>Remove</button>
                 </td>
               </tr>
             )
@@ -228,10 +228,10 @@ export function DraftEditor({ invoice, onReload }: { invoice: Invoice; onReload:
         {canOverride && <button type="button" className={secondaryButton} onClick={addCustom}>Add custom line</button>}
       </div>
       {services.isError && <FormError message={errorMessage(services.error)} />}
-      {!canCatalog && <p className="mb-3 text-sm text-slate-600">You need access to the service catalog to add services.</p>}
+      {!canCatalog && <p className="mb-3 text-sm text-ink-muted">You need access to the service catalog to add services.</p>}
 
       <FormError message={formError} />
-      {lockedByDiscount && <p role="status" className="mb-2 text-sm text-slate-700">This invoice carries a discount; only users who may give discounts can change its lines.</p>}
+      {lockedByDiscount && <p role="status" className="mb-2 text-sm text-ink-muted">This invoice carries a discount; only users who may give discounts can change its lines.</p>}
       <div className="mb-4 flex flex-wrap items-start gap-4">
         <button type="button" className={primaryButton} disabled={save.isPending || lockedByDiscount} onClick={submitSave}>Save items</button>
         {canIssue && (
@@ -250,22 +250,22 @@ export function DraftEditor({ invoice, onReload }: { invoice: Invoice; onReload:
       {discard.isError && !conflict && <FormError message={billingErrorMessage(discard.error)} />}
 
       {canDiscount && (
-        <fieldset className="rounded border border-slate-200 p-3" disabled={dirty}>
+        <fieldset className="rounded border border-border p-3" disabled={dirty}>
           <legend className="px-1 text-sm font-medium">Percent discount on all lines</legend>
           <div className="flex flex-wrap items-start gap-3 text-sm">
             <div>
               <label htmlFor="disc-percent" className="block">Discount percent</label>
               <input id="disc-percent" inputMode="decimal" className={`${inputClass} w-28`} value={percent} onChange={(e) => setPercent(e.target.value)} />
-              {percentErrors.percent && <p role="alert" className="text-xs text-red-700">{percentErrors.percent}</p>}
+              {percentErrors.percent && <p role="alert" className="text-xs text-danger">{percentErrors.percent}</p>}
             </div>
             <div>
               <label htmlFor="disc-reason" className="block">Reason for all lines</label>
               <input id="disc-reason" className={inputClass} value={percentReason} onChange={(e) => setPercentReason(e.target.value)} />
-              {percentErrors.reason && <p role="alert" className="text-xs text-red-700">{percentErrors.reason}</p>}
+              {percentErrors.reason && <p role="alert" className="text-xs text-danger">{percentErrors.reason}</p>}
             </div>
             <button type="button" className={`${secondaryButton} mt-6`} disabled={percentMutation.isPending} onClick={submitPercent}>Apply percent discount</button>
           </div>
-          {dirty && <p className="mt-1 text-xs text-slate-600">Save your line changes first.</p>}
+          {dirty && <p className="mt-1 text-xs text-ink-muted">Save your line changes first.</p>}
           {percentMutation.isError && !conflict && <div className="mt-2"><FormError message={billingErrorMessage(percentMutation.error)} /></div>}
         </fieldset>
       )}
@@ -274,5 +274,5 @@ export function DraftEditor({ invoice, onReload }: { invoice: Invoice; onReload:
 }
 
 function ReadOnlyHint() {
-  return <p className="text-sm text-slate-600">You can view this draft but not change it.</p>
+  return <p className="text-sm text-ink-muted">You can view this draft but not change it.</p>
 }

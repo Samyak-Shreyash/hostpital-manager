@@ -18,7 +18,7 @@ export function IssueButton({ invoice, disabled, hint }: { invoice: Invoice; dis
   return (
     <div>
       <button type="button" className={primaryButton} disabled={disabled || issue.isPending} onClick={() => issue.mutate()}>Issue invoice</button>
-      {hint && <p className="mt-1 text-sm text-slate-600">{hint}</p>}
+      {hint && <p className="mt-1 text-sm text-ink-muted">{hint}</p>}
       {issue.isError && <div className="mt-2"><FormError message={billingErrorMessage(issue.error)} /></div>}
     </div>
   )

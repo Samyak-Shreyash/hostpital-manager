@@ -40,7 +40,7 @@ export function StartConsult({ entry }: { entry: QueueEntry }) {
       {entry.status === 'IN_CONSULTATION' && canRead && (
         <button type="button" className={secondaryButton} disabled={resume.isPending} onClick={() => resume.mutate()}>Resume consult</button>
       )}
-      {error && <p role="alert" className="basis-full text-sm text-red-700">{error instanceof Error && !('status' in error) ? error.message : consultErrorMessage(error)}</p>}
+      {error && <p role="alert" className="basis-full text-sm text-danger">{error instanceof Error && !('status' in error) ? error.message : consultErrorMessage(error)}</p>}
     </>
   )
 }

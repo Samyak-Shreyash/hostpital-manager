@@ -49,12 +49,12 @@ export function AddendaSection(props: SectionProps) {
   }
   return (
     <Section title="Addenda">
-      {addenda.length === 0 && <p className="mb-2 text-sm text-slate-600">No addenda.</p>}
+      {addenda.length === 0 && <p className="mb-2 text-sm text-ink-muted">No addenda.</p>}
       <ul className="mb-3 space-y-2">
         {addenda.map((n, i) => (
-          <li key={`${n.createdAt}-${i}`} className="rounded border border-slate-200 p-2 text-sm">
+          <li key={`${n.createdAt}-${i}`} className="rounded border border-border p-2 text-sm">
             <p className="whitespace-pre-wrap">{n.text}</p>
-            <p className="mt-1 text-xs text-slate-600">{n.createdAt ? new Date(n.createdAt).toLocaleString() : ''}</p>
+            <p className="mt-1 text-xs text-ink-muted">{n.createdAt ? new Date(n.createdAt).toLocaleString() : ''}</p>
           </li>
         ))}
       </ul>
@@ -63,7 +63,7 @@ export function AddendaSection(props: SectionProps) {
           <div className="mb-3 text-sm">
             <label htmlFor="addendum-text" className="block font-medium">Addendum</label>
             <textarea id="addendum-text" rows={3} maxLength={10000} className={inputClass} value={text} onChange={(e) => setText(e.target.value)} />
-            {error && <p role="alert" className="mt-1 text-red-700">{error}</p>}
+            {error && <p role="alert" className="mt-1 text-danger">{error}</p>}
           </div>
           <ConsultProblem error={add.error} onReload={props.onReload} />
           <button type="button" className={primaryButton} disabled={add.isPending} onClick={submit}>Add addendum</button>

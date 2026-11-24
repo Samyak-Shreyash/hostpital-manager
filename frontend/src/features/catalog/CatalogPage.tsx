@@ -48,7 +48,7 @@ function CatalogForm({ section, item, onDone }: { section: Section; item: Catalo
   const { errors } = form.formState
   const prefix = section.path
   return (
-    <form noValidate onSubmit={form.handleSubmit((v) => mutation.mutate(v))} className="mb-4 max-w-xl rounded bg-white p-4 shadow">
+    <form noValidate onSubmit={form.handleSubmit((v) => mutation.mutate(v))} className="mb-4 max-w-xl rounded-xl border border-border bg-surface p-4">
       <h3 className="mb-3 font-semibold">{item ? `Edit ${section.singular} ${item.code}` : `New ${section.singular}`}</h3>
       <FormError message={mutation.isError ? errorMessage(mutation.error) : null} />
       <Field label="Code" htmlFor={`${prefix}-code`} error={errors.code?.message}>
@@ -91,14 +91,14 @@ function CatalogSection({ section, canManage }: { section: Section; canManage: b
           onDone={() => setEditing(null)}
         />
       )}
-      {toggle.isError && <p role="alert" className="text-red-700">{errorMessage(toggle.error)}</p>}
-      {items.isError && <p role="alert" className="text-red-700">{errorMessage(items.error)}</p>}
+      {toggle.isError && <p role="alert" className="text-danger">{errorMessage(toggle.error)}</p>}
+      {items.isError && <p role="alert" className="text-danger">{errorMessage(items.error)}</p>}
       {items.isPending && <p role="status">Loading...</p>}
-      {items.data && items.data.items.length === 0 && <p className="text-sm text-slate-600">No {section.title.toLowerCase()} yet.</p>}
+      {items.data && items.data.items.length === 0 && <p className="text-sm text-ink-muted">No {section.title.toLowerCase()} yet.</p>}
       {items.data && items.data.items.length > 0 && (
-        <table className="w-full border-collapse bg-white text-left text-sm shadow">
+        <table className="w-full border-collapse bg-surface text-left text-sm">
           <thead>
-            <tr className="border-b bg-slate-100">
+            <tr className="border-b bg-muted">
               <th className="p-2">Code</th><th className="p-2">Name</th><th className="p-2">Status</th>
               {canManage && <th className="p-2"><span className="sr-only">Actions</span></th>}
             </tr>
@@ -111,10 +111,10 @@ function CatalogSection({ section, canManage }: { section: Section; canManage: b
                 <td className="p-2">{item.active ? 'Active' : 'Inactive'}</td>
                 {canManage && (
                   <td className="space-x-3 p-2">
-                    <button type="button" className="text-blue-700 underline" aria-label={`Edit ${item.name}`} onClick={() => setEditing(item)}>Edit</button>
+                    <button type="button" className="text-primary underline" aria-label={`Edit ${item.name}`} onClick={() => setEditing(item)}>Edit</button>
                     <button
                       type="button"
-                      className="text-blue-700 underline"
+                      className="text-primary underline"
                       aria-label={`${item.active ? 'Deactivate' : 'Activate'} ${item.name}`}
                       disabled={toggle.isPending}
                       onClick={() => toggle.mutate(item)}

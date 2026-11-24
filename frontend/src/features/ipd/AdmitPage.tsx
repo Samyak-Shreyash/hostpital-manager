@@ -41,7 +41,7 @@ export function AdmitPage() {
         <PatientPicker selected={patient} error={errors.patientId?.message} onSelect={(p) => { setPatient(p); form.setValue('patientId', p.id, { shouldValidate: true }) }} />
         <div className="mb-4">
           <DoctorSelect value={admittingDoctorIdValue} onChange={(id) => form.setValue('admittingDoctorId', id, { shouldValidate: true })} />
-          {errors.admittingDoctorId && <p role="alert" className="mt-1 text-sm text-red-700">{errors.admittingDoctorId.message}</p>}
+          {errors.admittingDoctorId && <p role="alert" className="mt-1 text-sm text-danger">{errors.admittingDoctorId.message}</p>}
         </div>
         <BedSelect id="admit-bed" value={bedIdValue} onChange={(id) => form.setValue('bedId', id, { shouldValidate: true })} error={errors.bedId?.message} />
         <Field label="Admission diagnosis" htmlFor="admit-diagnosis" error={errors.admissionDiagnosis?.message}>

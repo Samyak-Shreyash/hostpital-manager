@@ -14,21 +14,21 @@ export function PatientTimeline({ patientId, currentId }: { patientId: string; c
   return (
     <Section title="Patient history">
       {history.isPending && <p role="status">Loading...</p>}
-      {history.isError && <p role="alert" className="text-sm text-red-700">{errorMessage(history.error)}</p>}
-      {history.data && history.data.items.length === 0 && <p className="text-sm text-slate-600">No earlier visits.</p>}
+      {history.isError && <p role="alert" className="text-sm text-danger">{errorMessage(history.error)}</p>}
+      {history.data && history.data.items.length === 0 && <p className="text-sm text-ink-muted">No earlier visits.</p>}
       {history.data && history.data.items.length > 0 && (
         <ul aria-label="Patient timeline" className="space-y-1 text-sm">
           {history.data.items.map((e) => {
             const body = (
               <>
                 <span className="font-medium">{when(e.startedAt)}</span>{' '}
-                <span className="rounded bg-slate-200 px-1.5 py-0.5 text-xs">{e.status === 'OPEN' ? 'Open' : 'Finalized'}</span>{' '}
+                <span className="rounded bg-muted px-1.5 py-0.5 text-xs">{e.status === 'OPEN' ? 'Open' : 'Finalized'}</span>{' '}
                 <span>{e.chiefComplaint ?? 'No complaint recorded'}</span>
               </>
             )
             return (
               <li key={e.id}>
-                {e.id === currentId ? <span className="text-slate-600">{body} (this visit)</span> : <Link className="text-blue-700 hover:underline" to={`/consult/${e.id}`}>{body}</Link>}
+                {e.id === currentId ? <span className="text-ink-muted">{body} (this visit)</span> : <Link className="text-primary hover:underline" to={`/consult/${e.id}`}>{body}</Link>}
               </li>
             )
           })}
