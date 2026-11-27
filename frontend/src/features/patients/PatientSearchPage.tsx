@@ -115,9 +115,9 @@ export function PatientSearchPage() {
           {shown.items.length > 1 && filters?.phone && (
             <p className="text-sm font-semibold">{shown.totalItems} patients share this number. Pick the right family member.</p>
           )}
-          <ul aria-label="Patients" className="flex flex-col gap-2">
+          <ul aria-label="Patients" className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-surface">
             {shown.items.map((p) => (
-              <li key={p.id} className="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-surface px-4 py-3">
+              <li key={p.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
                 <span aria-hidden="true" className="flex size-10 items-center justify-center rounded-full bg-primary-soft font-semibold text-primary">
                   {initials(p.fullName)}
                 </span>
@@ -131,7 +131,7 @@ export function PatientSearchPage() {
                 </span>
               </li>
             ))}
-            {shown.items.length === 0 && <li className="rounded-xl border border-border bg-surface p-4 text-ink-muted">No patients found.</li>}
+            {shown.items.length === 0 && <li className="p-4 text-ink-muted">No patients found.</li>}
           </ul>
           {!abha.data && (
             <div className="flex items-center gap-3 text-sm">

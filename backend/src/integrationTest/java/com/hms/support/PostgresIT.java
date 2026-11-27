@@ -17,7 +17,7 @@ public abstract class PostgresIT {
     public static final String APP_PASSWORD = "app-test-only";
 
     protected static final PostgreSQLContainer postgres =
-            new PostgreSQLContainer("postgres:17-alpine").withInitScript("db/init-roles.sql");
+            new PostgreSQLContainer("postgres:18.6-alpine").withInitScript("db/init-roles.sql");
 
     static {
         postgres.start();

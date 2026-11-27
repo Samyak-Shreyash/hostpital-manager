@@ -28,9 +28,9 @@ export function AdmissionsPage() {
       {list.isPending && <p role="status">Loading...</p>}
       {list.isError && <p role="alert" className="text-danger">{ipdErrorMessage(list.error)}</p>}
       {list.data && list.data.items.length === 0 && <p className="text-ink-muted">No admissions found.</p>}
-      <ul className="space-y-2">
+      <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-surface">
         {list.data?.items.map((a) => (
-          <li key={a.id} className="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-surface p-3">
+          <li key={a.id} className="flex flex-wrap items-center gap-3 p-3">
             <Link className="font-medium text-primary underline" to={`/admissions/${a.id}`}>{a.admissionNo}</Link>
             <span>{a.patient.name ?? 'Patient'} <span className="text-sm text-ink-muted">{a.patient.uhid}</span></span>
             <span className="text-sm">{a.currentBed ? `${a.currentBed.ward} — ${a.currentBed.bedNo}` : 'No bed'}</span>

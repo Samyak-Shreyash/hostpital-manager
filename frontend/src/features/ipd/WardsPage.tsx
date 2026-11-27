@@ -130,7 +130,7 @@ function BedRow({ bed, wardId, canManage }: { bed: Bed; wardId: string; canManag
       <div className="flex items-center gap-3">
         <span className="font-medium">{bed.bedNo}</span>
         {bed.bedClass && <span className="text-ink-muted">{bed.bedClass}</span>}
-        <span className={`rounded px-2 py-0.5 text-xs ${bed.status === 'ACTIVE' ? 'bg-success-soft text-success' : 'bg-amber-100 text-warning'}`}>
+        <span className={`rounded px-2 py-0.5 text-xs ${bed.status === 'ACTIVE' ? 'bg-success-soft text-success' : 'bg-warning-soft text-warning'}`}>
           {bed.status === 'ACTIVE' ? 'Active' : 'Out of service'}
         </span>
         {canManage && (
@@ -174,9 +174,9 @@ export function WardsPage() {
       {wards.isPending && <p role="status">Loading...</p>}
       {wards.isError && <p role="alert" className="text-danger">{ipdErrorMessage(wards.error)}</p>}
       {wards.data && wards.data.items.length === 0 && <p className="text-ink-muted">No wards yet.</p>}
-      <ul className="mb-6 space-y-2" aria-label="Wards">
+      <ul className="mb-6 divide-y divide-border overflow-hidden rounded-xl border border-border bg-surface" aria-label="Wards">
         {wards.data?.items.map((w) => (
-          <li key={w.id} className="flex items-center gap-3 rounded-xl border border-border bg-surface p-3">
+          <li key={w.id} className="flex items-center gap-3 p-3">
             <span className="font-medium">{w.name}</span>
             <span className="text-sm text-ink-muted">{w.code}</span>
             <span className="text-sm">{CARE_LABELS[w.careType]}</span>

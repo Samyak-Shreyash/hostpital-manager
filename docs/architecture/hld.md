@@ -22,7 +22,7 @@ C4Container
     Container(proxy, "Reverse proxy", "Nginx", "TLS termination, static SPA, /api routing, rate limit")
     Container(spa, "Web SPA", "React + TypeScript", "Static assets served by proxy")
     Container(api, "HMS API", "Java 21, Spring Boot", "Modular monolith, REST /api/v1")
-    ContainerDb(db, "PostgreSQL 17", "RDBMS", "Single DB, schema hms, Flyway-managed; roles hms_owner (migrations) and hms_app (runtime)")
+    ContainerDb(db, "PostgreSQL 18", "RDBMS", "Single DB, schema hms, Flyway-managed; roles hms_owner (migrations) and hms_app (runtime)")
     Container(prom, "Prometheus + Grafana", "Monitoring", "Metrics, dashboards, alerts")
     Container(backup, "Backup agent", "pgBackRest or managed PITR", "Base backup + WAL archive, encrypted off-host copy")
   }

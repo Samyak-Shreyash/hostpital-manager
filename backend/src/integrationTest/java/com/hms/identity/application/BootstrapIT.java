@@ -51,7 +51,7 @@ class BootstrapIT {
     private static final String ADMIN_EMAIL = "first.admin@demo-clinic.example";
 
     private static final PostgreSQLContainer postgres =
-            new PostgreSQLContainer("postgres:17-alpine").withInitScript("db/init-roles.sql");
+            new PostgreSQLContainer("postgres:18.6-alpine").withInitScript("db/init-roles.sql");
 
     private static final Path PASSWORD_FILE;
 

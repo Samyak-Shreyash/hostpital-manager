@@ -26,7 +26,7 @@ export function DuplicateCandidates({ candidates, canOverride, submitting, actio
     onOverride(parsed.data)
   }
   return (
-    <div role="region" aria-label="Possible duplicates" className="mt-6 max-w-xl rounded border border-amber-300 bg-warning-soft p-4">
+    <div role="region" aria-label="Possible duplicates" className="mt-6 max-w-xl rounded-md border border-warning/30 bg-warning-soft p-4">
       <h2 className="mb-2 font-semibold">This patient may already be registered</h2>
       <ul className="mb-3 text-sm">
         {candidates.map((c) => (

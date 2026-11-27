@@ -43,7 +43,7 @@ export function ConsultBilling({ encounter }: { encounter: Encounter }) {
       ) : (
         <p className="text-sm text-ink-muted">No invoice has been created for this visit yet.</p>
       )}
-      {exists && <p role="alert" className="mt-2 text-sm text-amber-800">An invoice already exists for this visit.{canRead ? ' It is listed above once loaded.' : ' Ask someone with invoice access to open it.'}</p>}
+      {exists && <p role="alert" className="mt-2 text-sm text-warning">An invoice already exists for this visit.{canRead ? ' It is listed above once loaded.' : ' Ask someone with invoice access to open it.'}</p>}
       {create.isError && !exists && <div className="mt-2"><FormError message={billingErrorMessage(create.error)} /></div>}
     </Section>
   )
