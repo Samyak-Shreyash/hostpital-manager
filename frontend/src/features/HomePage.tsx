@@ -22,7 +22,7 @@ export function HomePage() {
   const shortcuts = SHORTCUTS.filter((s) => hasPermission(data?.permissions, s.permission))
   return (
     <section>
-      <h1 className="text-2xl font-semibold">Welcome, {data?.user.fullName}</h1>
+      <h1 className="font-display text-2xl font-bold">Welcome, {data?.user.fullName}</h1>
       {notice && <p role="status" className="mt-4 rounded bg-success-soft p-3 text-sm text-success">{notice}</p>}
       <p className="mt-2 text-ink-muted">Signed in to {data?.organization.name}.</p>
       {shortcuts.length > 0 ? (
@@ -38,8 +38,7 @@ export function HomePage() {
         </ul>
       ) : (
         <p className="mt-4 text-ink-muted">
-          No screens are available for your role yet. Appointments, consultations, admissions and billing arrive in later
-          releases; ask your administrator if you expected to see something now.
+          No screens are available for your role. Ask your administrator if you expected to see something here.
         </p>
       )}
     </section>

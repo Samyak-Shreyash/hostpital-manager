@@ -62,7 +62,7 @@ export function UserImportPage() {
     return (
       <section>
         <h1 className="mb-2 text-2xl font-semibold">{created.length} users created</h1>
-        <p role="status" className="mb-4 rounded border border-amber-400 bg-warning-soft p-3 text-sm">
+        <p role="status" className="mb-4 rounded-md border border-warning/30 bg-warning-soft p-3 text-sm">
           These temporary passwords are shown once. Download them now, pass each one on securely, then delete the file.
           Every user must change the password at first sign-in.
         </p>

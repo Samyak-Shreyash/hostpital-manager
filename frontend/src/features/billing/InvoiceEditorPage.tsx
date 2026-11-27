@@ -14,7 +14,7 @@ const ISSUED_STATUSES = ['ISSUED', 'PARTIALLY_PAID', 'PAID', 'CANCELLED']
 /** Totals exactly as the server calculated them; never summed or rounded in the browser. */
 function Totals({ invoice }: { invoice: Invoice }) {
   return (
-    <section aria-label="Invoice totals" className="mb-4 rounded-xl border border-border bg-surface p-4">
+    <section aria-label="Invoice totals" className="p-4">
       <dl className="grid grid-cols-[1fr_auto] gap-x-6 gap-y-2 text-sm">
         <dt>Subtotal</dt><dd className="text-right tabular-nums" data-testid="subtotal">{invoice.subtotal}</dd>
         <dt>Discount</dt><dd className="text-right tabular-nums" data-testid="discount">{invoice.discountTotal}</dd>
@@ -95,16 +95,16 @@ export function InvoiceEditorPage() {
             </section>
           )}
           </div>
-          <aside aria-label="Totals and payment" className="min-w-0 flex-[1_1_320px]">
+          <aside aria-label="Totals and payment" className="min-w-0 flex-[1_1_320px] divide-y divide-border overflow-hidden rounded-xl border border-border bg-surface">
           <Totals invoice={data} />
           {(data.status === 'ISSUED' || data.status === 'PARTIALLY_PAID') && canPay && (
-            <section aria-label="Payment" className="mb-6 rounded-xl border border-border bg-surface p-4">
+            <section aria-label="Payment" className="p-4">
               <button type="button" className={`${primaryButton} min-h-13 w-full text-base`} onClick={() => setPaying(true)}>Take payment</button>
               {latest && <p className="mt-2 text-sm">Outstanding after the last payment: <span data-testid="last-outstanding">{latest.outstanding}</span></p>}
             </section>
           )}
           {payments.length > 0 && (
-            <section aria-label="Payments taken here" className="mb-6 rounded-xl border border-border bg-surface p-4">
+            <section aria-label="Payments taken here" className="p-4">
               <h2 className="mb-2 text-lg font-semibold">Payments taken on this screen</h2>
               <ul className="text-sm">
                 {payments.map((p) => (

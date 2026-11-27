@@ -12,7 +12,7 @@ export function TemporaryPassword({ password, account, onDismiss }: { password: 
     }
   }
   return (
-    <div role="status" className="mb-4 rounded border border-amber-400 bg-warning-soft p-4">
+    <div role="status" className="mb-4 rounded-md border border-warning/30 bg-warning-soft p-4">
       <p className="text-sm font-medium">
         Temporary password{account ? <> for <strong>{account}</strong></> : null} (shown once, the user must change it at first sign-in)
       </p>

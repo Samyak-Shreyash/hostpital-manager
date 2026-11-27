@@ -168,7 +168,7 @@ V1 contains, in order: extensions (section 5) → schema privileges and default 
 Applied: V2 `audit_event` + partitions `[E1-1]` (section 11); V3 `app_user` + Spring Session tables `[E1-3]` (section 12); V4 RBAC tables `[E1-5]` (section 13); V5 `organization`, organization FKs and RLS policies `[E1-6]` (section 14). Planned next: M2+ modules, each table with its RLS policy in the same migration.
 
 ## 9. Tests required for `[E0-6]`
-Integration tests (Testcontainers `postgres:17-alpine` with the role init script from section 3):
+Integration tests (Testcontainers `postgres:18.6-alpine` with the role init script from section 3):
 1. Flyway migrates an empty database as `hms_owner`; the app starts and connects as `hms_app` (acceptance: "Migration runs on Testcontainers").
 2. As `hms_app`: `CREATE TABLE hms.x(...)`, `CREATE TABLE public.x(...)`, `ALTER TABLE hms.document_sequence ...`, `DROP TABLE ...` and `CREATE TEMP TABLE` all fail with SQLSTATE `42501` (acceptance: "app role lacks DDL"). The same statements succeed as `hms_owner`, proving the negative test isn't failing for an unrelated reason.
 3. `hms_app` attributes: not superuser, no `CREATEDB`/`CREATEROLE`/`BYPASSRLS`, owns no objects (`pg_class.relowner`).
